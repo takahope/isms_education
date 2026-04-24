@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>教育訓練系統</title>
+  <!-- 引入 Tailwind CSS 進行快速排版 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入 SweetAlert2 提供美觀的彈跳視窗 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    /* 隱藏不想讓使用者看到的區塊 */
+    .hidden-section { display: none; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+  <div class="max-w-3xl w-full bg-white rounded-xl shadow-lg overflow-hidden">
+    <!-- 頂部標題 -->
+    <div class="bg-blue-600 text-white p-6 text-center">
+      <h1 class="text-2xl font-bold">企業資訊安全教育訓練</h1>
+    </div>
+
+    <div class="p-8">
+      <!-- 步驟 1: 登入/輸入基本資料 -->
+      <div id="step-login" class="space-y-4">
+        <h2 class="text-xl font-semibold mb-4 text-gray-800">請輸入您的基本資料以開始訓練</h2>
+        <div>
+          <label class="block text-gray-700 text-sm font-bold mb-2">員工姓名</label>
+          <input type="text" id="userName" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如：王小明">
+        </div>
+        <div>
+          <label class="block text-gray-700 text-sm font-bold mb-2">員工編號</label>
+          <input type="text" id="empId" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如：A1234567">
+        </div>
+        <button onclick="startTraining()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg mt-4 transition duration-300">
+          開始觀看影片
+        </button>
+      </div>
+
+      <!-- 步驟 2: 影片播放區 -->
+      <div id="step-video" class="hidden-section space-y-4 text-center">
+        <h2 class="text-xl font-semibold text-gray-800 mb-2">請完整觀看以下影片 (禁止快轉)</h2>
+        <p class="text-sm text-red-500 mb-4">注意：系統會每 5 分鐘確認您是否在座位上。</p>
+        
+        <!-- YouTube 播放器容器 -->
+        <div class="relative w-full" style="padding-top: 56.25%;">
+          <div id="ytplayer" class="absolute top-0 left-0 w-full h-full"></div>
+        </div>
+        <div id="video-progress" class="text-gray-600 text-sm mt-4 font-bold bg-gray-100 p-2 rounded"></div>
+      </div>
+
+      <!-- 步驟 3: 課後評量 -->
+      <div id="step-quiz" class="hidden-section space-y-6">
+        <h2 class="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">課後測驗</h2>
+        <p class="text-gray-600 mb-4">請回答以下問題，達到 80 分以上方為及格。</p>
+
+        <form id="quizForm" class="space-y-6">
+          <!-- 題目 1 -->
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <p class="font-semibold mb-2">1. 關於密碼設定，以下何者最安全？ (50分)</p>
+            <label class="block"><input type="radio" name="q1" value="0" class="mr-2"> 自己的生日</label>
+            <label class="block mt-1"><input type="radio" name="q1" value="0" class="mr-2"> 12345678</label>
+            <label class="block mt-1"><input type="radio" name="q1" value="50" class="mr-2"> 包含大小寫字母、數字與符號的隨機組合</label>
+          </div>
+
+          <!-- 題目 2 -->
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <p class="font-semibold mb-2">2. 收到來路不明的 Email 且附有不明連結時，應該怎麼做？ (50分)</p>
+            <label class="block"><input type="radio" name="q2" value="0" class="mr-2"> 馬上點開看看</label>
+            <label class="block mt-1"><input type="radio" name="q2" value="50" class="mr-2"> 不隨意點擊，並通報 IT 部門</label>
+            <label class="block mt-1"><input type="radio" name="q2" value="0" class="mr-2"> 轉傳給其他同事</label>
+          </div>
+
+          <button type="button" onclick="submitQuiz()" id="submitBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
+            送出測驗
+          </button>
+        </form>
+      </div>
+
+      <!-- 步驟 4: 完成畫面 -->
+      <div id="step-finish" class="hidden-section text-center space-y-4">
+        <div id="result-icon" class="text-6xl"></div>
+        <h2 id="result-title" class="text-2xl font-bold text-gray-800"></h2>
+        <p id="result-msg" class="text-gray-600 text-lg"></p>
+        <button onclick="location.reload()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg mt-4 transition duration-300">
+          重新開始
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  
+  <script>
+    // --- 變數區 ---
+    const VIDEO_ID = 'Pc7yCVU5fFI'; // ★ 替換為你的 YouTube 影片 ID
+    const VIDEO_TITLE = '資訊安全基礎概念';
+    const PASSING_SCORE = 80; // 及格分數
+    const IDLE_TIME_MS = 5 * 60 * 1000; // 閒置檢查時間：5 分鐘 (可修改測試)
+    const REQUIRED_WATCH_TIME_SEC = 7200; // ★ 必須觀看達 2 小時 (7200秒)。測試時建議先改小，例如 30
+    
+    let player;
+    let maxTimeWatched = 0; // 記錄使用者看到的最遠時間點
+    let checkProgressInterval;
+    let idleTimeout;
+    
+    let currentUser = { name: '', empId: '' };
+
+    // 時間格式化工具 (將秒數轉為 HH:MM:SS)
+    function formatTime(seconds) {
+      const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+      const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+      const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    // --- 步驟控制邏輯 ---
+    function showSection(sectionId) {
+      document.getElementById('step-login').classList.add('hidden-section');
+      document.getElementById('step-video').classList.add('hidden-section');
+      document.getElementById('step-quiz').classList.add('hidden-section');
+      document.getElementById('step-finish').classList.add('hidden-section');
+      document.getElementById(sectionId).classList.remove('hidden-section');
+    }
+
+    function startTraining() {
+      const name = document.getElementById('userName').value.trim();
+      const empId = document.getElementById('empId').value.trim();
+      
+      if (!name || !empId) {
+        Swal.fire('提醒', '請填寫完整的姓名與員工編號！', 'warning');
+        return;
+      }
+      
+      currentUser.name = name;
+      currentUser.empId = empId;
+      
+      // 讀取上次觀看進度 (依據員工編號與影片 ID 從瀏覽器暫存讀取)
+      const savedProgress = localStorage.getItem(`gas_training_${empId}_${VIDEO_ID}`);
+      if (savedProgress) {
+        maxTimeWatched = parseFloat(savedProgress);
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: 'info',
+          title: '已載入上次觀看進度',
+          showConfirmButton: false,
+          timer: 3000
+        });
+      }
+
+      showSection('step-video');
+      initYouTubePlayer();
+    }
+
+    // --- YouTube 播放器與防呆邏輯 ---
+    function initYouTubePlayer() {
+      // 確保只初始化一次
+      if(player) {
+        player.playVideo();
+        return;
+      }
+
+      player = new YT.Player('ytplayer', {
+        videoId: VIDEO_ID,
+        playerVars: {
+          'controls': 1, // 顯示控制列
+          'disablekb': 1, // 禁用鍵盤快轉
+          'rel': 0,       // 結束不顯示推薦影片
+          'modestbranding': 1
+        },
+        events: {
+          'onReady': onPlayerReady,
+          'onStateChange': onPlayerStateChange
+        }
+      });
+    }
+
+    function onPlayerReady(event) {
+      // 若有上次觀看紀錄，跳轉到該時間點繼續播放
+      if (maxTimeWatched > 0) {
+        event.target.seekTo(maxTimeWatched);
+      }
+      event.target.playVideo();
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.PLAYING) {
+        // 開始播放時：啟動防快轉檢查與閒置檢查
+        startAntiFastForwardCheck();
+        resetIdleTimer();
+      } else {
+        // 暫停或緩衝時：暫停檢查，並精準紀錄暫停瞬間的時間，避免秒差導致誤判
+        if (player && typeof player.getCurrentTime === 'function') {
+          let pauseTime = player.getCurrentTime();
+          // 只在合理範圍內更新 (避免他拖曳進度條後放開瞬間被記錄為最大時間)
+          if (pauseTime <= maxTimeWatched + 3) {
+            maxTimeWatched = Math.max(maxTimeWatched, pauseTime);
+            // 同步儲存到瀏覽器，避免使用者剛好暫停然後關閉視窗而遺失進度
+            localStorage.setItem(`gas_training_${currentUser.empId}_${VIDEO_ID}`, maxTimeWatched);
+            
+            const progressEl = document.getElementById('video-progress');
+            if (progressEl) {
+              progressEl.innerHTML = `目前學習進度：<span class="text-blue-600">${formatTime(maxTimeWatched)}</span> / 目標時數：02:00:00`;
+            }
+          }
+        }
+        clearInterval(checkProgressInterval);
+        clearTimeout(idleTimeout);
+      }
+
+      // 影片結束時
+      if (event.data === YT.PlayerState.ENDED) {
+        const duration = player.getDuration();
+        // 確保影片看完，且觀看最遠時間達到要求的 2 小時 (7200秒)
+        if (maxTimeWatched >= duration - 2 && maxTimeWatched >= REQUIRED_WATCH_TIME_SEC) {
+          Swal.fire('觀看完成', '太棒了！您已完成兩小時的課程，接下來請進行測驗。', 'success').then(() => {
+            showSection('step-quiz');
+          });
+        } else if (maxTimeWatched < REQUIRED_WATCH_TIME_SEC) {
+          // 影片播完但未達兩小時
+          Swal.fire('提醒', `影片已結束，但您的總觀看進度尚未達 2 小時標準 (目前: ${formatTime(maxTimeWatched)})。請確認是否有遺漏片段。`, 'warning');
+        } else {
+          // 防駭客機制：如果他用某些方式讓影片結束但 maxTime 不夠
+          Swal.fire('警告', '系統偵測到您未完整觀看影片，請勿跳轉！', 'error');
+          player.seekTo(maxTimeWatched);
+        }
+      }
+    }
+
+    // 防快轉核心邏輯
+    function startAntiFastForwardCheck() {
+      clearInterval(checkProgressInterval);
+      checkProgressInterval = setInterval(() => {
+        if (!player || !player.getCurrentTime) return;
+        
+        let currentTime = player.getCurrentTime();
+        
+        // 如果當前時間比紀錄的最遠時間多出超過 3 秒 (放寬 1 秒容錯，避免暫停恢復時的系統延遲導致誤判)
+        if (currentTime > maxTimeWatched + 3) {
+          player.pauseVideo();
+          Swal.fire('注意', '本課程禁止快轉，請按部就班觀看！', 'warning').then(() => {
+            player.seekTo(maxTimeWatched);
+            player.playVideo();
+          });
+        } else {
+          // 正常觀看，更新最遠觀看時間
+          maxTimeWatched = Math.max(maxTimeWatched, currentTime);
+          
+          // 每秒將進度儲存到 localStorage
+          localStorage.setItem(`gas_training_${currentUser.empId}_${VIDEO_ID}`, maxTimeWatched);
+          
+          // 更新畫面上的進度提示
+          const progressEl = document.getElementById('video-progress');
+          if (progressEl) {
+            progressEl.innerHTML = `目前學習進度：<span class="text-blue-600">${formatTime(maxTimeWatched)}</span> / 目標時數：02:00:00`;
+          }
+        }
+      }, 1000); // 每 1 秒檢查一次
+    }
+
+    // 閒置確認機制 (5分鐘後 + 30秒倒數)
+    function resetIdleTimer() {
+      clearTimeout(idleTimeout);
+      idleTimeout = setTimeout(() => {
+        if (player && player.getPlayerState() === YT.PlayerState.PLAYING) {
+          let timerInterval;
+          Swal.fire({
+            title: '您還在座位上嗎？',
+            html: '系統將在 <b>30</b> 秒後自動暫停影片。<br>請點擊下方按鈕確認您還在觀看。',
+            icon: 'warning',
+            timer: 30000, // 30秒倒數
+            timerProgressBar: true,
+            showConfirmButton: true,
+            confirmButtonText: '我還在看',
+            allowOutsideClick: false, // 禁止點擊旁邊關閉
+            allowEscapeKey: false,
+            didOpen: () => {
+              const b = Swal.getHtmlContainer().querySelector('b');
+              timerInterval = setInterval(() => {
+                b.textContent = Math.ceil(Swal.getTimerLeft() / 1000);
+              }, 100);
+            },
+            willClose: () => {
+              clearInterval(timerInterval);
+            }
+          }).then((result) => {
+            if (result.dismiss === Swal.DismissReason.timer) {
+              // 倒數完畢還沒有按確認 -> 暫停播放
+              player.pauseVideo();
+              Swal.fire({
+                title: '影片已暫停',
+                text: '因超時未確認，影片已暫停播放。點擊確認即可繼續觀看。',
+                icon: 'info',
+                confirmButtonText: '繼續播放',
+                allowOutsideClick: false
+              }).then(() => {
+                player.playVideo();
+                resetIdleTimer();
+              });
+            } else if (result.isConfirmed) {
+              // 有按確認，繼續計時
+              resetIdleTimer();
+            }
+          });
+        }
+      }, IDLE_TIME_MS);
+    }
+
+    // 監聽滑鼠移動來重置閒置時間 (選擇性：目前依據純時間強制彈出，若要根據滑鼠活動可打開下方註解)
+    // document.addEventListener('mousemove', resetIdleTimer);
+    // document.addEventListener('keypress', resetIdleTimer);
+
+    // --- 視窗焦點與分頁切換防呆機制 ---
+    // 1. 監聽網頁可見度 (使用者切換瀏覽器分頁或將瀏覽器最小化)
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden && player && typeof player.getPlayerState === 'function' && player.getPlayerState() === YT.PlayerState.PLAYING) {
+        player.pauseVideo();
+        Swal.fire('影片已暫停', '系統偵測到您離開了此分頁。為確保訓練品質，請保持在此畫面觀看。', 'warning');
+      }
+    });
+
+    // 2. 監聽視窗失去焦點 (使用者點擊了電腦上的其他應用程式、其他視窗或副螢幕)
+    window.addEventListener('blur', function() {
+      if (player && typeof player.getPlayerState === 'function' && player.getPlayerState() === YT.PlayerState.PLAYING) {
+        player.pauseVideo();
+        Swal.fire('影片已暫停', '系統偵測到視窗失去焦點。為確保訓練品質，請保持在此畫面觀看。', 'warning');
+      }
+    });
+
+    // --- 測驗與成績提交流程 ---
+    function submitQuiz() {
+      const form = document.getElementById('quizForm');
+      const q1 = form.querySelector('input[name="q1"]:checked');
+      const q2 = form.querySelector('input[name="q2"]:checked');
+
+      if (!q1 || !q2) {
+        Swal.fire('提醒', '請回答完所有問題再送出！', 'warning');
+        return;
+      }
+
+      // 禁用按鈕防止重複提交
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('submitBtn').innerHTML = '資料傳送中...';
+
+      const score = parseInt(q1.value) + parseInt(q2.value);
+      const isPassed = score >= PASSING_SCORE;
+
+      const submitData = {
+        userName: currentUser.name,
+        empId: currentUser.empId,
+        videoTitle: VIDEO_TITLE,
+        score: score,
+        isPassed: isPassed
+      };
+
+      // 呼叫 GAS 後端功能 (google.script.run)
+      google.script.run
+        .withSuccessHandler(function(response) {
+          showResult(score, isPassed);
+        })
+        .withFailureHandler(function(error) {
+          Swal.fire('錯誤', '資料儲存失敗，請聯繫系統管理員。', 'error');
+          document.getElementById('submitBtn').disabled = false;
+          document.getElementById('submitBtn').innerHTML = '送出測驗';
+        })
+        .submitTrainingResult(submitData);
+    }
+
+    function showResult(score, isPassed) {
+      showSection('step-finish');
+      
+      const iconEl = document.getElementById('result-icon');
+      const titleEl = document.getElementById('result-title');
+      const msgEl = document.getElementById('result-msg');
+
+      if (isPassed) {
+        iconEl.innerHTML = '🎉';
+        titleEl.textContent = '恭喜您，通過測驗！';
+        titleEl.className = 'text-2xl font-bold text-green-600';
+        msgEl.textContent = `您的測驗分數為：${score} 分。紀錄已同步至系統。`;
+      } else {
+        iconEl.innerHTML = '🥲';
+        titleEl.textContent = '很遺憾，測驗未達標準';
+        titleEl.className = 'text-2xl font-bold text-red-600';
+        msgEl.textContent = `您的測驗分數為：${score} 分 (及格標準：${PASSING_SCORE}分)。請重新學習與測驗。`;
+      }
+    }
+  </script>
+</body>
+</html>
