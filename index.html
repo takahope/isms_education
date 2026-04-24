@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>企業資訊安全教育訓練</title>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    /* Design Decisions:
+       - Color palette: Slate (neutral), Emerald (primary/success), Rose (error)
+       - Typography: system-ui, sans-serif
+       - Spacing system: 4px base (4, 8, 16, 24, 32, 48)
+       - Border-radius strategy: 12px for cards, 8px for buttons/inputs
+       - Shadow hierarchy: Subtle soft shadows for cards, stronger for active states
+       - Motion style: 0.3s ease for general transitions
+    */
+    :root {
+      /* Colors */
+      --color-bg: #f8fafc;
+      --color-surface: #ffffff;
+      --color-text-main: #0f172a;
+      --color-text-muted: #64748b;
+      --color-primary: #0ea5e9;
+      --color-primary-hover: #0284c7;
+      --color-success: #10b981;
+      --color-success-hover: #059669;
+      --color-error: #e11d48;
+      --color-border: #e2e8f0;
+      
+      /* Spacing */
+      --space-sm: 8px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      
+      /* Radius */
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      
+      /* Shadows */
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+      
+      /* Transitions */
+      --transition: 0.3s ease;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--color-bg);
+      color: var(--color-text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: var(--space-md);
+      line-height: 1.5;
+    }
+
+    .container {
+      background: var(--color-surface);
+      width: 100%;
+      max-width: 768px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    .header {
+      background: var(--color-primary);
+      color: white;
+      padding: var(--space-xl);
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    .content {
+      padding: var(--space-xl);
+    }
+
+    /* Utilities */
+    .hidden {
+      display: none !important;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-block;
+      width: 100%;
+      padding: 14px 24px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-align: center;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: background-color var(--transition), transform 0.1s ease;
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn-primary {
+      background-color: var(--color-primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--color-primary-hover);
+    }
+
+    .btn-success {
+      background-color: var(--color-success);
+      color: white;
+    }
+
+    .btn-success:hover {
+      background-color: var(--color-success-hover);
+    }
+
+    .btn:disabled {
+      background-color: var(--color-text-muted);
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Loading Spinner */
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid var(--color-border);
+      border-top-color: var(--color-primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto var(--space-md);
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Welcome Section */
+    .user-badge {
+      display: inline-block;
+      background: var(--color-bg);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: 500;
+      color: var(--color-primary);
+      margin-bottom: var(--space-lg);
+      border: 1px solid var(--color-border);
+    }
+
+    /* Video Section */
+    .video-wrapper {
+      position: relative;
+      padding-top: 56.25%; /* 16:9 Aspect Ratio */
+      background: #000;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin-bottom: var(--space-md);
+    }
+
+    .video-wrapper iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+
+    /* Progress Bar */
+    .progress-container {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--space-sm) var(--space-md);
+      margin-bottom: var(--space-md);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .progress-bar-track {
+      height: 6px;
+      background: var(--color-border);
+      border-radius: 3px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--color-primary);
+      width: 0%;
+      transition: width 1s linear, background-color var(--transition);
+    }
+
+    .progress-bar-fill.success {
+      background: var(--color-success);
+    }
+
+    .progress-text {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--color-text-muted);
+    }
+
+    .progress-text.success {
+      color: var(--color-success);
+    }
+
+    /* Quiz Cards */
+    .quiz-card {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-lg);
+    }
+
+    .quiz-question {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: var(--space-md);
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all var(--transition);
+      background: var(--color-surface);
+    }
+
+    .radio-option:hover {
+      border-color: var(--color-primary);
+      background: #f0f9ff;
+    }
+
+    .radio-option input[type="radio"] {
+      margin-right: 12px;
+      transform: scale(1.2);
+      accent-color: var(--color-primary);
+    }
+
+    .radio-option:has(input[type="radio"]:checked) {
+      border-color: var(--color-primary);
+      background: #e0f2fe;
+      box-shadow: 0 0 0 1px var(--color-primary);
+    }
+
+    /* SVG Icons */
+    .result-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto var(--space-lg);
+    }
+
+    .icon-success { color: var(--color-success); }
+    .icon-error { color: var(--color-error); }
+    
+    .result-title {
+      font-size: 1.5rem;
+      margin-bottom: var(--space-sm);
+    }
+
+    .result-desc {
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-xl);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <h1>企業資訊安全教育訓練</h1>
+    </div>
+
+    <div class="content">
+      
+      <!-- Step 0: Loading -->
+      <div id="step-loading" class="text-center">
+        <div class="spinner"></div>
+        <p>系統正在驗證您的身分，請稍候...</p>
+      </div>
+
+      <!-- Step 1: Welcome -->
+      <div id="step-welcome" class="hidden text-center">
+        <h2 class="result-title">歡迎開始教育訓練</h2>
+        <div class="user-badge" id="display-user-email">載入中...</div>
+        <p class="result-desc">請確認您的帳號無誤。本次訓練包含一段核心觀念影片，以及課後評量測驗。</p>
+        <button onclick="startTraining()" class="btn btn-primary">開始觀看影片</button>
+      </div>
+
+      <!-- Step 2: Video -->
+      <div id="step-video" class="hidden">
+        <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 8px;">請完整觀看以下影片</h2>
+        <p style="color: var(--color-error); font-size: 0.875rem; margin-bottom: 16px;">注意：本課程禁止快轉，且系統會定期確認您是否在座位上。</p>
+        
+        <div class="video-wrapper">
+          <div id="ytplayer"></div>
+        </div>
+        
+        <!-- Custom Progress Bar -->
+        <div class="progress-container" id="progress-container">
+          <div class="progress-text" id="progress-text">
+            <span>進度：<span id="time-current">00:00:00</span></span>
+            <span>目標：<span id="time-target">00:00:30</span></span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progress-fill"></div>
+          </div>
+        </div>
+        
+        <button id="btn-goto-quiz" onclick="proceedToQuiz()" class="btn btn-success hidden">
+          🎉 恭喜達標！點此前往測驗
+        </button>
+      </div>
+
+      <!-- Step 3: Quiz -->
+      <div id="step-quiz" class="hidden">
+        <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 8px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">課後測驗</h2>
+        <p style="color: var(--color-text-muted); margin-bottom: 24px;">請回答以下問題，達到 80 分以上方為及格。</p>
+
+        <form id="quizForm">
+          <!-- Q1 -->
+          <div class="quiz-card">
+            <div class="quiz-question">1. 關於密碼設定，以下何者最安全？ (50分)</div>
+            <label class="radio-option">
+              <input type="radio" name="q1" value="0"> 自己的生日
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="q1" value="0"> 12345678
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="q1" value="50"> 包含大小寫字母、數字與符號的隨機組合
+            </label>
+          </div>
+
+          <!-- Q2 -->
+          <div class="quiz-card">
+            <div class="quiz-question">2. 收到來路不明的 Email 且附有不明連結時，應該怎麼做？ (50分)</div>
+            <label class="radio-option">
+              <input type="radio" name="q2" value="0"> 馬上點開看看
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="q2" value="50"> 不隨意點擊，並通報 IT 部門
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="q2" value="0"> 轉傳給其他同事
+            </label>
+          </div>
+
+          <button type="button" onclick="submitQuiz()" id="submitBtn" class="btn btn-success">送出測驗</button>
+        </form>
+      </div>
+
+      <!-- Step 4: Finish -->
+      <div id="step-finish" class="hidden text-center">
+        <!-- SVG Icon will be injected here -->
+        <div id="result-icon-container"></div>
+        <h2 id="result-title" class="result-title"></h2>
+        <p id="result-msg" class="result-desc"></p>
+        <button onclick="location.reload()" class="btn btn-primary">重新開始</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  
+  <script>
+    const VIDEO_ID = 'fzDqfdmvw2o'; 
+    const VIDEO_TITLE = '資訊安全基礎概念';
+    const PASSING_SCORE = 80; 
+    const IDLE_TIME_MS = 5 * 60 * 1000; // 5 min idle
+    const REQUIRED_WATCH_TIME_SEC = 30; // 30s target for testing
+    
+    let player;
+    let maxTimeWatched = 0; 
+    let checkProgressInterval;
+    let idleTimeout;
+    
+    let currentUserEmail = '';
+
+    // --- Initialization & Auth ---
+    document.addEventListener('DOMContentLoaded', () => {
+      fetchUserEmail();
+    });
+
+    function fetchUserEmail() {
+      if (typeof google !== 'undefined' && google.script) {
+        google.script.run
+          .withSuccessHandler((email) => {
+            currentUserEmail = email || 'guest@example.com';
+            finishLoading(currentUserEmail);
+          })
+          .withFailureHandler(() => {
+            currentUserEmail = 'local-tester@example.com';
+            finishLoading(currentUserEmail);
+          })
+          .getCurrentUserEmail();
+      } else {
+        // Local fallback
+        setTimeout(() => {
+          currentUserEmail = 'local-tester@example.com';
+          finishLoading(currentUserEmail);
+        }, 1000);
+      }
+    }
+
+    function finishLoading(email) {
+      document.getElementById('display-user-email').textContent = email;
+      showSection('step-welcome');
+    }
+
+    function formatTime(seconds) {
+      const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+      const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+      const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function showSection(sectionId) {
+      ['step-loading', 'step-welcome', 'step-video', 'step-quiz', 'step-finish'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+      });
+      document.getElementById(sectionId).classList.remove('hidden');
+    }
+
+    // --- Video Logic ---
+    function startTraining() {
+      // 讀取進度
+      const savedProgress = localStorage.getItem(`gas_training_${currentUserEmail}_${VIDEO_ID}`);
+      if (savedProgress) {
+        maxTimeWatched = parseFloat(savedProgress);
+        Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: '已載入上次觀看進度', showConfirmButton: false, timer: 3000 });
+      }
+
+      showSection('step-video');
+      document.getElementById('time-target').textContent = formatTime(REQUIRED_WATCH_TIME_SEC);
+      updateProgressUI(maxTimeWatched); 
+      initYouTubePlayer();
+    }
+
+    function initYouTubePlayer() {
+      if(player) {
+        player.playVideo();
+        return;
+      }
+      player = new YT.Player('ytplayer', {
+        videoId: VIDEO_ID,
+        playerVars: { 'controls': 1, 'disablekb': 1, 'rel': 0, 'modestbranding': 1 },
+        events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
+      });
+    }
+
+    function onPlayerReady(event) {
+      if (maxTimeWatched > 0) {
+        event.target.seekTo(maxTimeWatched);
+      }
+      event.target.playVideo();
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.PLAYING) {
+        startAntiFastForwardCheck();
+        resetIdleTimer();
+      } else {
+        if (player && typeof player.getCurrentTime === 'function') {
+          let pauseTime = player.getCurrentTime();
+          if (pauseTime <= maxTimeWatched + 3) {
+            maxTimeWatched = Math.max(maxTimeWatched, pauseTime);
+            localStorage.setItem(`gas_training_${currentUserEmail}_${VIDEO_ID}`, maxTimeWatched);
+            updateProgressUI(maxTimeWatched);
+          }
+        }
+        clearInterval(checkProgressInterval);
+        clearTimeout(idleTimeout);
+      }
+
+      if (event.data === YT.PlayerState.ENDED) {
+        if (maxTimeWatched >= REQUIRED_WATCH_TIME_SEC) {
+          Swal.fire('觀看完成', '太棒了！您已達到要求的觀看時數，接下來請進行測驗。', 'success').then(proceedToQuiz);
+        } else {
+          Swal.fire('提醒', `您的總觀看進度尚未達標。請確認是否有遺漏片段。`, 'warning');
+        }
+      }
+    }
+
+    function startAntiFastForwardCheck() {
+      clearInterval(checkProgressInterval);
+      checkProgressInterval = setInterval(() => {
+        if (!player || !player.getCurrentTime) return;
+        
+        let currentTime = player.getCurrentTime();
+        if (currentTime > maxTimeWatched + 3) {
+          player.pauseVideo();
+          Swal.fire('注意', '本課程禁止快轉，請按部就班觀看！', 'warning').then(() => {
+            player.seekTo(maxTimeWatched);
+            player.playVideo();
+          });
+        } else {
+          maxTimeWatched = Math.max(maxTimeWatched, currentTime);
+          localStorage.setItem(`gas_training_${currentUserEmail}_${VIDEO_ID}`, maxTimeWatched);
+          updateProgressUI(maxTimeWatched);
+        }
+      }, 1000);
+    }
+
+    function updateProgressUI(currentTime) {
+      const fillEl = document.getElementById('progress-fill');
+      const textEl = document.getElementById('progress-text');
+      const btnQuiz = document.getElementById('btn-goto-quiz');
+      const currentEl = document.getElementById('time-current');
+      
+      let percentage = (currentTime / REQUIRED_WATCH_TIME_SEC) * 100;
+      if (percentage > 100) percentage = 100;
+      
+      fillEl.style.width = `${percentage}%`;
+      currentEl.textContent = formatTime(currentTime);
+
+      if (currentTime >= REQUIRED_WATCH_TIME_SEC) {
+        fillEl.classList.add('success');
+        textEl.classList.add('success');
+        currentEl.textContent = formatTime(currentTime) + " (已達標)";
+        btnQuiz.classList.remove('hidden');
+      } else {
+        fillEl.classList.remove('success');
+        textEl.classList.remove('success');
+        btnQuiz.classList.add('hidden');
+      }
+    }
+
+    function proceedToQuiz() {
+      if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
+      clearInterval(checkProgressInterval);
+      clearTimeout(idleTimeout);
+      showSection('step-quiz');
+    }
+
+    function resetIdleTimer() {
+      clearTimeout(idleTimeout);
+      idleTimeout = setTimeout(() => {
+        if (player && player.getPlayerState() === YT.PlayerState.PLAYING) {
+          let timerInterval;
+          Swal.fire({
+            title: '您還在座位上嗎？',
+            html: '系統將在 <b>30</b> 秒後自動暫停影片。<br>請點擊下方按鈕確認您還在觀看。',
+            icon: 'warning',
+            timer: 30000, 
+            timerProgressBar: true,
+            showConfirmButton: true,
+            confirmButtonText: '我還在看',
+            allowOutsideClick: false, 
+            allowEscapeKey: false,
+            didOpen: () => {
+              const b = Swal.getHtmlContainer().querySelector('b');
+              timerInterval = setInterval(() => {
+                b.textContent = Math.ceil(Swal.getTimerLeft() / 1000);
+              }, 100);
+            },
+            willClose: () => clearInterval(timerInterval)
+          }).then((result) => {
+            if (result.dismiss === Swal.DismissReason.timer) {
+              player.pauseVideo();
+              Swal.fire({ title: '影片已暫停', text: '因超時未確認，影片已暫停播放。點擊確認即可繼續觀看。', icon: 'info', confirmButtonText: '繼續播放', allowOutsideClick: false })
+                .then(() => { player.playVideo(); resetIdleTimer(); });
+            } else if (result.isConfirmed) {
+              resetIdleTimer();
+            }
+          });
+        }
+      }, IDLE_TIME_MS);
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && player && typeof player.getPlayerState === 'function' && player.getPlayerState() === YT.PlayerState.PLAYING) {
+        player.pauseVideo();
+        Swal.fire('影片已暫停', '系統偵測到您離開了此分頁。為確保訓練品質，請保持在此畫面觀看。', 'warning');
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      if (player && typeof player.getPlayerState === 'function' && player.getPlayerState() === YT.PlayerState.PLAYING) {
+        player.pauseVideo();
+        Swal.fire('影片已暫停', '系統偵測到視窗失去焦點。為確保訓練品質，請保持在此畫面觀看。', 'warning');
+      }
+    });
+
+    // --- Quiz Logic ---
+    function submitQuiz() {
+      const form = document.getElementById('quizForm');
+      const q1 = form.querySelector('input[name="q1"]:checked');
+      const q2 = form.querySelector('input[name="q2"]:checked');
+
+      if (!q1 || !q2) {
+        Swal.fire('提醒', '請回答完所有問題再送出！', 'warning');
+        return;
+      }
+
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '資料傳送中...';
+
+      const score = parseInt(q1.value) + parseInt(q2.value);
+      const isPassed = score >= PASSING_SCORE;
+
+      const submitData = {
+        userName: currentUserEmail,
+        videoTitle: VIDEO_TITLE,
+        score: score,
+        isPassed: isPassed
+      };
+
+      if (typeof google !== 'undefined' && google.script) {
+        google.script.run
+          .withSuccessHandler(() => showResult(score, isPassed))
+          .withFailureHandler(() => {
+            Swal.fire('錯誤', '資料儲存失敗，請聯繫系統管理員。', 'error');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '送出測驗';
+          })
+          .submitTrainingResult(submitData);
+      } else {
+        setTimeout(() => showResult(score, isPassed), 1000);
+      }
+    }
+
+    function showResult(score, isPassed) {
+      showSection('step-finish');
+      
+      const container = document.getElementById('result-icon-container');
+      const titleEl = document.getElementById('result-title');
+      const msgEl = document.getElementById('result-msg');
+
+      if (isPassed) {
+        container.innerHTML = `
+          <svg class="result-icon icon-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        `;
+        titleEl.textContent = '恭喜您，通過測驗！';
+        titleEl.style.color = 'var(--color-success)';
+        msgEl.textContent = `您的測驗分數為：${score} 分。紀錄已同步至系統。`;
+      } else {
+        container.innerHTML = `
+          <svg class="result-icon icon-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>
+        `;
+        titleEl.textContent = '很遺憾，測驗未達標準';
+        titleEl.style.color = 'var(--color-error)';
+        msgEl.textContent = `您的測驗分數為：${score} 分 (及格標準：${PASSING_SCORE}分)。請重新學習與測驗。`;
+      }
+    }
+  </script>
+</body>
+</html>
