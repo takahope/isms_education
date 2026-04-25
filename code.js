@@ -7,7 +7,7 @@
 // 1. 發佈為 Web App 時的進入點
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('index')
-      .setTitle('臺灣人體生物資料庫內部資訊安全暨個資保護教育訓練') // 設定瀏覽器標籤標題
+      .setTitle('企業內部教育訓練系統') // 設定瀏覽器標籤標題
       .addMetaTag('viewport', 'width=device-width, initial-scale=1') // 確保手機端顯示正常
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -21,31 +21,68 @@ function getCurrentUserEmail() {
   }
 }
 
-// 3. 接收前端資料並寫入 Google Sheets
+// 3. 根據 Email 從人員主檔查姓名
+function getUserNameByEmail(email) {
+  try {
+    // 檢查是否有設定 ENV.MASTER_SHEET_ID
+    if (typeof ENV === 'undefined' || !ENV.MASTER_SHEET_ID || ENV.MASTER_SHEET_ID.includes('請在此填入')) {
+      return '未設定主檔ID';
+    }
+    
+    // 開啟外部的主檔試算表
+    const masterSS = SpreadsheetApp.openById(ENV.MASTER_SHEET_ID);
+    const masterSheet = masterSS.getSheetByName('人員主檔');
+    
+    if (!masterSheet) {
+      return '找不到人員主檔';
+    }
+    
+    // 取得所有資料 (二維陣列)
+    const data = masterSheet.getDataRange().getValues();
+    
+    // 假設第一列為標題，從第二列 (index 1) 開始搜尋
+    // A 欄為信箱 (index 0)，B 欄為姓名 (index 1)
+    for (let i = 1; i < data.length; i++) { 
+      if (data[i][0] === email) {
+        return data[i][1]; // 回傳姓名
+      }
+    }
+    return '查無此人';
+  } catch (e) {
+    console.error("讀取人員主檔失敗:", e);
+    return '讀取失敗';
+  }
+}
+
+// 4. 接收前端資料並寫入 Google Sheets
 function submitTrainingResult(data) {
   try {
-    // 取得目前綁定此腳本的試算表 (請確認腳本是建立在試算表上的，或使用 openById)
+    // 取得目前綁定此腳本的試算表
     const ss = SpreadsheetApp.getActiveSpreadsheet(); 
     const sheetName = '訓練紀錄';
     let sheet = ss.getSheetByName(sheetName);
     
-    // 如果工作表不存在，則建立一個並加上標題列
+    // 如果工作表不存在，則建立一個並加上六個標題列
     if (!sheet) {
       sheet = ss.insertSheet(sheetName);
-      sheet.appendRow(['時間戳記', '使用者帳號 (Email)', '觀看影片', '測驗分數', '測驗結果']);
-      sheet.getRange("A1:E1").setFontWeight("bold").setBackground("#f8fafc");
+      sheet.appendRow(['時間戳記', '姓名', '使用者信箱', '課程名稱', '測驗分數', '測驗結果']);
+      sheet.getRange("A1:F1").setFontWeight("bold").setBackground("#f8fafc");
     }
     
-    // 寫入資料
+    // 準備寫入的資料
     const timestamp = new Date();
     const resultStatus = data.isPassed ? '通過' : '未通過';
+    const email = data.userName; // 前端的 userName 目前是用來裝載信箱的
+    const name = getUserNameByEmail(email); // 透過查表函數去「人員主檔」獲取真正的姓名
     
+    // 寫入到對應的欄位
     sheet.appendRow([
-      timestamp, 
-      data.userName, // 前端傳來的 Email
-      data.videoTitle, 
-      data.score, 
-      resultStatus
+      timestamp,       // A: 時間戳記
+      name,            // B: 姓名
+      email,           // C: 使用者信箱
+      data.videoTitle, // D: 課程名稱
+      data.score,      // E: 測驗分數
+      resultStatus     // F: 測驗結果
     ]);
     
     return { success: true, message: "紀錄已成功儲存！" };
