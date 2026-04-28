@@ -318,7 +318,7 @@
       <!-- Step 2: Video -->
       <div id="step-video" class="hidden">
         <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 8px;">請完整觀看以下影片</h2>
-        <p style="color: var(--color-error); font-size: 0.875rem; margin-bottom: 16px;">注意：本課程禁止快轉，且系統會定期確認您是否在座位上。</p>
+        <p style="color: var(--color-text-muted); font-size: 0.875rem; margin-bottom: 16px;">您可自行調整影片時間軸與觀看段落，但仍需達到指定學習時數，且系統會定期確認您是否在座位上。</p>
         
         <div class="video-wrapper">
           <div id="ytplayer"></div>
@@ -487,16 +487,14 @@
 
     function onPlayerStateChange(event) {
       if (event.data === YT.PlayerState.PLAYING) {
-        startAntiFastForwardCheck();
+        startProgressTracking();
         resetIdleTimer();
       } else {
         if (player && typeof player.getCurrentTime === 'function') {
           let pauseTime = player.getCurrentTime();
-          if (pauseTime <= maxTimeWatched + 3) {
-            maxTimeWatched = Math.max(maxTimeWatched, pauseTime);
-            localStorage.setItem(`gas_training_${currentUserEmail}_${VIDEO_ID}`, maxTimeWatched);
-            updateProgressUI(maxTimeWatched);
-          }
+          maxTimeWatched = Math.max(maxTimeWatched, pauseTime);
+          localStorage.setItem(`gas_training_${currentUserEmail}_${VIDEO_ID}`, maxTimeWatched);
+          updateProgressUI(maxTimeWatched);
         }
         clearInterval(checkProgressInterval);
         clearTimeout(idleTimeout);
@@ -511,23 +509,15 @@
       }
     }
 
-    function startAntiFastForwardCheck() {
+    function startProgressTracking() {
       clearInterval(checkProgressInterval);
       checkProgressInterval = setInterval(() => {
         if (!player || !player.getCurrentTime) return;
         
         let currentTime = player.getCurrentTime();
-        if (currentTime > maxTimeWatched + 3) {
-          player.pauseVideo();
-          Swal.fire('注意', '本課程禁止快轉，請按部就班觀看！', 'warning').then(() => {
-            player.seekTo(maxTimeWatched);
-            player.playVideo();
-          });
-        } else {
-          maxTimeWatched = Math.max(maxTimeWatched, currentTime);
-          localStorage.setItem(`gas_training_${currentUserEmail}_${VIDEO_ID}`, maxTimeWatched);
-          updateProgressUI(maxTimeWatched);
-        }
+        maxTimeWatched = Math.max(maxTimeWatched, currentTime);
+        localStorage.setItem(`gas_training_${currentUserEmail}_${VIDEO_ID}`, maxTimeWatched);
+        updateProgressUI(maxTimeWatched);
       }, 1000);
     }
 
