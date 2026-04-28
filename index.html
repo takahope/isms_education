@@ -227,6 +227,12 @@
       color: var(--color-success);
     }
 
+    .progress-hint {
+      margin-top: 8px;
+      font-size: 0.8125rem;
+      color: #b45309;
+    }
+
     /* Quiz Cards */
     .quiz-card {
       background: var(--color-bg);
@@ -333,6 +339,7 @@
           <div class="progress-bar-track">
             <div class="progress-bar-fill" id="progress-fill"></div>
           </div>
+          <div id="reviewed-segment-hint" class="progress-hint hidden">目前位於已看過的片段，學習時數不會重複累計。</div>
         </div>
 
         <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
@@ -408,9 +415,14 @@
     const PASSING_SCORE = 80; 
     const IDLE_TIME_MS = 5 * 60 * 1000; // 5 min idle
     const REQUIRED_WATCH_TIME_SEC = 30; // 30s target for testing
+    const PROGRESS_SCHEMA_VERSION = 2;
+    const NATURAL_PLAYBACK_DELTA_SEC = 2.5;
     
     let player;
-    let maxTimeWatched = 0; 
+    let watchedSecondMarks = new Set();
+    let lastPlaybackPosition = 0;
+    let previousTrackedPosition = null;
+    let isInReviewedSegment = false;
     let checkProgressInterval;
     let idleTimeout;
     
@@ -465,18 +477,113 @@
       return `gas_training_${currentUserEmail}_${VIDEO_ID}`;
     }
 
+    function getWatchedSeconds() {
+      return watchedSecondMarks.size;
+    }
+
+    function loadStoredProgress() {
+      const savedProgress = localStorage.getItem(getProgressStorageKey());
+      if (!savedProgress) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(savedProgress);
+        if (parsed && parsed.schemaVersion === PROGRESS_SCHEMA_VERSION && Array.isArray(parsed.watchedSecondMarks)) {
+          watchedSecondMarks = new Set(
+            parsed.watchedSecondMarks
+              .map((value) => Number(value))
+              .filter((value) => Number.isInteger(value) && value >= 0)
+          );
+          lastPlaybackPosition = Math.max(0, Number(parsed.lastPlaybackPosition) || 0);
+          return;
+        }
+      } catch (error) {
+        // Legacy numeric format falls through to reset.
+      }
+
+      localStorage.removeItem(getProgressStorageKey());
+      watchedSecondMarks = new Set();
+      lastPlaybackPosition = 0;
+    }
+
+    function saveStoredProgress() {
+      localStorage.setItem(getProgressStorageKey(), JSON.stringify({
+        schemaVersion: PROGRESS_SCHEMA_VERSION,
+        watchedSecondMarks: Array.from(watchedSecondMarks).sort((a, b) => a - b),
+        lastPlaybackPosition
+      }));
+    }
+
+    function setReviewedSegmentHint(visible) {
+      if (isInReviewedSegment === visible) return;
+      isInReviewedSegment = visible;
+      document.getElementById('reviewed-segment-hint').classList.toggle('hidden', !visible);
+    }
+
+    function isSecondReviewed(second) {
+      return watchedSecondMarks.has(Math.max(0, Math.floor(second)));
+    }
+
+    function updateReviewedSegmentState(currentTime, forceVisible = null) {
+      if (typeof forceVisible === 'boolean') {
+        setReviewedSegmentHint(forceVisible);
+        return;
+      }
+      setReviewedSegmentHint(isSecondReviewed(currentTime));
+    }
+
+    function flushProgressTracking(currentTime) {
+      if (typeof currentTime !== 'number' || Number.isNaN(currentTime)) return;
+
+      if (previousTrackedPosition === null) {
+        previousTrackedPosition = currentTime;
+        lastPlaybackPosition = currentTime;
+        saveStoredProgress();
+        updateReviewedSegmentState(currentTime);
+        return;
+      }
+
+      const delta = currentTime - previousTrackedPosition;
+      let addedNewSecond = false;
+
+      if (delta > 0 && delta <= NATURAL_PLAYBACK_DELTA_SEC) {
+        const startSecond = Math.floor(previousTrackedPosition);
+        const endSecond = Math.floor(currentTime);
+        for (let second = startSecond; second <= endSecond; second += 1) {
+          if (second < 0 || watchedSecondMarks.has(second)) continue;
+          watchedSecondMarks.add(second);
+          addedNewSecond = true;
+        }
+      }
+
+      lastPlaybackPosition = currentTime;
+      previousTrackedPosition = currentTime;
+      saveStoredProgress();
+
+      if (addedNewSecond) {
+        setReviewedSegmentHint(false);
+      } else {
+        updateReviewedSegmentState(currentTime);
+      }
+    }
+
     // --- Video Logic ---
     function startTraining() {
-      // 讀取進度
-      const savedProgress = localStorage.getItem(getProgressStorageKey());
-      if (savedProgress) {
-        maxTimeWatched = parseFloat(savedProgress);
+      watchedSecondMarks = new Set();
+      lastPlaybackPosition = 0;
+      previousTrackedPosition = null;
+      setReviewedSegmentHint(false);
+
+      loadStoredProgress();
+      if (watchedSecondMarks.size > 0 || lastPlaybackPosition > 0) {
         Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: '已載入上次觀看進度', showConfirmButton: false, timer: 3000 });
       }
 
       showSection('step-video');
       document.getElementById('time-target').textContent = formatTime(REQUIRED_WATCH_TIME_SEC);
-      updateProgressUI(maxTimeWatched); 
+      updateProgressUI(getWatchedSeconds());
+      updateReviewedSegmentState(lastPlaybackPosition);
       initYouTubePlayer();
     }
 
@@ -493,29 +600,33 @@
     }
 
     function onPlayerReady(event) {
-      if (maxTimeWatched > 0) {
-        event.target.seekTo(maxTimeWatched);
+      if (lastPlaybackPosition > 0) {
+        event.target.seekTo(lastPlaybackPosition);
       }
+      updateReviewedSegmentState(lastPlaybackPosition);
       event.target.playVideo();
     }
 
     function onPlayerStateChange(event) {
       if (event.data === YT.PlayerState.PLAYING) {
+        previousTrackedPosition = player && typeof player.getCurrentTime === 'function'
+          ? player.getCurrentTime()
+          : previousTrackedPosition;
+        updateReviewedSegmentState(previousTrackedPosition || 0);
         startProgressTracking();
         resetIdleTimer();
       } else {
         if (player && typeof player.getCurrentTime === 'function') {
-          let pauseTime = player.getCurrentTime();
-          maxTimeWatched = Math.max(maxTimeWatched, pauseTime);
-          localStorage.setItem(getProgressStorageKey(), maxTimeWatched);
-          updateProgressUI(maxTimeWatched);
+          flushProgressTracking(player.getCurrentTime());
+          updateProgressUI(getWatchedSeconds());
         }
         clearInterval(checkProgressInterval);
+        previousTrackedPosition = null;
         clearTimeout(idleTimeout);
       }
 
       if (event.data === YT.PlayerState.ENDED) {
-        if (maxTimeWatched >= REQUIRED_WATCH_TIME_SEC) {
+        if (getWatchedSeconds() >= REQUIRED_WATCH_TIME_SEC) {
           Swal.fire('觀看完成', '太棒了！您已達到要求的觀看時數，接下來請進行測驗。', 'success').then(proceedToQuiz);
         } else {
           Swal.fire('提醒', `您的總觀看進度尚未達標。請確認是否有遺漏片段。`, 'warning');
@@ -528,10 +639,9 @@
       checkProgressInterval = setInterval(() => {
         if (!player || !player.getCurrentTime) return;
         
-        let currentTime = player.getCurrentTime();
-        maxTimeWatched = Math.max(maxTimeWatched, currentTime);
-        localStorage.setItem(getProgressStorageKey(), maxTimeWatched);
-        updateProgressUI(maxTimeWatched);
+        const currentTime = player.getCurrentTime();
+        flushProgressTracking(currentTime);
+        updateProgressUI(getWatchedSeconds());
       }, 1000);
     }
 
@@ -546,8 +656,11 @@
       }).then((result) => {
         if (!result.isConfirmed) return;
 
-        maxTimeWatched = 0;
+        watchedSecondMarks = new Set();
+        lastPlaybackPosition = 0;
+        previousTrackedPosition = null;
         localStorage.removeItem(getProgressStorageKey());
+        setReviewedSegmentHint(false);
         updateProgressUI(0);
 
         if (player && typeof player.seekTo === 'function') {
@@ -593,6 +706,7 @@
     function proceedToQuiz() {
       if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
       clearInterval(checkProgressInterval);
+      previousTrackedPosition = null;
       clearTimeout(idleTimeout);
       showSection('step-quiz');
     }
