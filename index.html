@@ -334,6 +334,16 @@
             <div class="progress-bar-fill" id="progress-fill"></div>
           </div>
         </div>
+
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+          <button
+            type="button"
+            onclick="resetWatchProgress()"
+            style="border: 1px solid var(--color-border); background: white; color: var(--color-text-muted); border-radius: 999px; padding: 6px 12px; font-size: 0.8125rem; cursor: pointer;"
+          >
+            重置觀看進度
+          </button>
+        </div>
         
         <button id="btn-goto-quiz" onclick="proceedToQuiz()" class="btn btn-success hidden">
           🎉 恭喜達標！點此前往測驗
@@ -451,10 +461,14 @@
       document.getElementById(sectionId).classList.remove('hidden');
     }
 
+    function getProgressStorageKey() {
+      return `gas_training_${currentUserEmail}_${VIDEO_ID}`;
+    }
+
     // --- Video Logic ---
     function startTraining() {
       // 讀取進度
-      const savedProgress = localStorage.getItem(`gas_training_${currentUserEmail}_${VIDEO_ID}`);
+      const savedProgress = localStorage.getItem(getProgressStorageKey());
       if (savedProgress) {
         maxTimeWatched = parseFloat(savedProgress);
         Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: '已載入上次觀看進度', showConfirmButton: false, timer: 3000 });
@@ -493,7 +507,7 @@
         if (player && typeof player.getCurrentTime === 'function') {
           let pauseTime = player.getCurrentTime();
           maxTimeWatched = Math.max(maxTimeWatched, pauseTime);
-          localStorage.setItem(`gas_training_${currentUserEmail}_${VIDEO_ID}`, maxTimeWatched);
+          localStorage.setItem(getProgressStorageKey(), maxTimeWatched);
           updateProgressUI(maxTimeWatched);
         }
         clearInterval(checkProgressInterval);
@@ -516,9 +530,40 @@
         
         let currentTime = player.getCurrentTime();
         maxTimeWatched = Math.max(maxTimeWatched, currentTime);
-        localStorage.setItem(`gas_training_${currentUserEmail}_${VIDEO_ID}`, maxTimeWatched);
+        localStorage.setItem(getProgressStorageKey(), maxTimeWatched);
         updateProgressUI(maxTimeWatched);
       }, 1000);
+    }
+
+    function resetWatchProgress() {
+      Swal.fire({
+        title: '重置觀看進度？',
+        text: '這會清除目前儲存的觀看時數，並將影片進度歸零。',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '確認重置',
+        cancelButtonText: '取消'
+      }).then((result) => {
+        if (!result.isConfirmed) return;
+
+        maxTimeWatched = 0;
+        localStorage.removeItem(getProgressStorageKey());
+        updateProgressUI(0);
+
+        if (player && typeof player.seekTo === 'function') {
+          player.seekTo(0);
+          if (typeof player.pauseVideo === 'function') player.pauseVideo();
+        }
+
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: 'success',
+          title: '觀看進度已重置',
+          showConfirmButton: false,
+          timer: 2000
+        });
+      });
     }
 
     function updateProgressUI(currentTime) {
