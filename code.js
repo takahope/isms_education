@@ -8,6 +8,7 @@ const QUIZ_CONFIG = {
   questionSheetName: '題庫',
   trainingRecordSheetName: '訓練紀錄',
   answerRecordSheetName: '答題紀錄',
+  progressSheetName: '觀看進度',
   questionCount: 10,
   passingScore: 70,
   pointsPerQuestion: 10,
@@ -17,7 +18,8 @@ const QUIZ_CONFIG = {
 const SHEET_HEADERS = {
   題庫: ['題目ID', '是否啟用', '年度', '主題', '題型', '題目內容', '選項A', '選項B', '選項C', '選項D', '選項E', '正確答案', '答案說明', '來源標註', '備註'],
   訓練紀錄: ['時間戳記', '姓名', '使用者信箱', '課程名稱', '測驗分數', '測驗結果', '測驗批次ID', '題目數', '及格門檻'],
-  答題紀錄: ['時間戳記', '測驗批次ID', '姓名', '使用者信箱', '課程名稱', '題目序號', '題目ID', '主題', '題型', '題目內容', '選項快照', '正確答案', '作答答案', '是否答對', '本題得分', '來源標註']
+  答題紀錄: ['時間戳記', '測驗批次ID', '姓名', '使用者信箱', '課程名稱', '題目序號', '題目ID', '主題', '題型', '題目內容', '選項快照', '正確答案', '作答答案', '是否答對', '本題得分', '來源標註'],
+  觀看進度: ['使用者信箱', '課程名稱', '影片ID', '已觀看區間', '已觀看秒數', '最後播放位置', '最後更新時間', '最後同步來源版本']
 };
 
 // 1. 發佈為 Web App 時的進入點
@@ -139,6 +141,105 @@ function submitQuizAttempt(payload) {
   }
 }
 
+function getTrainingProgress(payload) {
+  try {
+    ensureSheetHeaders_();
+    const normalized = normalizeProgressPayload_(payload, { requireProgressData: false });
+    const progressSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(QUIZ_CONFIG.progressSheetName);
+    const progressRow = findProgressRow_(progressSheet, normalized.userEmail, normalized.videoId);
+
+    if (!progressRow) {
+      return { success: true, progress: null };
+    }
+
+    return {
+      success: true,
+      progress: {
+        userEmail: progressRow.userEmail,
+        videoTitle: progressRow.videoTitle,
+        videoId: progressRow.videoId,
+        watchedRanges: progressRow.watchedRanges,
+        watchedSecondsCount: progressRow.watchedSecondsCount,
+        lastPlaybackPosition: progressRow.lastPlaybackPosition,
+        updatedAt: progressRow.updatedAt,
+        sourceVersion: progressRow.sourceVersion
+      }
+    };
+  } catch (error) {
+    console.error('讀取觀看進度失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法載入觀看進度。'
+    };
+  }
+}
+
+function syncTrainingProgress(payload) {
+  try {
+    ensureSheetHeaders_();
+    const normalized = normalizeProgressPayload_(payload, { requireProgressData: true });
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const progressSheet = ss.getSheetByName(QUIZ_CONFIG.progressSheetName);
+    const existing = findProgressRow_(progressSheet, normalized.userEmail, normalized.videoId);
+
+    if (existing && compareIsoTimestamps_(normalized.updatedAt, existing.updatedAt) < 0) {
+      return {
+        success: true,
+        skipped: true,
+        progress: {
+          userEmail: existing.userEmail,
+          videoTitle: existing.videoTitle,
+          videoId: existing.videoId,
+          watchedRanges: existing.watchedRanges,
+          watchedSecondsCount: existing.watchedSecondsCount,
+          lastPlaybackPosition: existing.lastPlaybackPosition,
+          updatedAt: existing.updatedAt,
+          sourceVersion: existing.sourceVersion
+        }
+      };
+    }
+
+    const rowValues = [[
+      normalized.userEmail,
+      normalized.videoTitle,
+      normalized.videoId,
+      normalized.watchedRanges,
+      normalized.watchedSecondsCount,
+      normalized.lastPlaybackPosition,
+      normalized.updatedAt,
+      normalized.sourceVersion
+    ]];
+
+    if (existing) {
+      progressSheet.getRange(existing.rowNumber, 1, 1, rowValues[0].length).setValues(rowValues);
+    } else {
+      progressSheet.getRange(progressSheet.getLastRow() + 1, 1, 1, rowValues[0].length).setValues(rowValues);
+    }
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      skipped: false,
+      progress: {
+        userEmail: normalized.userEmail,
+        videoTitle: normalized.videoTitle,
+        videoId: normalized.videoId,
+        watchedRanges: normalized.watchedRanges,
+        watchedSecondsCount: normalized.watchedSecondsCount,
+        lastPlaybackPosition: normalized.lastPlaybackPosition,
+        updatedAt: normalized.updatedAt,
+        sourceVersion: normalized.sourceVersion
+      }
+    };
+  } catch (error) {
+    console.error('同步觀看進度失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法同步觀看進度。'
+    };
+  }
+}
+
 // 舊前端相容入口，保留摘要寫入能力。
 function submitTrainingResult(data) {
   try {
@@ -183,6 +284,82 @@ function ensureSheetHeaders_() {
       headerRange.setFontWeight('bold').setBackground('#f8fafc');
     }
   });
+}
+
+function normalizeProgressPayload_(payload, options) {
+  const normalized = {
+    userEmail: String(payload && payload.userEmail || '').trim(),
+    videoTitle: String(payload && payload.videoTitle || '').trim(),
+    videoId: String(payload && payload.videoId || '').trim(),
+    watchedRanges: String(payload && payload.watchedRanges || '').trim(),
+    watchedSecondsCount: Number(payload && payload.watchedSecondsCount || 0),
+    lastPlaybackPosition: Number(payload && payload.lastPlaybackPosition || 0),
+    updatedAt: normalizeIsoTimestamp_(payload && payload.updatedAt),
+    sourceVersion: String(payload && payload.sourceVersion || '2').trim()
+  };
+
+  if (!normalized.userEmail) {
+    throw new Error('缺少使用者信箱。');
+  }
+  if (!normalized.videoId) {
+    throw new Error('缺少影片ID。');
+  }
+  if (options && options.requireProgressData) {
+    if (!normalized.updatedAt) {
+      throw new Error('缺少觀看進度更新時間。');
+    }
+    if (normalized.watchedSecondsCount < 0) {
+      throw new Error('觀看秒數不可為負值。');
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeIsoTimestamp_(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('觀看進度時間格式錯誤。');
+  }
+  return parsed.toISOString();
+}
+
+function compareIsoTimestamps_(left, right) {
+  const leftTime = Date.parse(String(left || ''));
+  const rightTime = Date.parse(String(right || ''));
+  const normalizedLeft = Number.isNaN(leftTime) ? 0 : leftTime;
+  const normalizedRight = Number.isNaN(rightTime) ? 0 : rightTime;
+  if (normalizedLeft === normalizedRight) return 0;
+  return normalizedLeft > normalizedRight ? 1 : -1;
+}
+
+function findProgressRow_(sheet, userEmail, videoId) {
+  if (!sheet) return null;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  const values = sheet.getRange(1, 1, lastRow, SHEET_HEADERS[QUIZ_CONFIG.progressSheetName].length).getDisplayValues();
+  for (let i = 1; i < values.length; i += 1) {
+    const row = values[i];
+    if (String(row[0] || '').trim() === userEmail && String(row[2] || '').trim() === videoId) {
+      return {
+        rowNumber: i + 1,
+        userEmail: String(row[0] || '').trim(),
+        videoTitle: String(row[1] || '').trim(),
+        videoId: String(row[2] || '').trim(),
+        watchedRanges: String(row[3] || '').trim(),
+        watchedSecondsCount: Number(row[4] || 0),
+        lastPlaybackPosition: Number(row[5] || 0),
+        updatedAt: String(row[6] || '').trim(),
+        sourceVersion: String(row[7] || '').trim()
+      };
+    }
+  }
+
+  return null;
 }
 
 function loadQuestionBank_() {

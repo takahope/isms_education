@@ -579,14 +579,19 @@
     const REQUIRED_WATCH_TIME_SEC = 30;
     const PROGRESS_SCHEMA_VERSION = 2;
     const NATURAL_PLAYBACK_DELTA_SEC = 2.5;
+    const CLOUD_SYNC_INTERVAL_MS = 30 * 60 * 1000;
 
     let player;
     let replayPlayer;
     let watchedSecondMarks = new Set();
     let lastPlaybackPosition = 0;
+    let progressUpdatedAt = '';
+    let lastSyncedAt = '';
+    let isProgressDirty = false;
     let previousTrackedPosition = null;
     let isInReviewedSegment = false;
     let checkProgressInterval;
+    let progressSyncInterval;
     let idleTimeout;
 
     let currentUserEmail = '';
@@ -651,36 +656,217 @@
       return watchedSecondMarks.size;
     }
 
+    function getProgressPayload() {
+      return {
+        schemaVersion: PROGRESS_SCHEMA_VERSION,
+        watchedSecondMarks: Array.from(watchedSecondMarks).sort((a, b) => a - b),
+        lastPlaybackPosition,
+        updatedAt: progressUpdatedAt,
+        lastSyncedAt
+      };
+    }
+
     function loadStoredProgress() {
       const savedProgress = localStorage.getItem(getProgressStorageKey());
-      if (!savedProgress) return;
+      if (!savedProgress) return null;
 
       try {
         const parsed = JSON.parse(savedProgress);
         if (parsed && parsed.schemaVersion === PROGRESS_SCHEMA_VERSION && Array.isArray(parsed.watchedSecondMarks)) {
-          watchedSecondMarks = new Set(
-            parsed.watchedSecondMarks
-              .map((value) => Number(value))
-              .filter((value) => Number.isInteger(value) && value >= 0)
-          );
-          lastPlaybackPosition = Math.max(0, Number(parsed.lastPlaybackPosition) || 0);
-          return;
+          return normalizeLocalProgress(parsed);
         }
       } catch (error) {
         // Legacy format falls through to reset.
       }
 
       localStorage.removeItem(getProgressStorageKey());
-      watchedSecondMarks = new Set();
-      lastPlaybackPosition = 0;
+      return null;
     }
 
     function saveStoredProgress() {
-      localStorage.setItem(getProgressStorageKey(), JSON.stringify({
+      localStorage.setItem(getProgressStorageKey(), JSON.stringify(getProgressPayload()));
+    }
+
+    function resetProgressState() {
+      watchedSecondMarks = new Set();
+      lastPlaybackPosition = 0;
+      progressUpdatedAt = '';
+      lastSyncedAt = '';
+      isProgressDirty = false;
+      previousTrackedPosition = null;
+      setReviewedSegmentHint(false);
+    }
+
+    function normalizeLocalProgress(parsed) {
+      return {
         schemaVersion: PROGRESS_SCHEMA_VERSION,
-        watchedSecondMarks: Array.from(watchedSecondMarks).sort((a, b) => a - b),
-        lastPlaybackPosition
-      }));
+        watchedSecondMarks: Array.isArray(parsed.watchedSecondMarks)
+          ? parsed.watchedSecondMarks
+              .map((value) => Number(value))
+              .filter((value) => Number.isInteger(value) && value >= 0)
+          : [],
+        lastPlaybackPosition: Math.max(0, Number(parsed.lastPlaybackPosition) || 0),
+        updatedAt: normalizeTimestampValue(parsed.updatedAt),
+        lastSyncedAt: normalizeTimestampValue(parsed.lastSyncedAt)
+      };
+    }
+
+    function normalizeCloudProgress(progress) {
+      if (!progress) return null;
+      return {
+        schemaVersion: PROGRESS_SCHEMA_VERSION,
+        watchedSecondMarks: expandRangesToWatchedMarks(progress.watchedRanges),
+        lastPlaybackPosition: Math.max(0, Number(progress.lastPlaybackPosition) || 0),
+        updatedAt: normalizeTimestampValue(progress.updatedAt),
+        lastSyncedAt: normalizeTimestampValue(progress.updatedAt),
+        watchedSecondsCount: Number(progress.watchedSecondsCount) || 0
+      };
+    }
+
+    function applyProgressState(progress, options = {}) {
+      watchedSecondMarks = new Set((progress && progress.watchedSecondMarks) || []);
+      lastPlaybackPosition = Math.max(0, Number(progress && progress.lastPlaybackPosition) || 0);
+      progressUpdatedAt = normalizeTimestampValue(progress && progress.updatedAt);
+      lastSyncedAt = normalizeTimestampValue(progress && progress.lastSyncedAt);
+      isProgressDirty = Boolean(options.markDirty);
+      previousTrackedPosition = null;
+      setReviewedSegmentHint(false);
+      saveStoredProgress();
+    }
+
+    function normalizeTimestampValue(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      const parsed = new Date(raw);
+      return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
+    }
+
+    function getNowIsoString() {
+      return new Date().toISOString();
+    }
+
+    function compareProgressTimestamps(left, right) {
+      const leftTime = left ? Date.parse(left) : 0;
+      const rightTime = right ? Date.parse(right) : 0;
+      const normalizedLeft = Number.isNaN(leftTime) ? 0 : leftTime;
+      const normalizedRight = Number.isNaN(rightTime) ? 0 : rightTime;
+      if (normalizedLeft === normalizedRight) return 0;
+      return normalizedLeft > normalizedRight ? 1 : -1;
+    }
+
+    function markProgressDirty(updatedAt = getNowIsoString()) {
+      progressUpdatedAt = updatedAt;
+      isProgressDirty = true;
+      saveStoredProgress();
+    }
+
+    function compressWatchedMarksToRanges() {
+      const marks = Array.from(watchedSecondMarks).sort((a, b) => a - b);
+      if (!marks.length) return '';
+
+      const ranges = [];
+      let start = marks[0];
+      let end = marks[0];
+
+      for (let i = 1; i < marks.length; i += 1) {
+        const current = marks[i];
+        if (current === end + 1) {
+          end = current;
+          continue;
+        }
+        ranges.push(`${start}-${end}`);
+        start = current;
+        end = current;
+      }
+      ranges.push(`${start}-${end}`);
+      return ranges.join('|');
+    }
+
+    function expandRangesToWatchedMarks(rangesString) {
+      if (!rangesString) return [];
+      return String(rangesString)
+        .split('|')
+        .flatMap((segment) => {
+          const [startRaw, endRaw] = segment.split('-');
+          const start = Number(startRaw);
+          const end = Number(endRaw);
+          if (!Number.isInteger(start) || !Number.isInteger(end) || end < start) return [];
+          const values = [];
+          for (let second = start; second <= end; second += 1) {
+            values.push(second);
+          }
+          return values;
+        });
+    }
+
+    function callServer(functionName, payload) {
+      return new Promise((resolve, reject) => {
+        if (typeof google === 'undefined' || !google.script) {
+          resolve(null);
+          return;
+        }
+
+        let runner = google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject);
+
+        if (typeof payload === 'undefined') {
+          runner[functionName]();
+        } else {
+          runner[functionName](payload);
+        }
+      });
+    }
+
+    function buildCloudProgressPayload() {
+      return {
+        userEmail: currentUserEmail,
+        videoTitle: VIDEO_TITLE,
+        videoId: VIDEO_ID,
+        watchedRanges: compressWatchedMarksToRanges(),
+        watchedSecondsCount: getWatchedSeconds(),
+        lastPlaybackPosition,
+        updatedAt: progressUpdatedAt || getNowIsoString(),
+        sourceVersion: String(PROGRESS_SCHEMA_VERSION)
+      };
+    }
+
+    async function loadLatestProgressState() {
+      const localProgress = loadStoredProgress();
+      let cloudProgress = null;
+
+      try {
+        const response = await callServer('getTrainingProgress', {
+          userEmail: currentUserEmail,
+          videoId: VIDEO_ID
+        });
+        if (response && response.success && response.progress) {
+          cloudProgress = normalizeCloudProgress(response.progress);
+        }
+      } catch (error) {
+        console.error('載入雲端觀看進度失敗:', error);
+      }
+
+      const localTimestamp = normalizeTimestampValue(localProgress && localProgress.updatedAt);
+      const cloudTimestamp = normalizeTimestampValue(cloudProgress && cloudProgress.updatedAt);
+      const comparison = compareProgressTimestamps(localTimestamp, cloudTimestamp);
+
+      if (localProgress && (!cloudProgress || comparison >= 0)) {
+        applyProgressState(localProgress, { markDirty: false });
+        if (!cloudProgress || comparison > 0) {
+          scheduleProgressSync('local_newer', { force: true, silent: true });
+        }
+        return 'local';
+      }
+
+      if (cloudProgress) {
+        applyProgressState(cloudProgress, { markDirty: false });
+        return 'cloud';
+      }
+
+      resetProgressState();
+      saveStoredProgress();
+      return 'empty';
     }
 
     function setReviewedSegmentHint(visible) {
@@ -703,11 +889,16 @@
 
     function flushProgressTracking(currentTime) {
       if (typeof currentTime !== 'number' || Number.isNaN(currentTime)) return;
+      const previousPlaybackPosition = lastPlaybackPosition;
 
       if (previousTrackedPosition === null) {
         previousTrackedPosition = currentTime;
         lastPlaybackPosition = currentTime;
-        saveStoredProgress();
+        if (Math.abs(previousPlaybackPosition - currentTime) > 0.25) {
+          markProgressDirty();
+        } else {
+          saveStoredProgress();
+        }
         updateReviewedSegmentState(currentTime);
         return;
       }
@@ -727,7 +918,11 @@
 
       lastPlaybackPosition = currentTime;
       previousTrackedPosition = currentTime;
-      saveStoredProgress();
+      if (addedNewSecond || Math.abs(previousPlaybackPosition - currentTime) > 0.25) {
+        markProgressDirty();
+      } else {
+        saveStoredProgress();
+      }
 
       if (addedNewSecond) {
         setReviewedSegmentHint(false);
@@ -736,15 +931,20 @@
       }
     }
 
-    function startTraining() {
-      watchedSecondMarks = new Set();
-      lastPlaybackPosition = 0;
-      previousTrackedPosition = null;
-      setReviewedSegmentHint(false);
+    async function startTraining() {
+      resetProgressState();
+      showSection('step-loading');
 
-      loadStoredProgress();
-      if (watchedSecondMarks.size > 0 || lastPlaybackPosition > 0) {
-        Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: '已載入上次觀看進度', showConfirmButton: false, timer: 3000 });
+      const progressSource = await loadLatestProgressState();
+      if (progressSource !== 'empty') {
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: 'info',
+          title: progressSource === 'cloud' ? '已載入雲端觀看進度' : '已載入上次觀看進度',
+          showConfirmButton: false,
+          timer: 3000
+        });
       }
 
       showSection('step-video');
@@ -782,6 +982,7 @@
           : previousTrackedPosition;
         updateReviewedSegmentState(previousTrackedPosition || 0);
         startProgressTracking();
+        startPeriodicProgressSync();
         resetIdleTimer();
       } else {
         if (player && typeof player.getCurrentTime === 'function') {
@@ -789,11 +990,15 @@
           updateProgressUI(getWatchedSeconds());
         }
         clearInterval(checkProgressInterval);
+        clearInterval(progressSyncInterval);
+        progressSyncInterval = null;
         previousTrackedPosition = null;
         clearTimeout(idleTimeout);
+        scheduleProgressSync('pause', { silent: true });
       }
 
       if (event.data === YT.PlayerState.ENDED) {
+        scheduleProgressSync('ended', { force: true, silent: true });
         if (getWatchedSeconds() >= REQUIRED_WATCH_TIME_SEC) {
           Swal.fire('觀看完成', '太棒了！您已達到要求的觀看時數，接下來請進行測驗。', 'success').then(() => {
             proceedToQuiz();
@@ -815,6 +1020,47 @@
       }, 1000);
     }
 
+    function startPeriodicProgressSync() {
+      clearInterval(progressSyncInterval);
+      progressSyncInterval = setInterval(() => {
+        scheduleProgressSync('interval', { silent: true });
+      }, CLOUD_SYNC_INTERVAL_MS);
+    }
+
+    async function scheduleProgressSync(reason, options = {}) {
+      if (!currentUserEmail) return;
+      if (!options.force && !isProgressDirty) return;
+      if (typeof google === 'undefined' || !google.script) return;
+
+      const payload = buildCloudProgressPayload();
+      try {
+        const response = await callServer('syncTrainingProgress', payload);
+        if (response && response.success) {
+          if (response.skipped && response.progress) {
+            applyProgressState(normalizeCloudProgress(response.progress), { markDirty: false });
+            return;
+          }
+          const latestTimestamp = response.progress && response.progress.updatedAt
+            ? normalizeTimestampValue(response.progress.updatedAt)
+            : payload.updatedAt;
+          lastSyncedAt = latestTimestamp;
+          if (!response.skipped) {
+            progressUpdatedAt = latestTimestamp;
+            isProgressDirty = false;
+          }
+          saveStoredProgress();
+          return;
+        }
+        if (!options.silent) {
+          console.error(`觀看進度同步失敗: ${reason}`, response && response.message);
+        }
+      } catch (error) {
+        if (!options.silent) {
+          console.error(`觀看進度同步失敗: ${reason}`, error);
+        }
+      }
+    }
+
     function resetWatchProgress() {
       Swal.fire({
         title: '重置觀看進度？',
@@ -828,9 +1074,13 @@
 
         watchedSecondMarks = new Set();
         lastPlaybackPosition = 0;
+        progressUpdatedAt = getNowIsoString();
+        lastSyncedAt = '';
+        isProgressDirty = true;
         previousTrackedPosition = null;
-        localStorage.removeItem(getProgressStorageKey());
         setReviewedSegmentHint(false);
+        saveStoredProgress();
+        scheduleProgressSync('reset', { force: true, silent: true });
         updateProgressUI(0);
 
         if (player && typeof player.seekTo === 'function') {
@@ -876,8 +1126,11 @@
     function proceedToQuiz() {
       if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
       clearInterval(checkProgressInterval);
+      clearInterval(progressSyncInterval);
+      progressSyncInterval = null;
       previousTrackedPosition = null;
       clearTimeout(idleTimeout);
+      scheduleProgressSync('proceed_to_quiz', { force: true, silent: true });
       showSection('step-quiz');
       closeReplayWindow();
       loadQuizQuestions();
