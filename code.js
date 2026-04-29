@@ -23,7 +23,7 @@ const SHEET_HEADERS = {
 // 1. 發佈為 Web App 時的進入點
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('index')
-      .setTitle('企業內部教育訓練系統')
+      .setTitle('臺灣人體生物資料庫資安暨個資教育訓練')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
