@@ -580,6 +580,8 @@
     const PROGRESS_SCHEMA_VERSION = 2;
     const NATURAL_PLAYBACK_DELTA_SEC = 2.5;
     const CLOUD_SYNC_INTERVAL_MS = 30 * 60 * 1000;
+    const FOCUS_LOSS_GRACE_MS = 80;
+    const FOCUS_ALERT_COOLDOWN_MS = 1000;
 
     let player;
     let replayPlayer;
@@ -603,6 +605,8 @@
     let dragPointerId = null;
     let dragOffsetX = 0;
     let dragOffsetY = 0;
+    let blurCheckTimeout = null;
+    let lastFocusAlertAt = 0;
 
     document.addEventListener('DOMContentLoaded', () => {
       bindReplayWindowEvents();
@@ -1136,6 +1140,36 @@
       loadQuizQuestions();
     }
 
+    function canPauseForFocusLoss() {
+      return player
+        && typeof player.getPlayerState === 'function'
+        && player.getPlayerState() === YT.PlayerState.PLAYING;
+    }
+
+    function isManagedPlayerIframe(element) {
+      if (!element || element.tagName !== 'IFRAME') return false;
+      const trainingIframe = document.querySelector('#ytplayer iframe');
+      const replayIframe = document.querySelector('#quiz-replay-player iframe');
+      return element === trainingIframe || element === replayIframe;
+    }
+
+    function shouldSkipFocusLossPause() {
+      if (document.hidden) return true;
+      if (document.hasFocus()) return true;
+      if (Swal.isVisible && Swal.isVisible()) return true;
+      return isManagedPlayerIframe(document.activeElement);
+    }
+
+    function pauseTrainingForFocusLoss(message) {
+      const now = Date.now();
+      if (!canPauseForFocusLoss()) return;
+      if (now - lastFocusAlertAt < FOCUS_ALERT_COOLDOWN_MS) return;
+
+      lastFocusAlertAt = now;
+      player.pauseVideo();
+      Swal.fire('影片已暫停', message, 'warning');
+    }
+
     function retryQuiz() {
       showSection('step-quiz');
       closeReplayWindow();
@@ -1186,17 +1220,17 @@
     }
 
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden && player && typeof player.getPlayerState === 'function' && player.getPlayerState() === YT.PlayerState.PLAYING) {
-        player.pauseVideo();
-        Swal.fire('影片已暫停', '系統偵測到您離開了此分頁。為確保訓練品質，請保持在此畫面觀看。', 'warning');
+      if (document.hidden) {
+        pauseTrainingForFocusLoss('系統偵測到您離開了此分頁。為確保訓練品質，請保持在此畫面觀看。');
       }
     });
 
     window.addEventListener('blur', () => {
-      if (player && typeof player.getPlayerState === 'function' && player.getPlayerState() === YT.PlayerState.PLAYING) {
-        player.pauseVideo();
-        Swal.fire('影片已暫停', '系統偵測到視窗失去焦點。為確保訓練品質，請保持在此畫面觀看。', 'warning');
-      }
+      clearTimeout(blurCheckTimeout);
+      blurCheckTimeout = setTimeout(() => {
+        if (shouldSkipFocusLossPause()) return;
+        pauseTrainingForFocusLoss('系統偵測到視窗失去焦點。為確保訓練品質，請保持在此畫面觀看。');
+      }, FOCUS_LOSS_GRACE_MS);
     });
 
     function loadQuizQuestions() {
