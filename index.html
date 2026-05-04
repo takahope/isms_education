@@ -155,15 +155,120 @@
     }
 
     /* Welcome Section */
-    .user-badge {
-      display: inline-block;
-      background: var(--color-bg);
-      padding: 8px 16px;
+    .account-card {
+      position: relative;
+      margin: 0 auto var(--space-lg);
+      padding: 20px;
+      max-width: 560px;
+      border: 1px solid rgba(14, 165, 233, 0.18);
       border-radius: 20px;
-      font-weight: 500;
-      color: var(--color-primary);
-      margin-bottom: var(--space-lg);
-      border: 1px solid var(--color-border);
+      background:
+        radial-gradient(circle at top right, rgba(14, 165, 233, 0.16), transparent 32%),
+        linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+      text-align: left;
+      overflow: hidden;
+    }
+
+    .account-card::after {
+      content: '';
+      position: absolute;
+      inset: auto -40px -50px auto;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: rgba(14, 165, 233, 0.08);
+      filter: blur(6px);
+      pointer-events: none;
+    }
+
+    .account-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(14, 165, 233, 0.1);
+      border: 1px solid rgba(14, 165, 233, 0.18);
+      color: #0369a1;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      margin-bottom: 14px;
+    }
+
+    .account-primary-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .account-email {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--color-primary-hover);
+      word-break: break-word;
+    }
+
+    .account-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #0f172a;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.12);
+    }
+
+    .assignment-list {
+      display: grid;
+      gap: 10px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .assignment-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+
+    .assignment-item::before {
+      content: '';
+      width: 4px;
+      min-width: 4px;
+      align-self: stretch;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #0ea5e9 0%, #38bdf8 100%);
+    }
+
+    .assignment-text {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--color-text-main);
+      word-break: break-word;
+    }
+
+    @media (max-width: 640px) {
+      .account-card {
+        padding: 18px;
+      }
+
+      .account-primary-line {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .account-email {
+        font-size: 1rem;
+      }
     }
 
     /* Video Section */
@@ -472,7 +577,14 @@
       <!-- Step 1: Welcome -->
       <div id="step-welcome" class="hidden text-center">
         <h2 class="result-title">歡迎開始教育訓練</h2>
-        <div class="user-badge" id="display-user-email">載入中...</div>
+        <div class="account-card" id="account-card">
+          <div class="account-chip">目前登入帳號</div>
+          <div class="account-primary-line">
+            <div class="account-email" id="display-user-email">載入中...</div>
+            <div class="account-name hidden" id="display-user-name"></div>
+          </div>
+          <div class="assignment-list hidden" id="display-user-assignments"></div>
+        </div>
         <p class="result-desc">請確認您的帳號無誤。本次訓練包含一段核心觀念影片，以及課後評量測驗。</p>
         <button onclick="startTraining()" class="btn btn-primary">開始觀看影片</button>
       </div>
@@ -612,31 +724,100 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       bindReplayWindowEvents();
-      fetchUserEmail();
+      fetchUserProfile();
     });
 
-    function fetchUserEmail() {
+    function fetchUserProfile() {
       if (typeof google !== 'undefined' && google.script) {
         google.script.run
-          .withSuccessHandler((email) => {
-            currentUserEmail = email || 'guest@example.com';
-            finishLoading(currentUserEmail);
+          .withSuccessHandler((profile) => {
+            const normalizedProfile = normalizeUserProfile(profile, 'guest@example.com');
+            currentUserEmail = normalizedProfile.email;
+            finishLoading(normalizedProfile);
           })
           .withFailureHandler(() => {
-            currentUserEmail = 'local-tester@example.com';
-            finishLoading(currentUserEmail);
+            const fallbackProfile = normalizeUserProfile(null, 'local-tester@example.com');
+            currentUserEmail = fallbackProfile.email;
+            finishLoading(fallbackProfile);
           })
-          .getCurrentUserEmail();
+          .getCurrentUserProfile();
       } else {
         setTimeout(() => {
-          currentUserEmail = 'local-tester@example.com';
-          finishLoading(currentUserEmail);
+          const fallbackProfile = normalizeUserProfile(null, 'local-tester@example.com');
+          currentUserEmail = fallbackProfile.email;
+          finishLoading(fallbackProfile);
         }, 300);
       }
     }
 
-    function finishLoading(email) {
-      document.getElementById('display-user-email').textContent = email;
+    function normalizeUserProfile(profile, fallbackEmail) {
+      const normalizedEmail = String(
+        (profile && profile.email)
+        || fallbackEmail
+        || 'guest@example.com'
+      ).trim() || 'guest@example.com';
+
+      const assignments = Array.isArray(profile && profile.assignments)
+        ? profile.assignments
+            .filter((item) => item && (item.type || item.orgName || item.title))
+            .map((item) => ({
+              type: String(item.type || '').trim(),
+              orgName: String(item.orgName || '').trim(),
+              title: String(item.title || '').trim()
+            }))
+        : [];
+
+      return {
+        email: normalizedEmail,
+        name: String((profile && profile.name) || '').trim(),
+        assignments
+      };
+    }
+
+    function renderUserProfile(profile) {
+      const emailEl = document.getElementById('display-user-email');
+      const nameEl = document.getElementById('display-user-name');
+      const assignmentsEl = document.getElementById('display-user-assignments');
+
+      emailEl.textContent = profile.email;
+
+      if (profile.name) {
+        nameEl.textContent = profile.name;
+        nameEl.classList.remove('hidden');
+      } else {
+        nameEl.textContent = '';
+        nameEl.classList.add('hidden');
+      }
+
+      assignmentsEl.textContent = '';
+      if (profile.assignments.length === 0) {
+        assignmentsEl.classList.add('hidden');
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      profile.assignments.forEach((assignment) => {
+        const item = document.createElement('div');
+        item.className = 'assignment-item';
+
+        const text = document.createElement('div');
+        text.className = 'assignment-text';
+        text.textContent = [
+          assignment.type,
+          assignment.orgName,
+          assignment.title
+        ].filter(Boolean).join('｜');
+
+        item.appendChild(text);
+        fragment.appendChild(item);
+      });
+
+      assignmentsEl.appendChild(fragment);
+      assignmentsEl.classList.remove('hidden');
+    }
+
+    function finishLoading(profile) {
+      renderUserProfile(profile);
       showSection('step-welcome');
     }
 

@@ -39,31 +39,231 @@ function getCurrentUserEmail() {
   }
 }
 
+function getCurrentUserProfile() {
+  const fallbackEmail = getCurrentUserEmail();
+
+  try {
+    const email = normalizeEmail_(fallbackEmail);
+    const masterSS = getMasterSpreadsheet_();
+    const personnelSheet = getRequiredSheet_(masterSS, '人員主檔');
+    const assignmentSheet = getRequiredSheet_(masterSS, '人員職務配置');
+    const name = findPersonnelNameByEmail_(personnelSheet, email);
+    const assignments = buildUserAssignments_(assignmentSheet, email);
+
+    return {
+      success: true,
+      email,
+      name,
+      assignments
+    };
+  } catch (error) {
+    console.error('讀取首頁人員資料失敗:', error);
+    return {
+      success: false,
+      email: fallbackEmail || '',
+      name: '',
+      assignments: [],
+      message: error && error.message ? error.message : '無法讀取人員資料'
+    };
+  }
+}
+
 // 3. 根據 Email 從人員主檔查姓名
 function getUserNameByEmail(email) {
   try {
-    if (typeof ENV === 'undefined' || !ENV.MASTER_SHEET_ID || ENV.MASTER_SHEET_ID.includes('請在此填入')) {
-      return '未設定主檔ID';
-    }
-
-    const masterSS = SpreadsheetApp.openById(ENV.MASTER_SHEET_ID);
-    const masterSheet = masterSS.getSheetByName('人員主檔');
-
-    if (!masterSheet) {
-      return '找不到人員主檔';
-    }
-
-    const data = masterSheet.getDataRange().getDisplayValues();
-    for (let i = 1; i < data.length; i += 1) {
-      if (String(data[i][0]).trim() === String(email || '').trim()) {
-        return data[i][1] || '查無姓名';
-      }
-    }
+    const masterSheet = getRequiredSheet_(getMasterSpreadsheet_(), '人員主檔');
+    const name = findPersonnelNameByEmail_(masterSheet, email);
+    if (name) return name;
     return '查無此人';
   } catch (e) {
     console.error('讀取人員主檔失敗:', e);
+    if (e && e.message === '未設定主檔ID') return '未設定主檔ID';
+    if (e && e.message === '找不到人員主檔') return '找不到人員主檔';
     return '讀取失敗';
   }
+}
+
+function getMasterSpreadsheet_() {
+  if (typeof ENV === 'undefined' || !ENV.MASTER_SHEET_ID || ENV.MASTER_SHEET_ID.includes('請在此填入')) {
+    throw new Error('未設定主檔ID');
+  }
+
+  return SpreadsheetApp.openById(ENV.MASTER_SHEET_ID);
+}
+
+function getRequiredSheet_(spreadsheet, sheetName) {
+  const sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    throw new Error(`找不到${sheetName}`);
+  }
+  return sheet;
+}
+
+function findPersonnelNameByEmail_(sheet, email) {
+  const normalizedEmail = normalizeEmail_(email);
+  if (!normalizedEmail) return '';
+
+  const data = sheet.getDataRange().getDisplayValues();
+  for (let i = 1; i < data.length; i += 1) {
+    if (normalizeEmail_(data[i][0]) === normalizedEmail) {
+      return String(data[i][1] || '').trim();
+    }
+  }
+
+  return '';
+}
+
+function buildUserAssignments_(sheet, email) {
+  const normalizedEmail = normalizeEmail_(email);
+  if (!normalizedEmail) return [];
+
+  const rows = sheet.getDataRange().getDisplayValues();
+  const assignments = [];
+  for (let i = 1; i < rows.length; i += 1) {
+    if (normalizeEmail_(rows[i][0]) !== normalizedEmail) continue;
+
+    assignments.push({
+      rowIndex: i + 1,
+      email: rows[i][0],
+      name: rows[i][1],
+      orgCode: rows[i][2],
+      orgName: rows[i][3],
+      title: rows[i][4],
+      managerEmail: rows[i][5]
+    });
+  }
+
+  if (assignments.length === 0) return [];
+
+  const assignmentTypeMap = buildAssignmentTypeMap_(assignments);
+  return assignments
+    .map((assignment) => ({
+      type: assignmentTypeMap.get(getAssignmentIdentityKey_(assignment)) || '兼任',
+      orgName: String(assignment.orgName || '').trim(),
+      title: String(assignment.title || '').trim()
+    }))
+    .sort((a, b) => getAssignmentSortOrder_(a.type) - getAssignmentSortOrder_(b.type));
+}
+
+function buildAssignmentTypeMap_(assignments) {
+  const groupedAssignments = new Map();
+  const typeMap = new Map();
+
+  assignments.forEach((item) => {
+    const emailKey = normalizeEmail_(item.email);
+    if (!groupedAssignments.has(emailKey)) groupedAssignments.set(emailKey, []);
+    groupedAssignments.get(emailKey).push(item);
+  });
+
+  groupedAssignments.forEach((personAssignments) => {
+    const primaryMode = getPrimaryAssignmentMode_(personAssignments);
+    const primaryAssignments = isExplicitPrimaryKind_(primaryMode)
+      ? personAssignments.filter((item) => classifyAssignmentKind_(item.orgCode) === primaryMode)
+      : [];
+    const primaryManagerEmails = new Set(
+      primaryAssignments
+        .map((item) => normalizeEmail_(item.managerEmail))
+        .filter(Boolean)
+    );
+
+    personAssignments.forEach((item) => {
+      const itemKey = getAssignmentIdentityKey_(item);
+      const itemKind = classifyAssignmentKind_(item.orgCode);
+      const managerEmail = normalizeEmail_(item.managerEmail);
+
+      if (isFallbackPrimaryMode_(primaryMode)) {
+        typeMap.set(itemKey, '主職');
+        return;
+      }
+
+      if (isExplicitPrimaryKind_(primaryMode) && itemKind === primaryMode) {
+        typeMap.set(itemKey, '主職');
+        return;
+      }
+
+      if (!primaryMode) {
+        typeMap.set(itemKey, '兼任');
+        return;
+      }
+
+      if (isExplicitPrimaryKind_(primaryMode) && isTfAssignment_(item.orgCode)) {
+        typeMap.set(itemKey, primaryManagerEmails.has(managerEmail) ? '兼任' : '矩陣兼任');
+        return;
+      }
+
+      if (!managerEmail || primaryManagerEmails.size === 0) {
+        typeMap.set(itemKey, '兼任');
+        return;
+      }
+
+      typeMap.set(itemKey, primaryManagerEmails.has(managerEmail) ? '垂直兼任' : '矩陣兼任');
+    });
+  });
+
+  return typeMap;
+}
+
+function getPrimaryAssignmentMode_(personAssignments) {
+  if (personAssignments.some((item) => classifyAssignmentKind_(item.orgCode) === 'PRE')) return 'PRE';
+  if (personAssignments.some((item) => classifyAssignmentKind_(item.orgCode) === 'CEO')) return 'CEO';
+  if (personAssignments.some((item) => classifyAssignmentKind_(item.orgCode) === 'DEPT')) return 'DEPT';
+  if (personAssignments.some((item) => classifyAssignmentKind_(item.orgCode) === 'GRP')) return 'GRP';
+
+  const managerEmails = personAssignments.map((item) => normalizeEmail_(item.managerEmail));
+  const nonEmptyManagerEmails = [...new Set(managerEmails.filter(Boolean))];
+  if (nonEmptyManagerEmails.length === 1) return 'FALLBACK_SINGLE_MANAGER';
+  if (managerEmails.length > 0 && managerEmails.every((managerEmail) => !managerEmail)) return 'FALLBACK_NO_MANAGER';
+
+  return null;
+}
+
+function classifyAssignmentKind_(orgCode) {
+  const normalized = String(orgCode || '').trim().toUpperCase();
+  if (normalized === 'PRE') return 'PRE';
+  if (normalized === 'CEO') return 'CEO';
+  if (normalized.startsWith('DEPT-')) return 'DEPT';
+  if (normalized.startsWith('GRP-')) return 'GRP';
+  return 'OTHER';
+}
+
+function isExplicitPrimaryKind_(primaryMode) {
+  return primaryMode === 'PRE'
+    || primaryMode === 'CEO'
+    || primaryMode === 'DEPT'
+    || primaryMode === 'GRP';
+}
+
+function isFallbackPrimaryMode_(primaryMode) {
+  return primaryMode === 'FALLBACK_SINGLE_MANAGER'
+    || primaryMode === 'FALLBACK_NO_MANAGER';
+}
+
+function isTfAssignment_(orgCode) {
+  return String(orgCode || '').trim().toUpperCase().startsWith('TF-');
+}
+
+function getAssignmentIdentityKey_(assignment) {
+  return [
+    normalizeEmail_(assignment.email),
+    String(assignment.orgCode || '').trim().toUpperCase(),
+    String(assignment.title || '').trim(),
+    normalizeEmail_(assignment.managerEmail),
+    String(assignment.rowIndex || '')
+  ].join('||');
+}
+
+function getAssignmentSortOrder_(type) {
+  const orderMap = {
+    主職: 1,
+    垂直兼任: 2,
+    兼任: 3,
+    矩陣兼任: 4
+  };
+  return orderMap[type] || 99;
+}
+
+function normalizeEmail_(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 function getQuizQuestions() {
