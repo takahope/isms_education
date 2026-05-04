@@ -579,7 +579,7 @@
     const REQUIRED_WATCH_TIME_SEC = 60 * 60;
     const PROGRESS_SCHEMA_VERSION = 2;
     const NATURAL_PLAYBACK_DELTA_SEC = 2.5;
-    const CLOUD_SYNC_INTERVAL_MS = 30 * 60 * 1000;
+    const CLOUD_SYNC_UNIQUE_WATCH_THRESHOLD_SEC = 30 * 60;
     const FOCUS_LOSS_GRACE_MS = 80;
     const FOCUS_ALERT_COOLDOWN_MS = 1000;
 
@@ -589,12 +589,14 @@
     let lastPlaybackPosition = 0;
     let progressUpdatedAt = '';
     let lastSyncedAt = '';
+    let unsyncedUniqueWatchSeconds = 0;
     let isProgressDirty = false;
+    let isProgressSyncInFlight = false;
     let previousTrackedPosition = null;
     let isInReviewedSegment = false;
     let checkProgressInterval;
-    let progressSyncInterval;
     let idleTimeout;
+    let hasTriggeredThresholdSync = false;
 
     let currentUserEmail = '';
     let currentAttemptId = '';
@@ -666,7 +668,9 @@
         watchedSecondMarks: Array.from(watchedSecondMarks).sort((a, b) => a - b),
         lastPlaybackPosition,
         updatedAt: progressUpdatedAt,
-        lastSyncedAt
+        lastSyncedAt,
+        unsyncedUniqueWatchSeconds,
+        hasTriggeredThresholdSync
       };
     }
 
@@ -696,8 +700,10 @@
       lastPlaybackPosition = 0;
       progressUpdatedAt = '';
       lastSyncedAt = '';
+      unsyncedUniqueWatchSeconds = 0;
       isProgressDirty = false;
       previousTrackedPosition = null;
+      hasTriggeredThresholdSync = false;
       setReviewedSegmentHint(false);
     }
 
@@ -711,7 +717,9 @@
           : [],
         lastPlaybackPosition: Math.max(0, Number(parsed.lastPlaybackPosition) || 0),
         updatedAt: normalizeTimestampValue(parsed.updatedAt),
-        lastSyncedAt: normalizeTimestampValue(parsed.lastSyncedAt)
+        lastSyncedAt: normalizeTimestampValue(parsed.lastSyncedAt),
+        unsyncedUniqueWatchSeconds: Math.max(0, Number(parsed.unsyncedUniqueWatchSeconds) || 0),
+        hasTriggeredThresholdSync: Boolean(parsed.hasTriggeredThresholdSync)
       };
     }
 
@@ -723,7 +731,9 @@
         lastPlaybackPosition: Math.max(0, Number(progress.lastPlaybackPosition) || 0),
         updatedAt: normalizeTimestampValue(progress.updatedAt),
         lastSyncedAt: normalizeTimestampValue(progress.updatedAt),
-        watchedSecondsCount: Number(progress.watchedSecondsCount) || 0
+        watchedSecondsCount: Number(progress.watchedSecondsCount) || 0,
+        unsyncedUniqueWatchSeconds: 0,
+        hasTriggeredThresholdSync: (Number(progress.watchedSecondsCount) || 0) >= REQUIRED_WATCH_TIME_SEC
       };
     }
 
@@ -732,7 +742,10 @@
       lastPlaybackPosition = Math.max(0, Number(progress && progress.lastPlaybackPosition) || 0);
       progressUpdatedAt = normalizeTimestampValue(progress && progress.updatedAt);
       lastSyncedAt = normalizeTimestampValue(progress && progress.lastSyncedAt);
+      unsyncedUniqueWatchSeconds = Math.max(0, Number(progress && progress.unsyncedUniqueWatchSeconds) || 0);
       isProgressDirty = Boolean(options.markDirty);
+      hasTriggeredThresholdSync = Boolean(progress && progress.hasTriggeredThresholdSync)
+        || watchedSecondMarks.size >= REQUIRED_WATCH_TIME_SEC;
       previousTrackedPosition = null;
       setReviewedSegmentHint(false);
       saveStoredProgress();
@@ -762,6 +775,19 @@
       progressUpdatedAt = updatedAt;
       isProgressDirty = true;
       saveStoredProgress();
+    }
+
+    function maybeTriggerAutoProgressSync() {
+      if (unsyncedUniqueWatchSeconds < CLOUD_SYNC_UNIQUE_WATCH_THRESHOLD_SEC) return;
+      scheduleProgressSync('unique_watch_threshold', { force: true, silent: true });
+    }
+
+    function maybeTriggerThresholdCompletionSync() {
+      if (hasTriggeredThresholdSync) return;
+      if (getWatchedSeconds() < REQUIRED_WATCH_TIME_SEC) return;
+      hasTriggeredThresholdSync = true;
+      saveStoredProgress();
+      scheduleProgressSync('watch_requirement_reached', { force: true, silent: true });
     }
 
     function compressWatchedMarksToRanges() {
@@ -916,6 +942,7 @@
         for (let second = startSecond; second <= endSecond; second += 1) {
           if (second < 0 || watchedSecondMarks.has(second)) continue;
           watchedSecondMarks.add(second);
+          unsyncedUniqueWatchSeconds += 1;
           addedNewSecond = true;
         }
       }
@@ -932,6 +959,11 @@
         setReviewedSegmentHint(false);
       } else {
         updateReviewedSegmentState(currentTime);
+      }
+
+      if (addedNewSecond) {
+        maybeTriggerThresholdCompletionSync();
+        maybeTriggerAutoProgressSync();
       }
     }
 
@@ -986,7 +1018,6 @@
           : previousTrackedPosition;
         updateReviewedSegmentState(previousTrackedPosition || 0);
         startProgressTracking();
-        startPeriodicProgressSync();
         resetIdleTimer();
       } else {
         if (player && typeof player.getCurrentTime === 'function') {
@@ -994,11 +1025,8 @@
           updateProgressUI(getWatchedSeconds());
         }
         clearInterval(checkProgressInterval);
-        clearInterval(progressSyncInterval);
-        progressSyncInterval = null;
         previousTrackedPosition = null;
         clearTimeout(idleTimeout);
-        scheduleProgressSync('pause', { silent: true });
       }
 
       if (event.data === YT.PlayerState.ENDED) {
@@ -1024,19 +1052,14 @@
       }, 1000);
     }
 
-    function startPeriodicProgressSync() {
-      clearInterval(progressSyncInterval);
-      progressSyncInterval = setInterval(() => {
-        scheduleProgressSync('interval', { silent: true });
-      }, CLOUD_SYNC_INTERVAL_MS);
-    }
-
     async function scheduleProgressSync(reason, options = {}) {
       if (!currentUserEmail) return;
       if (!options.force && !isProgressDirty) return;
       if (typeof google === 'undefined' || !google.script) return;
+      if (isProgressSyncInFlight) return;
 
       const payload = buildCloudProgressPayload();
+      isProgressSyncInFlight = true;
       try {
         const response = await callServer('syncTrainingProgress', payload);
         if (response && response.success) {
@@ -1050,6 +1073,7 @@
           lastSyncedAt = latestTimestamp;
           if (!response.skipped) {
             progressUpdatedAt = latestTimestamp;
+            unsyncedUniqueWatchSeconds = 0;
             isProgressDirty = false;
           }
           saveStoredProgress();
@@ -1062,6 +1086,8 @@
         if (!options.silent) {
           console.error(`觀看進度同步失敗: ${reason}`, error);
         }
+      } finally {
+        isProgressSyncInFlight = false;
       }
     }
 
@@ -1080,8 +1106,10 @@
         lastPlaybackPosition = 0;
         progressUpdatedAt = getNowIsoString();
         lastSyncedAt = '';
+        unsyncedUniqueWatchSeconds = 0;
         isProgressDirty = true;
         previousTrackedPosition = null;
+        hasTriggeredThresholdSync = false;
         setReviewedSegmentHint(false);
         saveStoredProgress();
         scheduleProgressSync('reset', { force: true, silent: true });
@@ -1130,8 +1158,6 @@
     function proceedToQuiz() {
       if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
       clearInterval(checkProgressInterval);
-      clearInterval(progressSyncInterval);
-      progressSyncInterval = null;
       previousTrackedPosition = null;
       clearTimeout(idleTimeout);
       scheduleProgressSync('proceed_to_quiz', { force: true, silent: true });
