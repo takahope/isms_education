@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>學員訓練儀表板</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #edf3f4;
+      --bg-strong: #dbe9eb;
+      --panel: rgba(255, 255, 255, 0.82);
+      --panel-strong: #ffffff;
+      --text: #112031;
+      --muted: #5d7184;
+      --line: rgba(17, 32, 49, 0.09);
+      --line-strong: rgba(17, 32, 49, 0.16);
+      --teal: #0f766e;
+      --teal-soft: rgba(15, 118, 110, 0.11);
+      --amber: #c77700;
+      --amber-soft: rgba(199, 119, 0, 0.12);
+      --rose: #c2415d;
+      --rose-soft: rgba(194, 65, 93, 0.12);
+      --slate: #4b5563;
+      --slate-soft: rgba(75, 85, 99, 0.12);
+      --shadow: 0 24px 70px rgba(15, 23, 42, 0.1);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+    }
+
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.15), transparent 24%),
+        radial-gradient(circle at top right, rgba(194, 65, 93, 0.12), transparent 22%),
+        linear-gradient(180deg, #f7fbfc 0%, var(--bg) 100%);
+      color: var(--text);
+      line-height: 1.55;
+    }
+
+    .shell {
+      width: min(1440px, calc(100vw - 32px));
+      margin: 24px auto 40px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius-xl);
+      background:
+        linear-gradient(135deg, rgba(17, 32, 49, 0.98) 0%, rgba(15, 118, 110, 0.92) 58%, rgba(8, 145, 178, 0.9) 100%);
+      color: #f8fbfc;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -60px -110px auto;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      filter: blur(8px);
+    }
+
+    .hero-top {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero h1 {
+      margin: 16px 0 10px;
+      font-family: "Noto Serif TC", serif;
+      font-size: clamp(34px, 5vw, 50px);
+      line-height: 1.12;
+      letter-spacing: 0.02em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 720px;
+      color: rgba(248, 251, 252, 0.82);
+      font-size: 15px;
+    }
+
+    .hero-meta {
+      display: grid;
+      gap: 10px;
+      min-width: 240px;
+      justify-items: end;
+    }
+
+    .meta-card {
+      width: 100%;
+      max-width: 280px;
+      padding: 14px 16px;
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      backdrop-filter: blur(10px);
+    }
+
+    .meta-label {
+      color: rgba(248, 251, 252, 0.72);
+      font-size: 12px;
+    }
+
+    .meta-value {
+      margin-top: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .ghost-btn {
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      color: #f8fbfc;
+      border-radius: 999px;
+      padding: 10px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.18s ease, background-color 0.18s ease;
+    }
+
+    .ghost-btn:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .stack {
+      display: grid;
+      gap: 20px;
+    }
+
+    .panel {
+      border-radius: var(--radius-xl);
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      overflow: hidden;
+    }
+
+    .panel-inner {
+      padding: 22px;
+    }
+
+    .panel-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+
+    .panel-subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .kpi-card {
+      position: relative;
+      overflow: hidden;
+      padding: 18px;
+      border-radius: var(--radius-lg);
+      background: var(--panel-strong);
+      border: 1px solid var(--line);
+    }
+
+    .kpi-card::after {
+      content: "";
+      position: absolute;
+      inset: auto -18px -28px auto;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: rgba(15, 118, 110, 0.08);
+    }
+
+    .kpi-label {
+      position: relative;
+      z-index: 1;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .kpi-value {
+      position: relative;
+      z-index: 1;
+      margin-top: 10px;
+      font-size: clamp(30px, 4vw, 40px);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    .kpi-footnote {
+      position: relative;
+      z-index: 1;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .filters-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.7fr 0.7fr 0.6fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      height: 46px;
+      padding: 0 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line-strong);
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      outline: none;
+      border-color: rgba(15, 118, 110, 0.44);
+      box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
+    }
+
+    .checkbox-field {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 46px;
+      padding: 0 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line-strong);
+      background: #fff;
+    }
+
+    .checkbox-field input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--teal);
+    }
+
+    .filter-reset {
+      height: 46px;
+      padding: 0 18px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: var(--text);
+      color: #fff;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .metric-ribbon {
+      display: flex;
+      border-radius: 999px;
+      overflow: hidden;
+      height: 16px;
+      background: rgba(17, 32, 49, 0.08);
+    }
+
+    .ribbon-segment {
+      height: 100%;
+    }
+
+    .ribbon-legend {
+      margin-top: 12px;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .alert-list,
+    .unit-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .alert-card,
+    .unit-card {
+      padding: 16px;
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--line);
+    }
+
+    .alert-title,
+    .unit-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .alert-title strong,
+    .unit-title strong {
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .alert-title span,
+    .unit-title span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .alert-meta,
+    .unit-meta {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .unit-bar {
+      margin-top: 12px;
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(17, 32, 49, 0.07);
+      overflow: hidden;
+    }
+
+    .unit-bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #0f766e 0%, #0891b2 100%);
+    }
+
+    .table-panel {
+      overflow: hidden;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1080px;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: rgba(245, 249, 250, 0.96);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--line);
+      padding: 14px 16px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    tbody td {
+      padding: 15px 16px;
+      border-bottom: 1px solid rgba(17, 32, 49, 0.06);
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    tbody tr:hover {
+      background: rgba(15, 118, 110, 0.04);
+    }
+
+    .name-cell {
+      display: grid;
+      gap: 4px;
+    }
+
+    .name-cell strong {
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .email-line {
+      color: var(--muted);
+      font-size: 12px;
+      word-break: break-word;
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 84px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .status-completed { background: var(--teal-soft); color: var(--teal); }
+    .status-pending_quiz { background: var(--amber-soft); color: var(--amber); }
+    .status-in_progress { background: var(--rose-soft); color: var(--rose); }
+    .status-not_started { background: var(--slate-soft); color: var(--slate); }
+
+    .mini-progress {
+      width: 100%;
+      min-width: 120px;
+      margin-top: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(17, 32, 49, 0.08);
+      overflow: hidden;
+    }
+
+    .mini-progress-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #0f766e 0%, #2dd4bf 100%);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .small {
+      font-size: 12px;
+    }
+
+    .empty-state,
+    .loading-state {
+      display: grid;
+      place-items: center;
+      min-height: 300px;
+      padding: 32px;
+      text-align: center;
+    }
+
+    .loading-ring {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 4px solid rgba(15, 118, 110, 0.16);
+      border-top-color: var(--teal);
+      animation: spin 0.9s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 1180px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .shell {
+        width: min(100vw - 20px, 100%);
+        margin: 10px auto 24px;
+      }
+
+      .hero,
+      .panel-inner {
+        padding: 18px;
+      }
+
+      .hero-top,
+      .hero-actions {
+        align-items: stretch;
+      }
+
+      .hero-meta {
+        justify-items: stretch;
+      }
+
+      .kpi-grid,
+      .filters-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="hero-top">
+        <div>
+          <div class="eyebrow">Training Operations Dashboard</div>
+          <h1>學員訓練狀況儀表板</h1>
+          <p id="hero-summary">整合觀看進度、測驗結果與職務資訊，讓管理者能快速找出未開始、進行中與待補測學員。</p>
+        </div>
+        <div class="hero-meta">
+          <div class="meta-card">
+            <div class="meta-label">目前登入帳號</div>
+            <div id="viewer-email" class="meta-value">載入中...</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">資料更新時間</div>
+            <div id="generated-at" class="meta-value">載入中...</div>
+          </div>
+          <div class="hero-actions">
+            <button id="refresh-btn" class="ghost-btn">重新整理資料</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div id="loading-state" class="panel loading-state">
+      <div>
+        <div class="loading-ring"></div>
+        <div class="panel-title">正在載入學員訓練狀況</div>
+        <p class="panel-subtitle">彙整觀看進度、測驗紀錄與職務資訊中。</p>
+      </div>
+    </div>
+
+    <div id="error-state" class="panel empty-state hidden">
+      <div>
+        <div class="panel-title">無法載入儀表板資料</div>
+        <p id="error-message" class="panel-subtitle"></p>
+      </div>
+    </div>
+
+    <div id="dashboard-body" class="hidden">
+      <section class="panel">
+        <div class="panel-inner">
+          <div class="panel-heading">
+            <div>
+              <h2 class="panel-title">整體訓練概況</h2>
+              <p class="panel-subtitle">完成定義：觀看達標且任一測驗通過。</p>
+            </div>
+          </div>
+          <div class="kpi-grid" id="kpi-grid"></div>
+          <div style="margin-top:18px;">
+            <div class="metric-ribbon" id="completion-ribbon"></div>
+            <div class="ribbon-legend" id="completion-legend"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-inner">
+          <div class="panel-heading">
+            <div>
+              <h2 class="panel-title">篩選與檢索</h2>
+              <p class="panel-subtitle">依學員、單位、訓練狀態快速鎖定待追蹤對象。</p>
+            </div>
+          </div>
+          <div class="filters-grid">
+            <div class="field">
+              <label for="search-input">關鍵字搜尋</label>
+              <input id="search-input" type="text" placeholder="搜尋姓名、Email、單位、職稱">
+            </div>
+            <div class="field">
+              <label for="status-filter">狀態</label>
+              <select id="status-filter">
+                <option value="">全部狀態</option>
+                <option value="completed">已完成</option>
+                <option value="pending_quiz">待補測</option>
+                <option value="in_progress">進行中</option>
+                <option value="not_started">未開始</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="unit-filter">單位</label>
+              <select id="unit-filter">
+                <option value="">全部單位</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>快速篩選</label>
+              <div class="checkbox-field">
+                <input id="incomplete-toggle" type="checkbox">
+                <span>只看未完成</span>
+              </div>
+            </div>
+            <button id="reset-filters-btn" class="filter-reset" type="button">清除篩選</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="dashboard-grid">
+        <div class="stack">
+          <section class="panel">
+            <div class="panel-inner">
+              <div class="panel-heading">
+                <div>
+                  <h2 class="panel-title">狀態分布</h2>
+                  <p class="panel-subtitle">目前篩選結果中的學員訓練完成分布。</p>
+                </div>
+                <div id="filtered-count" class="small muted"></div>
+              </div>
+              <div class="status-grid" id="status-grid"></div>
+            </div>
+          </section>
+
+          <section class="panel table-panel">
+            <div class="panel-inner">
+              <div class="panel-heading">
+                <div>
+                  <h2 class="panel-title">學員明細</h2>
+                  <p class="panel-subtitle">整合職務、進度、分數與最後活動，支援管理追蹤。</p>
+                </div>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>學員</th>
+                    <th>單位職務</th>
+                    <th>觀看進度</th>
+                    <th>測驗最佳 / 最新</th>
+                    <th>訓練狀態</th>
+                    <th>最後活動</th>
+                  </tr>
+                </thead>
+                <tbody id="learner-table-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <div class="stack">
+          <section class="panel">
+            <div class="panel-inner">
+              <div class="panel-heading">
+                <div>
+                  <h2 class="panel-title">風險名單</h2>
+                  <p class="panel-subtitle">優先辨識最需要催辦或追蹤的學員。</p>
+                </div>
+              </div>
+              <div class="alert-list" id="alert-list"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-inner">
+              <div class="panel-heading">
+                <div>
+                  <h2 class="panel-title">單位完成概況</h2>
+                  <p class="panel-subtitle">依主顯示職務所屬單位觀察完成率。</p>
+                </div>
+              </div>
+              <div class="unit-list" id="unit-list"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      viewerEmail: '',
+      generatedAt: '',
+      courseTitle: '',
+      requiredWatchSeconds: 3600,
+      allLearners: [],
+      filters: {
+        search: '',
+        status: '',
+        unit: '',
+        incompleteOnly: false
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      bindEvents();
+      bootstrapDashboard();
+    });
+
+    function bindEvents() {
+      document.getElementById('refresh-btn').addEventListener('click', loadDashboardData);
+      document.getElementById('reset-filters-btn').addEventListener('click', resetFilters);
+      document.getElementById('search-input').addEventListener('input', (event) => {
+        state.filters.search = String(event.target.value || '').trim().toLowerCase();
+        renderDashboard();
+      });
+      document.getElementById('status-filter').addEventListener('change', (event) => {
+        state.filters.status = String(event.target.value || '').trim();
+        renderDashboard();
+      });
+      document.getElementById('unit-filter').addEventListener('change', (event) => {
+        state.filters.unit = String(event.target.value || '').trim();
+        renderDashboard();
+      });
+      document.getElementById('incomplete-toggle').addEventListener('change', (event) => {
+        state.filters.incompleteOnly = Boolean(event.target.checked);
+        renderDashboard();
+      });
+    }
+
+    async function bootstrapDashboard() {
+      try {
+        showLoading();
+        const bootstrap = await callServer('getTrainingDashboardBootstrap');
+        if (!bootstrap || !bootstrap.success) {
+          throw new Error((bootstrap && bootstrap.message) || '無法驗證儀表板權限。');
+        }
+        state.viewerEmail = bootstrap.viewerEmail || '';
+        state.requiredWatchSeconds = Number(bootstrap.requiredWatchSeconds) || 3600;
+        state.courseTitle = bootstrap.courseTitle || '';
+        document.getElementById('viewer-email').textContent = state.viewerEmail || '未取得帳號';
+        document.getElementById('hero-summary').textContent = `${state.courseTitle || '本次訓練'} 的管理視圖，整合觀看達標、測驗通過、最後活動與職務資訊，方便即時掌握整體完成風險。`;
+        await loadDashboardData();
+      } catch (error) {
+        showError(error && error.message ? error.message : '無法載入儀表板。');
+      }
+    }
+
+    async function loadDashboardData() {
+      try {
+        showLoading();
+        const response = await callServer('getTrainingDashboardData', {});
+        if (!response || !response.success) {
+          throw new Error((response && response.message) || '無法載入儀表板資料。');
+        }
+        state.generatedAt = response.generatedAt || '';
+        state.courseTitle = response.courseTitle || state.courseTitle;
+        state.allLearners = Array.isArray(response.learners) ? response.learners : [];
+        document.getElementById('generated-at').textContent = formatDateTime(state.generatedAt) || '無資料';
+        populateUnitFilter(state.allLearners);
+        renderDashboard();
+      } catch (error) {
+        showError(error && error.message ? error.message : '無法載入儀表板資料。');
+      }
+    }
+
+    function populateUnitFilter(learners) {
+      const unitFilter = document.getElementById('unit-filter');
+      const currentValue = state.filters.unit;
+      const unitNames = Array.from(new Set(
+        learners
+          .map((learner) => String(learner.assignmentOrgName || '').trim())
+          .filter(Boolean)
+      )).sort((left, right) => left.localeCompare(right, 'zh-Hant'));
+
+      unitFilter.innerHTML = '<option value="">全部單位</option>';
+      unitNames.forEach((unitName) => {
+        const option = document.createElement('option');
+        option.value = unitName;
+        option.textContent = unitName;
+        unitFilter.appendChild(option);
+      });
+      unitFilter.value = currentValue;
+    }
+
+    function resetFilters() {
+      state.filters = {
+        search: '',
+        status: '',
+        unit: '',
+        incompleteOnly: false
+      };
+      document.getElementById('search-input').value = '';
+      document.getElementById('status-filter').value = '';
+      document.getElementById('unit-filter').value = '';
+      document.getElementById('incomplete-toggle').checked = false;
+      renderDashboard();
+    }
+
+    function renderDashboard() {
+      const filteredLearners = applyFilters(state.allLearners);
+      const metrics = computeClientMetrics(filteredLearners);
+      renderKpis(metrics.kpis);
+      renderRibbon(metrics.kpis);
+      renderStatusGrid(metrics.kpis);
+      renderAlerts(metrics.alerts);
+      renderUnits(metrics.units);
+      renderLearnerTable(filteredLearners);
+      document.getElementById('filtered-count').textContent = `目前顯示 ${filteredLearners.length} / ${state.allLearners.length} 位學員`;
+      hideLoading();
+    }
+
+    function applyFilters(learners) {
+      return learners.filter((learner) => {
+        const searchHaystack = [
+          learner.name,
+          learner.email,
+          learner.assignmentOrgName,
+          learner.assignmentTitle,
+          learner.assignmentLabel
+        ].join(' ').toLowerCase();
+
+        if (state.filters.search && !searchHaystack.includes(state.filters.search)) return false;
+        if (state.filters.status && learner.status !== state.filters.status) return false;
+        if (state.filters.unit && learner.assignmentOrgName !== state.filters.unit) return false;
+        if (state.filters.incompleteOnly && learner.status === 'completed') return false;
+        return true;
+      });
+    }
+
+    function computeClientMetrics(learners) {
+      const now = new Date();
+      const kpis = {
+        total: learners.length,
+        completed: 0,
+        pendingQuiz: 0,
+        inProgress: 0,
+        notStarted: 0,
+        recentActive: 0,
+        completionRate: 0
+      };
+      const recentThreshold = now.getTime() - (7 * 24 * 60 * 60 * 1000);
+      const unitMap = new Map();
+
+      learners.forEach((learner) => {
+        if (learner.status === 'completed') kpis.completed += 1;
+        if (learner.status === 'pending_quiz') kpis.pendingQuiz += 1;
+        if (learner.status === 'in_progress') kpis.inProgress += 1;
+        if (learner.status === 'not_started') kpis.notStarted += 1;
+        if (parseDateMs(learner.lastActivityAt) >= recentThreshold) kpis.recentActive += 1;
+
+        const unitName = learner.assignmentOrgName || '未設定單位';
+        if (!unitMap.has(unitName)) {
+          unitMap.set(unitName, { unitName, total: 0, completed: 0 });
+        }
+        const unit = unitMap.get(unitName);
+        unit.total += 1;
+        if (learner.status === 'completed') unit.completed += 1;
+      });
+
+      kpis.completionRate = kpis.total > 0 ? Math.round((kpis.completed / kpis.total) * 1000) / 10 : 0;
+
+      const alerts = {
+        pendingQuiz: learners.filter((learner) => learner.status === 'pending_quiz').slice(0, 8),
+        staleInProgress: learners
+          .filter((learner) => learner.status === 'in_progress' && parseDateMs(learner.lastActivityAt) < recentThreshold)
+          .slice(0, 8),
+        latestFailed: learners
+          .filter((learner) => learner.latestResult === '未通過' && !learner.hasPassed)
+          .slice(0, 8)
+      };
+
+      const units = Array.from(unitMap.values())
+        .map((unit) => ({
+          ...unit,
+          completionRate: unit.total > 0 ? Math.round((unit.completed / unit.total) * 1000) / 10 : 0
+        }))
+        .sort((left, right) => right.total - left.total || left.unitName.localeCompare(right.unitName, 'zh-Hant'))
+        .slice(0, 8);
+
+      return { kpis, alerts, units };
+    }
+
+    function renderKpis(kpis) {
+      const cards = [
+        { label: '完成率', value: `${formatPercent(kpis.completionRate)}%`, footnote: `已完成 ${kpis.completed} / ${kpis.total || 0} 人` },
+        { label: '已完成', value: String(kpis.completed), footnote: '觀看達標且曾通過測驗' },
+        { label: '待補測', value: String(kpis.pendingQuiz), footnote: '影片已看完，尚未通過測驗' },
+        { label: '進行中', value: String(kpis.inProgress), footnote: '已有活動，但尚未完成訓練' },
+        { label: '近 7 日活躍', value: String(kpis.recentActive), footnote: '最近 7 天內有觀看或測驗紀錄' }
+      ];
+      const grid = document.getElementById('kpi-grid');
+      grid.textContent = '';
+      cards.forEach((card) => {
+        const node = document.createElement('article');
+        node.className = 'kpi-card';
+        node.innerHTML = `
+          <div class="kpi-label">${card.label}</div>
+          <div class="kpi-value">${card.value}</div>
+          <div class="kpi-footnote">${card.footnote}</div>
+        `;
+        grid.appendChild(node);
+      });
+    }
+
+    function renderRibbon(kpis) {
+      const total = Math.max(kpis.total, 1);
+      const segments = [
+        { key: 'completed', label: '已完成', value: kpis.completed, color: '#0f766e' },
+        { key: 'pendingQuiz', label: '待補測', value: kpis.pendingQuiz, color: '#c77700' },
+        { key: 'inProgress', label: '進行中', value: kpis.inProgress, color: '#c2415d' },
+        { key: 'notStarted', label: '未開始', value: kpis.notStarted, color: '#4b5563' }
+      ];
+      const ribbon = document.getElementById('completion-ribbon');
+      const legend = document.getElementById('completion-legend');
+      ribbon.textContent = '';
+      legend.textContent = '';
+
+      segments.forEach((segment) => {
+        const ratio = (segment.value / total) * 100;
+        const bar = document.createElement('div');
+        bar.className = 'ribbon-segment';
+        bar.style.width = `${ratio}%`;
+        bar.style.background = segment.color;
+        ribbon.appendChild(bar);
+
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML = `<span class="legend-dot" style="background:${segment.color}"></span>${segment.label} ${segment.value}`;
+        legend.appendChild(item);
+      });
+    }
+
+    function renderStatusGrid(kpis) {
+      const cards = [
+        { label: '待補測', value: kpis.pendingQuiz, description: '觀看時數已達標，但尚未取得通過紀錄。', chipClass: 'status-pending_quiz' },
+        { label: '進行中', value: kpis.inProgress, description: '已有觀看或測驗活動，尚未完成整體訓練。', chipClass: 'status-in_progress' },
+        { label: '未開始', value: kpis.notStarted, description: '尚無觀看進度與測驗紀錄，適合優先提醒。', chipClass: 'status-not_started' }
+      ];
+      const grid = document.getElementById('status-grid');
+      grid.textContent = '';
+      cards.forEach((card) => {
+        const node = document.createElement('article');
+        node.className = 'alert-card';
+        node.innerHTML = `
+          <div class="alert-title">
+            <strong>${card.label}</strong>
+            <span class="status-chip ${card.chipClass}">${card.value} 人</span>
+          </div>
+          <div class="alert-meta">${card.description}</div>
+        `;
+        grid.appendChild(node);
+      });
+    }
+
+    function renderAlerts(alerts) {
+      const list = document.getElementById('alert-list');
+      list.textContent = '';
+      const blocks = [
+        {
+          title: '待補測名單',
+          items: alerts.pendingQuiz,
+          formatter: (learner) => `${learner.name}｜${learner.assignmentOrgName || '未設定單位'}｜最佳分數 ${formatScore(learner.bestScore)}`
+        },
+        {
+          title: '進行中但近期未更新',
+          items: alerts.staleInProgress,
+          formatter: (learner) => `${learner.name}｜進度 ${formatPercent(learner.watchedPercent)}%｜最後活動 ${formatDateTime(learner.lastActivityAt) || '無紀錄'}`
+        },
+        {
+          title: '最近一次測驗未通過',
+          items: alerts.latestFailed,
+          formatter: (learner) => `${learner.name}｜最新分數 ${formatScore(learner.latestScore)}｜${formatDateTime(learner.latestAttemptAt) || '無時間'}`
+        }
+      ];
+
+      blocks.forEach((block) => {
+        const wrapper = document.createElement('section');
+        wrapper.className = 'alert-card';
+        const title = document.createElement('div');
+        title.className = 'alert-title';
+        title.innerHTML = `<strong>${block.title}</strong><span>${block.items.length} 人</span>`;
+        wrapper.appendChild(title);
+
+        if (!block.items.length) {
+          const empty = document.createElement('div');
+          empty.className = 'alert-meta';
+          empty.textContent = '目前沒有符合條件的學員。';
+          wrapper.appendChild(empty);
+        } else {
+          const innerList = document.createElement('div');
+          innerList.className = 'alert-list';
+          innerList.style.marginTop = '12px';
+          block.items.forEach((item) => {
+            const entry = document.createElement('div');
+            entry.className = 'alert-card';
+            entry.style.padding = '12px';
+            entry.innerHTML = `
+              <div class="alert-title">
+                <strong>${item.name}</strong>
+                <span>${item.statusLabel}</span>
+              </div>
+              <div class="alert-meta">${block.formatter(item)}</div>
+            `;
+            innerList.appendChild(entry);
+          });
+          wrapper.appendChild(innerList);
+        }
+
+        list.appendChild(wrapper);
+      });
+    }
+
+    function renderUnits(units) {
+      const list = document.getElementById('unit-list');
+      list.textContent = '';
+      if (!units.length) {
+        list.innerHTML = '<div class="unit-card"><div class="unit-meta">目前沒有可顯示的單位資料。</div></div>';
+        return;
+      }
+
+      units.forEach((unit) => {
+        const node = document.createElement('article');
+        node.className = 'unit-card';
+        node.innerHTML = `
+          <div class="unit-title">
+            <strong>${unit.unitName}</strong>
+            <span>${unit.completed} / ${unit.total} 已完成</span>
+          </div>
+          <div class="unit-meta">完成率 ${formatPercent(unit.completionRate)}%</div>
+          <div class="unit-bar">
+            <div class="unit-bar-fill" style="width:${Math.min(100, unit.completionRate)}%"></div>
+          </div>
+        `;
+        list.appendChild(node);
+      });
+    }
+
+    function renderLearnerTable(learners) {
+      const tbody = document.getElementById('learner-table-body');
+      tbody.textContent = '';
+
+      if (!learners.length) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="6" class="muted" style="padding:28px 16px; text-align:center;">沒有符合目前篩選條件的學員。</td>';
+        tbody.appendChild(row);
+        return;
+      }
+
+      learners.forEach((learner) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>
+            <div class="name-cell">
+              <strong>${escapeHtml(learner.name || '未命名')}</strong>
+              <div class="email-line">${escapeHtml(learner.email || '')}</div>
+            </div>
+          </td>
+          <td>
+            <div>${escapeHtml(learner.assignmentLabel || '未設定職務')}</div>
+            <div class="small muted">${escapeHtml(learner.assignmentOrgName || '')}</div>
+          </td>
+          <td>
+            <div><strong>${formatPercent(learner.watchedPercent)}%</strong> ・ ${formatDuration(learner.watchedSecondsCount)}</div>
+            <div class="mini-progress"><div class="mini-progress-fill" style="width:${Math.min(100, learner.watchedPercent)}%"></div></div>
+            <div class="small muted">${learner.watchCompleted ? '觀看已達標' : `需達 ${formatDuration(state.requiredWatchSeconds)}`}</div>
+          </td>
+          <td>
+            <div>最佳：<strong>${formatScore(learner.bestScore)}</strong></div>
+            <div class="small muted">最新：${formatScore(learner.latestScore)} ${learner.latestResult ? `・ ${escapeHtml(learner.latestResult)}` : ''}</div>
+          </td>
+          <td>
+            <span class="status-chip status-${learner.status}">${escapeHtml(learner.statusLabel)}</span>
+            <div class="small muted" style="margin-top:8px;">${learner.attemptCount ? `測驗 ${learner.attemptCount} 次` : '尚無測驗紀錄'}</div>
+          </td>
+          <td>
+            <div>${formatDateTime(learner.lastActivityAt) || '尚無活動'}</div>
+            <div class="small muted">${learner.progressUpdatedAt ? `進度更新：${formatDateTime(learner.progressUpdatedAt)}` : '尚無觀看同步'}</div>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function callServer(name, payload) {
+      return new Promise((resolve, reject) => {
+        const runner = google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject);
+        if (typeof payload === 'undefined') {
+          runner[name]();
+        } else {
+          runner[name](payload);
+        }
+      });
+    }
+
+    function showLoading() {
+      document.getElementById('loading-state').classList.remove('hidden');
+      document.getElementById('dashboard-body').classList.add('hidden');
+      document.getElementById('error-state').classList.add('hidden');
+    }
+
+    function hideLoading() {
+      document.getElementById('loading-state').classList.add('hidden');
+      document.getElementById('dashboard-body').classList.remove('hidden');
+      document.getElementById('error-state').classList.add('hidden');
+    }
+
+    function showError(message) {
+      document.getElementById('loading-state').classList.add('hidden');
+      document.getElementById('dashboard-body').classList.add('hidden');
+      document.getElementById('error-state').classList.remove('hidden');
+      document.getElementById('error-message').textContent = message || '未知錯誤';
+    }
+
+    function formatPercent(value) {
+      const num = Number(value || 0);
+      return Number.isFinite(num) ? (Math.round(num * 10) / 10).toString() : '0';
+    }
+
+    function formatScore(value) {
+      if (value === null || value === '' || typeof value === 'undefined') return '未作答';
+      return `${Number(value || 0)} 分`;
+    }
+
+    function formatDuration(seconds) {
+      const safeSeconds = Math.max(0, Number(seconds || 0));
+      const hours = Math.floor(safeSeconds / 3600);
+      const minutes = Math.floor((safeSeconds % 3600) / 60);
+      if (hours > 0) return `${hours} 小時 ${minutes} 分`;
+      return `${minutes} 分`;
+    }
+
+    function formatDateTime(value) {
+      const ms = parseDateMs(value);
+      if (!ms) return '';
+      const date = new Date(ms);
+      return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+
+    function parseDateMs(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return 0;
+      const time = new Date(raw).getTime();
+      return Number.isNaN(time) ? 0 : time;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+  </script>
+</body>
+</html>
