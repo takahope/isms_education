@@ -19,6 +19,25 @@ function doGet() {
   return renderDashboardPage_();
 }
 
+function authorizeDashboardProject() {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+  const allowedEmailsRaw = PropertiesService.getScriptProperties()
+    .getProperty(DASHBOARD_CONFIG.allowedEmailsPropertyKey) || '';
+  const masterSS = getMasterSpreadsheet_();
+  const trainingSS = getTrainingSpreadsheet_();
+
+  return {
+    success: true,
+    viewerEmail,
+    allowedEmailsPropertyKey: DASHBOARD_CONFIG.allowedEmailsPropertyKey,
+    allowedEmailsConfigured: Boolean(String(allowedEmailsRaw).trim()),
+    masterSpreadsheetId: masterSS.getId(),
+    masterSpreadsheetName: masterSS.getName(),
+    trainingSpreadsheetId: trainingSS.getId(),
+    trainingSpreadsheetName: trainingSS.getName()
+  };
+}
+
 function getCurrentUserEmail() {
   try {
     return Session.getActiveUser().getEmail() || '';
