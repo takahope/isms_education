@@ -1699,7 +1699,7 @@
             <div class="self-row-top">
               <div class="member-main">
                 <div class="member-name">${escapeHtml(item.stationName || item.stationCode)}</div>
-                <div class="member-meta">${escapeHtml([item.title, item.managerName || item.managerEmail].filter(Boolean).join('｜'))}</div>
+                <div class="member-meta">${escapeHtml(['駐站管理員', item.managerName || item.managerEmail].filter(Boolean).join('｜'))}</div>
               </div>
               <button type="button" class="mini-btn mini-btn-danger" data-delete-row="${escapeHtml(rowKey)}">刪除</button>
             </div>
