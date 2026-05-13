@@ -652,10 +652,11 @@
       color: var(--color-text-muted);
     }
 
-    .manager-transfer-hint {
-      margin-top: 12px;
-      font-size: 0.8125rem;
-      color: var(--color-text-muted);
+    .station-tools {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
     }
 
     .warning-text {
@@ -698,6 +699,10 @@
       }
 
       .add-row {
+        grid-template-columns: 1fr;
+      }
+
+      .station-tools {
         grid-template-columns: 1fr;
       }
     }
@@ -1307,6 +1312,8 @@
         isSaving: false,
         activeTab: 'managed',
         managedViewMode: 'mine',
+        managedSearchKeyword: '',
+        managedSelectedStationCode: '',
         changeListExpanded: false,
         baseData: null,
         draftData: null,
@@ -1360,6 +1367,8 @@
         stationEditorState.selfNewStationCode = '';
         stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
         stationEditorState.managedViewMode = 'mine';
+        stationEditorState.managedSearchKeyword = '';
+        stationEditorState.managedSelectedStationCode = '';
         stationEditorState.changeListExpanded = false;
       } catch (error) {
         stationEditorState.message = error && error.message ? error.message : '無法載入駐站收案配置。';
@@ -2081,7 +2090,18 @@
 
     function renderManagedStationsView(container, draft) {
       const viewMode = stationEditorState.managedViewMode === 'all' ? 'all' : 'mine';
-      const stations = viewMode === 'all' ? draft.allStations : draft.managedStations;
+      const baseStations = viewMode === 'all' ? draft.allStations : draft.managedStations;
+      const searchKeyword = String(stationEditorState.managedSearchKeyword || '').trim().toLowerCase();
+      const stations = baseStations.filter((station) => {
+        if (!searchKeyword) return true;
+        const haystacks = [
+          station.name,
+          station.code,
+          station.managerName,
+          station.managerEmail
+        ].map((value) => String(value || '').toLowerCase());
+        return haystacks.some((value) => value.includes(searchKeyword));
+      });
 
       if (draft.viewer && draft.viewer.isStationManager) {
         const toggle = document.createElement('div');
@@ -2104,6 +2124,59 @@
             renderStationEditor();
           });
         });
+
+        const tools = document.createElement('div');
+        tools.className = 'station-tools';
+        tools.innerHTML = `
+          <input
+            type="text"
+            class="inline-select"
+            data-managed-search
+            placeholder="搜尋駐站名稱、代碼或管理員"
+            value="${escapeHtml(stationEditorState.managedSearchKeyword || '')}"
+          />
+          <select class="inline-select" data-managed-locator>
+            <option value="">定位特定駐站</option>
+            ${stations.map((station) => `
+              <option value="${escapeHtml(station.code)}">${escapeHtml(station.name)} (${escapeHtml(station.code)})</option>
+            `).join('')}
+          </select>
+        `;
+        container.appendChild(tools);
+
+        const searchInput = tools.querySelector('[data-managed-search]');
+        if (searchInput) {
+          searchInput.addEventListener('input', () => {
+            stationEditorState.managedSearchKeyword = searchInput.value;
+            const availableStation = baseStations.some((station) => station.code === stationEditorState.managedSelectedStationCode && (
+              !String(stationEditorState.managedSearchKeyword || '').trim()
+              || [
+                station.name,
+                station.code,
+                station.managerName,
+                station.managerEmail
+              ].map((value) => String(value || '').toLowerCase()).some((value) => value.includes(String(stationEditorState.managedSearchKeyword || '').trim().toLowerCase()))
+            ));
+            if (!availableStation) stationEditorState.managedSelectedStationCode = '';
+            renderStationEditor();
+          });
+        }
+
+        const locatorSelect = tools.querySelector('[data-managed-locator]');
+        if (locatorSelect) {
+          locatorSelect.value = stationEditorState.managedSelectedStationCode || '';
+          locatorSelect.addEventListener('change', () => {
+            stationEditorState.managedSelectedStationCode = locatorSelect.value;
+            renderStationEditor();
+            if (!locatorSelect.value) return;
+            requestAnimationFrame(() => {
+              const target = container.querySelector(`[data-station-card="${locatorSelect.value}"]`);
+              if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+            });
+          });
+        }
       }
 
       if (!stations.length) {
@@ -2120,6 +2193,7 @@
       stations.forEach((station) => {
         const card = document.createElement('section');
         card.className = 'station-card';
+        card.setAttribute('data-station-card', station.code);
         const managerOptionsHtml = draft.stationManagerCandidates.map((candidate) => `
           <option value="${escapeHtml(candidate.email)}">${escapeHtml(candidate.label)}</option>
         `).join('');
@@ -2157,13 +2231,10 @@
             </div>
           </div>
           <div class="add-row">
-            <div class="member-main">
-              <div class="member-meta">駐站管理員｜${escapeHtml(station.managerName || station.managerEmail || '未設定')}</div>
-              <div class="member-meta">更換下拉選單後，系統會立即列入待儲存異動；按下下方「儲存變更」才會正式寫回。</div>
-            </div>
             <select class="inline-select" data-station-manager-select="${escapeHtml(station.code)}">
               ${managerOptionsHtml}
             </select>
+            <div></div>
           </div>
           <div class="member-list">
             ${memberRows || '<div class="editor-empty">目前尚無收案人員。</div>'}
