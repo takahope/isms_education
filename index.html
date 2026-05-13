@@ -524,9 +524,33 @@
       flex-wrap: wrap;
     }
 
+    .editor-status-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: min(100%, 420px);
+      flex: 1 1 420px;
+    }
+
     .editor-status {
       color: var(--color-text-muted);
       font-size: 0.875rem;
+    }
+
+    .editor-change-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .editor-change-item {
+      font-size: 0.8125rem;
+      color: #475569;
+      background: #f8fafc;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 10px;
+      padding: 8px 10px;
+      line-height: 1.45;
     }
 
     .editor-footer-actions {
@@ -1034,7 +1058,10 @@
         <div class="editor-loading">讀取資料中，請稍候...</div>
       </div>
       <div class="editor-footer">
-        <div id="station-editor-status" class="editor-status">尚未載入。</div>
+        <div class="editor-status-wrap">
+          <div id="station-editor-status" class="editor-status">尚未載入。</div>
+          <div id="station-editor-change-list" class="editor-change-list hidden"></div>
+        </div>
         <div class="editor-footer-actions">
           <button type="button" id="station-editor-cancel-btn" class="mini-btn">取消</button>
           <button type="button" id="station-editor-save-btn" class="mini-btn" disabled>儲存變更</button>
@@ -1492,6 +1519,72 @@
       return changes;
     }
 
+    function formatStationEditorPersonName(item) {
+      if (!item) return '未指定人員';
+      return String(item.name || item.label || item.email || '').trim() || '未指定人員';
+    }
+
+    function formatStationEditorStationName(item) {
+      if (!item) return '未指定駐站';
+      return String(item.stationName || item.name || item.orgName || item.code || '').trim() || '未指定駐站';
+    }
+
+    function buildStationEditorChangeDescriptions(baseData = stationEditorState.baseData, draftData = stationEditorState.draftData) {
+      const changes = buildStationEditorChanges(baseData, draftData);
+      const baseRows = flattenEditorRows(baseData);
+      const draftRows = flattenEditorRows(draftData);
+      const baseRowByIndex = new Map(baseRows.filter((item) => item.rowIndex).map((item) => [item.rowIndex, item]));
+      const draftRowByIndex = new Map(draftRows.filter((item) => item.rowIndex).map((item) => [item.rowIndex, item]));
+      const draftStationByCode = new Map((Array.isArray(draftData && draftData.allStations) ? draftData.allStations : []).map((item) => [item.code, item]));
+      const baseStationByCode = new Map((Array.isArray(baseData && baseData.allStations) ? baseData.allStations : []).map((item) => [item.code, item]));
+      const managerCandidateByEmail = new Map((Array.isArray(draftData && draftData.stationManagerCandidates) ? draftData.stationManagerCandidates : []).map((item) => [item.email, item]));
+
+      return changes.map((change) => {
+        if (change.action === 'add') {
+          const row = draftRows.find((item) => !item.rowIndex && item.email === change.targetEmail && item.stationCode === change.stationCode);
+          return `${formatStationEditorStationName(row || draftStationByCode.get(change.stationCode))} 新增 收案人員 ${formatStationEditorPersonName(row || { email: change.targetEmail })}`;
+        }
+
+        if (change.action === 'delete') {
+          const row = baseRowByIndex.get(change.rowIndex);
+          return `${formatStationEditorStationName(row)} 刪除 收案人員 ${formatStationEditorPersonName(row)}`;
+        }
+
+        if (change.action === 'move') {
+          const baseRow = baseRowByIndex.get(change.rowIndex);
+          const draftRow = draftRowByIndex.get(change.rowIndex);
+          return `${formatStationEditorPersonName(draftRow || baseRow)} 從 ${formatStationEditorStationName(baseRow)} 調整至 ${formatStationEditorStationName(draftRow || draftStationByCode.get(change.stationCode))}`;
+        }
+
+        if (change.action === 'reassign_manager') {
+          const station = draftStationByCode.get(change.stationCode) || baseStationByCode.get(change.stationCode);
+          const candidate = managerCandidateByEmail.get(change.targetManagerEmail) || (station ? { name: station.managerName, email: station.managerEmail } : { email: change.targetManagerEmail });
+          return `${formatStationEditorStationName(station || { code: change.stationCode })} 更改 駐站管理員 ${formatStationEditorPersonName(candidate)}`;
+        }
+
+        return '已調整駐站資料';
+      });
+    }
+
+    function renderStationEditorChangeList(element, descriptions) {
+      if (!element) return;
+      element.innerHTML = '';
+      if (!Array.isArray(descriptions) || !descriptions.length) {
+        element.classList.add('hidden');
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      descriptions.forEach((description) => {
+        const item = document.createElement('div');
+        item.className = 'editor-change-item';
+        item.textContent = description;
+        fragment.appendChild(item);
+      });
+      element.appendChild(fragment);
+      element.classList.remove('hidden');
+    }
+
     function hasStationEditorDirtyChanges() {
       return buildStationEditorChanges().length > 0;
     }
@@ -1689,6 +1782,7 @@
       const tabsEl = document.getElementById('station-editor-tabs');
       const bodyEl = document.getElementById('station-editor-body');
       const statusEl = document.getElementById('station-editor-status');
+      const changeListEl = document.getElementById('station-editor-change-list');
       const saveBtn = document.getElementById('station-editor-save-btn');
       const hasChanges = hasStationEditorDirtyChanges();
 
@@ -1697,6 +1791,7 @@
         tabsEl.classList.add('hidden');
         bodyEl.innerHTML = '<div class="editor-loading">讀取資料中，請稍候...</div>';
         statusEl.textContent = '讀取中...';
+        renderStationEditorChangeList(changeListEl, []);
         saveBtn.disabled = true;
         return;
       }
@@ -1706,6 +1801,7 @@
         tabsEl.classList.add('hidden');
         bodyEl.innerHTML = `<div class="editor-empty">${escapeHtml(stationEditorState.message || '目前沒有可編輯的駐站收案配置。')}</div>`;
         statusEl.textContent = stationEditorState.message || '沒有可編輯資料。';
+        renderStationEditorChangeList(changeListEl, []);
         saveBtn.disabled = true;
         return;
       }
@@ -1749,11 +1845,14 @@
         renderSelfAssignmentsView(bodyEl, draft);
       }
 
+      const changes = buildStationEditorChanges();
+      const changeDescriptions = buildStationEditorChangeDescriptions();
       const statusParts = [];
-      if (hasChanges) statusParts.push(`待儲存異動 ${buildStationEditorChanges().length} 筆`);
+      if (hasChanges) statusParts.push(`待儲存異動 ${changes.length} 筆`);
       if (stationEditorState.isSaving) statusParts.push('儲存中...');
       if (stationEditorState.message) statusParts.push(stationEditorState.message);
       statusEl.textContent = statusParts.join('｜') || '尚未修改。';
+      renderStationEditorChangeList(changeListEl, changeDescriptions);
     }
 
     function renderManagedStationsView(container, draft) {
