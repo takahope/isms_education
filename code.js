@@ -121,6 +121,8 @@ function getStationAssignmentEditorData() {
       selfAssignments: [],
       stationOptions: [],
       stationStaffCandidates: [],
+      stationManagerCandidates: [],
+      personnelOptions: [],
       message: error && error.message ? error.message : '無法讀取駐站收案配置。'
     };
   }
@@ -161,6 +163,124 @@ function saveStationAssignmentChanges(payload) {
     };
   } finally {
     if (hasLock) lock.releaseLock();
+  }
+}
+
+function createStationStaff(payload) {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+
+  try {
+    const context = buildStationEditorContext_(viewerEmail);
+    if (!context.viewer.isStationManager) {
+      throw new Error('您沒有新增收案人員的權限。');
+    }
+
+    const normalized = normalizeCreateStationStaffPayload_(payload);
+    const station = context.stationByCode.get(normalizeOrgCode_(normalized.stationCode));
+    if (!station) {
+      throw new Error('找不到指定駐站。');
+    }
+
+    assertNoDuplicateStationAssignment_(context.stationAssignments, normalized.email, station.code, 0);
+
+    const existingPerson = context.personnelByEmail.get(normalized.email);
+    const personName = existingPerson && existingPerson.name
+      ? String(existingPerson.name || '').trim()
+      : normalized.name;
+
+    if (!existingPerson) {
+      context.personnelSheet.getRange(context.personnelSheet.getLastRow() + 1, 1, 1, 3).setValues([[
+        normalized.email,
+        personName,
+        getPersonnelStatusForStation_(station.code)
+      ]]);
+    }
+
+    context.assignmentSheet.getRange(context.assignmentSheet.getLastRow() + 1, 1, 1, 7).setValues([[
+      normalized.email,
+      personName,
+      station.code,
+      String(station.name || '').trim(),
+      normalized.title,
+      normalizeEmail_(station.managerEmail),
+      String(station.managerName || '').trim()
+    ]]);
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: '收案人員已新增。',
+      ...toStationEditorPayload_(buildStationEditorContext_(viewerEmail))
+    };
+  } catch (error) {
+    console.error('新增收案人員失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法新增收案人員。'
+    };
+  }
+}
+
+function createStationNode(payload) {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+
+  try {
+    const context = buildStationEditorContext_(viewerEmail);
+    if (!context.viewer.isStationManager) {
+      throw new Error('您沒有新增駐站的權限。');
+    }
+
+    const normalized = normalizeCreateStationNodePayload_(payload);
+    const personnel = context.personnelByEmail.get(normalized.managerEmail);
+    if (!personnel) {
+      throw new Error('找不到指定的駐站管理員。');
+    }
+    if (context.stationByCode.has(normalized.code)) {
+      throw new Error(`駐站代碼 ${normalized.code} 已存在。`);
+    }
+
+    context.orgSheet.getRange(context.orgSheet.getLastRow() + 1, 1, 1, 8).setValues([[
+      '行政',
+      5,
+      normalized.code,
+      normalized.name,
+      normalized.alias,
+      'GRP-CO',
+      normalized.managerEmail,
+      String(personnel.name || '').trim()
+    ]]);
+
+    const isExistingStationManager = context.stationManagerCandidates.some((item) => normalizeEmail_(item.email) === normalized.managerEmail);
+    if (!isExistingStationManager) {
+      const managerTemplate = context.allAssignments
+        .filter((item) => normalizeEmail_(item.email) === normalized.managerEmail)
+        .sort((a, b) => Number(a.rowIndex || 0) - Number(b.rowIndex || 0))[0] || null;
+
+      context.assignmentSheet.getRange(context.assignmentSheet.getLastRow() + 1, 1, 1, 7).setValues([[
+        normalized.managerEmail,
+        String(personnel.name || '').trim(),
+        normalized.code,
+        normalized.name,
+        '駐站管理員',
+        managerTemplate ? normalizeEmail_(managerTemplate.managerEmail) : '',
+        managerTemplate ? String(managerTemplate.managerName || '').trim() : ''
+      ]]);
+    }
+
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: '駐站已新增。',
+      ...toStationEditorPayload_(buildStationEditorContext_(viewerEmail))
+    };
+  } catch (error) {
+    console.error('新增駐站失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法新增駐站。'
+    };
   }
 }
 
@@ -324,6 +444,15 @@ function buildStationEditorContext_(viewerEmail) {
   const stationManagerCandidates = Array.from(uniqueStationManagerMap.values())
     .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
 
+  const personnelOptions = personnelRecords
+    .map((item) => ({
+      email: item.email,
+      name: String(item.name || '').trim(),
+      status: String(item.status || '').trim(),
+      label: [String(item.name || '').trim(), item.email].filter(Boolean).join('｜')
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
+
   const stationOptions = stationNodes
     .map((station) => ({
       code: station.code,
@@ -349,10 +478,12 @@ function buildStationEditorContext_(viewerEmail) {
     stationOptions,
     stationStaffCandidates,
     stationManagerCandidates,
+    personnelOptions,
     personnelByEmail,
     stationByCode,
     allAssignments,
     stationAssignments,
+    personnelSheet,
     assignmentSheet,
     orgSheet
   };
@@ -366,7 +497,8 @@ function toStationEditorPayload_(context) {
     selfAssignments: context.selfAssignments,
     stationOptions: context.stationOptions,
     stationStaffCandidates: context.stationStaffCandidates,
-    stationManagerCandidates: context.stationManagerCandidates
+    stationManagerCandidates: context.stationManagerCandidates,
+    personnelOptions: context.personnelOptions
   };
 }
 
@@ -713,6 +845,65 @@ function dedupeUpdatesByRowIndex_(updates) {
     byRowIndex.set(Number(item.rowIndex), item);
   });
   return Array.from(byRowIndex.values());
+}
+
+function normalizeCreateStationStaffPayload_(payload) {
+  const email = normalizeEmail_(payload && payload.email);
+  const stationCode = normalizeOrgCode_(payload && payload.stationCode);
+  const title = String(payload && payload.title || '').trim();
+  const name = String(payload && payload.name || '').trim();
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('請輸入有效的 Email。');
+  }
+  if (!name) {
+    throw new Error('請輸入姓名。');
+  }
+  if (!stationCode) {
+    throw new Error('請選擇駐站。');
+  }
+  if (!title) {
+    throw new Error('請輸入職稱。');
+  }
+
+  return { email, name, stationCode, title };
+}
+
+function normalizeCreateStationNodePayload_(payload) {
+  const stationType = String(payload && payload.stationType || '').trim().toLowerCase() === 'external' ? 'external' : 'general';
+  const suffix = String(payload && payload.suffix || '').trim().toUpperCase();
+  const name = String(payload && payload.name || '').trim();
+  const alias = String(payload && payload.alias || '').trim();
+  const managerEmail = normalizeEmail_(payload && payload.managerEmail);
+
+  if (!suffix || !/^[A-Z]+$/.test(suffix)) {
+    throw new Error('駐站代碼尾碼只能輸入英文字母。');
+  }
+  if (!name) {
+    throw new Error('請輸入駐站中文名稱。');
+  }
+  if (!managerEmail) {
+    throw new Error('請選擇駐站管理員。');
+  }
+
+  return {
+    stationType,
+    suffix,
+    name,
+    alias,
+    managerEmail,
+    code: buildStationCode_(stationType, suffix)
+  };
+}
+
+function buildStationCode_(stationType, suffix) {
+  return stationType === 'external'
+    ? `GRP-CO-EX-${String(suffix || '').trim().toUpperCase()}`
+    : `GRP-CO-${String(suffix || '').trim().toUpperCase()}`;
+}
+
+function getPersonnelStatusForStation_(stationCode) {
+  return normalizeOrgCode_(stationCode).startsWith('GRP-CO-EX-') ? '委外廠商' : '在職';
 }
 
 function writeAssignmentRow_(sheet, rowIndex, assignment) {

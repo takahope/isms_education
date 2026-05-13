@@ -494,6 +494,24 @@
       line-height: 1;
     }
 
+    .editor-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-left: auto;
+    }
+
+    .editor-action-btn {
+      background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+      border-color: rgba(14, 165, 233, 0.22);
+      color: #0369a1;
+    }
+
+    .editor-action-btn:hover {
+      background: #ffffff;
+    }
+
     .station-overview-modal {
       position: fixed;
       inset: 0;
@@ -580,6 +598,107 @@
       background: #ffffff;
       text-align: center;
       color: var(--color-text-muted);
+    }
+
+    .editor-form-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .editor-form-field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .editor-form-field label {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .editor-form-note {
+      font-size: 0.78rem;
+      color: var(--color-text-muted);
+    }
+
+    .editor-form-error {
+      font-size: 0.8rem;
+      color: var(--color-error);
+      min-height: 1.1em;
+    }
+
+    .editor-form-inline {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .editor-segmented {
+      display: inline-flex;
+      padding: 4px;
+      gap: 4px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: #f8fafc;
+      width: fit-content;
+    }
+
+    .editor-segmented-btn {
+      border: 0;
+      background: transparent;
+      color: var(--color-text-muted);
+      border-radius: 999px;
+      min-height: 38px;
+      padding: 0 14px;
+      font: inherit;
+      font-size: 0.84rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .editor-segmented-btn.is-active {
+      background: #ffffff;
+      color: #0369a1;
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+    }
+
+    .editor-preview-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 42px;
+      padding: 0 14px;
+      border-radius: 14px;
+      border: 1px dashed rgba(14, 165, 233, 0.28);
+      background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%);
+      color: #075985;
+      font-size: 0.9rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+    }
+
+    .editor-option-toggle {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .editor-option-chip {
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: #ffffff;
+      color: var(--color-text-muted);
+      border-radius: 999px;
+      min-height: 36px;
+      padding: 0 12px;
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .editor-option-chip.is-active {
+      border-color: rgba(14, 165, 233, 0.26);
+      background: #eff6ff;
+      color: #0369a1;
     }
 
     .editor-tabs {
@@ -1048,6 +1167,15 @@
         grid-template-columns: 1fr;
       }
 
+      .editor-form-inline {
+        grid-template-columns: 1fr;
+      }
+
+      .editor-header-actions,
+      .editor-option-toggle {
+        width: 100%;
+      }
+
       .editor-heading,
       .station-card-summary,
       .manager-scope-card {
@@ -1473,6 +1601,10 @@
           <h3 id="station-editor-title">駐站收案配置</h3>
           <p id="station-editor-subtitle">載入中...</p>
         </div>
+        <div id="station-editor-header-actions" class="editor-header-actions hidden">
+          <button type="button" id="station-add-staff-btn" class="mini-btn editor-action-btn">新增收案人員</button>
+          <button type="button" id="station-add-node-btn" class="mini-btn editor-action-btn">新增駐站</button>
+        </div>
         <button type="button" id="station-editor-close-btn" class="editor-close" aria-label="關閉">×</button>
       </div>
       <div id="station-editor-tabs" class="editor-tabs hidden"></div>
@@ -1504,6 +1636,115 @@
       <div id="station-overview-body" class="station-overview-dialog-body"></div>
     </div>
   </div>
+
+  <div id="station-staff-modal" class="editor-modal hidden" aria-hidden="true">
+    <div class="editor-dialog" role="dialog" aria-modal="true" aria-labelledby="station-staff-modal-title">
+      <div class="editor-header">
+        <div class="editor-heading">
+          <h3 id="station-staff-modal-title">新增收案人員</h3>
+          <p>新增人員到指定駐站，主管會自動帶入該駐站管理員。</p>
+        </div>
+        <button type="button" id="station-staff-close-btn" class="editor-close" aria-label="關閉">×</button>
+      </div>
+      <div class="editor-body">
+        <div class="editor-form-grid">
+          <div class="editor-form-field">
+            <label for="station-staff-email-input">Email</label>
+            <input id="station-staff-email-input" class="inline-select" list="station-personnel-datalist" type="email" placeholder="name@example.com" />
+            <div class="editor-form-note" id="station-staff-email-note">可直接輸入新 Email，或從既有人員名單選擇。</div>
+          </div>
+          <div class="editor-form-inline">
+            <div class="editor-form-field">
+              <label for="station-staff-name-input">姓名</label>
+              <input id="station-staff-name-input" class="inline-select" type="text" placeholder="請輸入姓名" />
+            </div>
+            <div class="editor-form-field">
+              <label for="station-staff-title-input">職稱</label>
+              <input id="station-staff-title-input" class="inline-select" type="text" placeholder="例如：收案人員" />
+            </div>
+          </div>
+          <div class="editor-form-field">
+            <label for="station-staff-station-select">駐站</label>
+            <select id="station-staff-station-select" class="inline-select"></select>
+          </div>
+          <div id="station-staff-form-error" class="editor-form-error"></div>
+        </div>
+      </div>
+      <div class="editor-footer">
+        <div class="editor-status-wrap">
+          <div class="editor-status">若 Email 已存在人員主檔，系統會略過主檔新增。</div>
+        </div>
+        <div class="editor-footer-actions">
+          <button type="button" id="station-staff-cancel-btn" class="mini-btn">取消</button>
+          <button type="button" id="station-staff-submit-btn" class="mini-btn">新增收案人員</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="station-node-modal" class="editor-modal hidden" aria-hidden="true">
+    <div class="editor-dialog" role="dialog" aria-modal="true" aria-labelledby="station-node-modal-title">
+      <div class="editor-header">
+        <div class="editor-heading">
+          <h3 id="station-node-modal-title">新增駐站</h3>
+          <p>建立新的駐站節點，並指定該駐站管理員。</p>
+        </div>
+        <button type="button" id="station-node-close-btn" class="editor-close" aria-label="關閉">×</button>
+      </div>
+      <div class="editor-body">
+        <div class="editor-form-grid">
+          <div class="editor-form-field">
+            <label>駐站類型</label>
+            <div id="station-node-type-toggle" class="editor-segmented">
+              <button type="button" class="editor-segmented-btn is-active" data-station-type="general">一般駐站</button>
+              <button type="button" class="editor-segmented-btn" data-station-type="external">委外駐站</button>
+            </div>
+          </div>
+          <div class="editor-form-inline">
+            <div class="editor-form-field">
+              <label for="station-node-suffix-input">英文尾碼</label>
+              <input id="station-node-suffix-input" class="inline-select" type="text" maxlength="12" placeholder="例如：ABC" />
+              <div class="editor-form-note">只接受英文字母，系統會自動轉成大寫。</div>
+            </div>
+            <div class="editor-form-field">
+              <label>完整代碼預覽</label>
+              <div id="station-node-code-preview" class="editor-preview-chip">GRP-CO-</div>
+            </div>
+          </div>
+          <div class="editor-form-inline">
+            <div class="editor-form-field">
+              <label for="station-node-name-input">駐站中文名稱</label>
+              <input id="station-node-name-input" class="inline-select" type="text" placeholder="請輸入駐站名稱" />
+            </div>
+            <div class="editor-form-field">
+              <label for="station-node-alias-input">駐站別名</label>
+              <input id="station-node-alias-input" class="inline-select" type="text" placeholder="選填" />
+            </div>
+          </div>
+          <div class="editor-form-field">
+            <label>駐站管理員</label>
+            <div id="station-node-manager-source" class="editor-option-toggle">
+              <button type="button" class="editor-option-chip is-active" data-manager-source="station">既有駐站管理員</button>
+              <button type="button" class="editor-option-chip" data-manager-source="all">全部人員主檔</button>
+            </div>
+            <select id="station-node-manager-select" class="inline-select"></select>
+          </div>
+          <div id="station-node-form-error" class="editor-form-error"></div>
+        </div>
+      </div>
+      <div class="editor-footer">
+        <div class="editor-status-wrap">
+          <div class="editor-status">若指定的人尚未是駐站管理員，系統會同步補一筆駐站管理員職務。</div>
+        </div>
+        <div class="editor-footer-actions">
+          <button type="button" id="station-node-cancel-btn" class="mini-btn">取消</button>
+          <button type="button" id="station-node-submit-btn" class="mini-btn">新增駐站</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <datalist id="station-personnel-datalist"></datalist>
 
   <script src="https://www.youtube.com/iframe_api"></script>
   
@@ -1873,6 +2114,26 @@
         draftData: null,
         managerSelections: {},
         selfNewStationCode: '',
+        isStaffModalOpen: false,
+        isStaffModalSubmitting: false,
+        staffForm: {
+          email: '',
+          name: '',
+          title: '',
+          stationCode: '',
+          error: ''
+        },
+        isNodeModalOpen: false,
+        isNodeModalSubmitting: false,
+        nodeForm: {
+          stationType: 'general',
+          suffix: '',
+          name: '',
+          alias: '',
+          managerSource: 'station',
+          managerEmail: '',
+          error: ''
+        },
         message: ''
       };
     }
@@ -1882,8 +2143,66 @@
       document.getElementById('station-editor-close-btn').addEventListener('click', closeStationEditor);
       document.getElementById('station-editor-cancel-btn').addEventListener('click', closeStationEditor);
       document.getElementById('station-editor-save-btn').addEventListener('click', saveStationEditorChanges);
+      document.getElementById('station-add-staff-btn').addEventListener('click', openStationStaffModal);
+      document.getElementById('station-add-node-btn').addEventListener('click', openStationNodeModal);
       document.getElementById('station-editor-modal').addEventListener('click', (event) => {
         if (event.target.id === 'station-editor-modal') closeStationEditor();
+      });
+      bindStationCreationEvents();
+    }
+
+    function bindStationCreationEvents() {
+      document.getElementById('station-staff-close-btn').addEventListener('click', closeStationStaffModal);
+      document.getElementById('station-staff-cancel-btn').addEventListener('click', closeStationStaffModal);
+      document.getElementById('station-staff-submit-btn').addEventListener('click', submitStationStaffForm);
+      document.getElementById('station-staff-modal').addEventListener('click', (event) => {
+        if (event.target.id === 'station-staff-modal') closeStationStaffModal();
+      });
+      document.getElementById('station-staff-email-input').addEventListener('input', handleStationStaffEmailInput);
+      document.getElementById('station-staff-name-input').addEventListener('input', () => {
+        stationEditorState.staffForm.name = document.getElementById('station-staff-name-input').value;
+      });
+      document.getElementById('station-staff-title-input').addEventListener('input', () => {
+        stationEditorState.staffForm.title = document.getElementById('station-staff-title-input').value;
+      });
+      document.getElementById('station-staff-station-select').addEventListener('change', () => {
+        stationEditorState.staffForm.stationCode = document.getElementById('station-staff-station-select').value;
+      });
+
+      document.getElementById('station-node-close-btn').addEventListener('click', closeStationNodeModal);
+      document.getElementById('station-node-cancel-btn').addEventListener('click', closeStationNodeModal);
+      document.getElementById('station-node-submit-btn').addEventListener('click', submitStationNodeForm);
+      document.getElementById('station-node-modal').addEventListener('click', (event) => {
+        if (event.target.id === 'station-node-modal') closeStationNodeModal();
+      });
+      document.querySelectorAll('[data-station-type]').forEach((button) => {
+        button.addEventListener('click', () => {
+          stationEditorState.nodeForm.stationType = button.getAttribute('data-station-type') === 'external' ? 'external' : 'general';
+          renderStationNodeTypeButtons();
+          updateStationNodeCodePreview();
+        });
+      });
+      document.getElementById('station-node-suffix-input').addEventListener('input', () => {
+        const input = document.getElementById('station-node-suffix-input');
+        input.value = input.value.replace(/[^a-z]/gi, '').toUpperCase();
+        stationEditorState.nodeForm.suffix = input.value;
+        updateStationNodeCodePreview();
+      });
+      document.getElementById('station-node-name-input').addEventListener('input', () => {
+        stationEditorState.nodeForm.name = document.getElementById('station-node-name-input').value;
+      });
+      document.getElementById('station-node-alias-input').addEventListener('input', () => {
+        stationEditorState.nodeForm.alias = document.getElementById('station-node-alias-input').value;
+      });
+      document.querySelectorAll('[data-manager-source]').forEach((button) => {
+        button.addEventListener('click', () => {
+          stationEditorState.nodeForm.managerSource = button.getAttribute('data-manager-source') === 'all' ? 'all' : 'station';
+          renderStationNodeManagerSourceButtons();
+          populateStationNodeManagerSelect();
+        });
+      });
+      document.getElementById('station-node-manager-select').addEventListener('change', () => {
+        stationEditorState.nodeForm.managerEmail = document.getElementById('station-node-manager-select').value;
       });
     }
 
@@ -2008,6 +2327,37 @@
       }
     }
 
+    function applyStationEditorPayload(response, options = {}) {
+      const normalized = normalizeStationEditorData(response);
+      stationEditorState.baseData = normalized;
+      stationEditorState.draftData = cloneStationEditorData(normalized);
+      stationEditorState.managerSelections = {};
+      stationEditorState.selfNewStationCode = '';
+      if (options.resetView) {
+        stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
+        stationEditorState.managedViewMode = 'all';
+        stationEditorState.managedSearchKeyword = '';
+        stationEditorState.managedSelectedStationCode = '';
+        stationEditorState.managedManagerFilterEmail = '';
+        stationEditorState.managedSearchComposing = false;
+        stationEditorState.changeListExpanded = false;
+      }
+    }
+
+    function getPersonnelOptionByEmail(email) {
+      const draft = stationEditorState.draftData;
+      const options = draft && Array.isArray(draft.personnelOptions) ? draft.personnelOptions : [];
+      return options.find((item) => item.email === String(email || '').trim().toLowerCase()) || null;
+    }
+
+    function getStationCreationManagerOptions(source) {
+      const draft = stationEditorState.draftData || {};
+      if (source === 'all') {
+        return Array.isArray(draft.personnelOptions) ? draft.personnelOptions : [];
+      }
+      return Array.isArray(draft.stationManagerCandidates) ? draft.stationManagerCandidates : [];
+    }
+
     async function openStationEditor() {
       if (stationEditorState.isSaving) return;
       const modal = document.getElementById('station-editor-modal');
@@ -2023,18 +2373,7 @@
         if (!response || !response.success) {
           throw new Error(response && response.message ? response.message : '無法載入駐站收案配置。');
         }
-        const normalized = normalizeStationEditorData(response);
-        stationEditorState.baseData = normalized;
-        stationEditorState.draftData = cloneStationEditorData(normalized);
-        stationEditorState.managerSelections = {};
-        stationEditorState.selfNewStationCode = '';
-        stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
-        stationEditorState.managedViewMode = 'all';
-        stationEditorState.managedSearchKeyword = '';
-        stationEditorState.managedSelectedStationCode = '';
-        stationEditorState.managedManagerFilterEmail = '';
-        stationEditorState.managedSearchComposing = false;
-        stationEditorState.changeListExpanded = false;
+        applyStationEditorPayload(response, { resetView: true });
       } catch (error) {
         stationEditorState.message = error && error.message ? error.message : '無法載入駐站收案配置。';
       } finally {
@@ -2064,6 +2403,7 @@
       const stationStaffCandidates = Array.isArray(payload && payload.stationStaffCandidates) ? payload.stationStaffCandidates : [];
       const allStations = Array.isArray(payload && payload.allStations) ? payload.allStations : [];
       const stationManagerCandidates = Array.isArray(payload && payload.stationManagerCandidates) ? payload.stationManagerCandidates : [];
+      const personnelOptions = Array.isArray(payload && payload.personnelOptions) ? payload.personnelOptions : [];
 
       return {
         viewer: {
@@ -2107,6 +2447,12 @@
         stationManagerCandidates: stationManagerCandidates.map((item) => ({
           email: String(item.email || '').trim(),
           name: String(item.name || '').trim(),
+          label: String(item.label || '').trim()
+        })),
+        personnelOptions: personnelOptions.map((item) => ({
+          email: String(item.email || '').trim().toLowerCase(),
+          name: String(item.name || '').trim(),
+          status: String(item.status || '').trim(),
           label: String(item.label || '').trim()
         }))
       };
@@ -2709,10 +3055,12 @@
       const statusEl = document.getElementById('station-editor-status');
       const changeListEl = document.getElementById('station-editor-change-list');
       const saveBtn = document.getElementById('station-editor-save-btn');
+      const headerActionsEl = document.getElementById('station-editor-header-actions');
       const hasChanges = hasStationEditorDirtyChanges();
 
       if (stationEditorState.isLoading) {
         subtitleEl.textContent = '讀取目前可編輯的駐站收案配置。';
+        headerActionsEl.classList.add('hidden');
         tabsEl.classList.add('hidden');
         bodyEl.innerHTML = '<div class="editor-loading">讀取資料中，請稍候...</div>';
         statusEl.textContent = '讀取中...';
@@ -2723,6 +3071,7 @@
 
       if (!stationEditorState.draftData) {
         subtitleEl.textContent = '目前沒有可編輯的資料。';
+        headerActionsEl.classList.add('hidden');
         tabsEl.classList.add('hidden');
         bodyEl.innerHTML = `<div class="editor-empty">${escapeHtml(stationEditorState.message || '目前沒有可編輯的駐站收案配置。')}</div>`;
         statusEl.textContent = stationEditorState.message || '沒有可編輯資料。';
@@ -2733,6 +3082,11 @@
 
       const draft = stationEditorState.draftData;
       subtitleEl.textContent = '可調整駐站管理員名下的收案人員，或修改自己負責的駐站。';
+      if (draft.viewer && draft.viewer.isStationManager) {
+        headerActionsEl.classList.remove('hidden');
+      } else {
+        headerActionsEl.classList.add('hidden');
+      }
       saveBtn.disabled = stationEditorState.isSaving || !hasChanges;
 
       const tabs = [];
@@ -3137,6 +3491,229 @@
       container.querySelectorAll('[data-delete-row]').forEach((button) => {
         button.addEventListener('click', () => deleteEditorAssignment(button.getAttribute('data-delete-row')));
       });
+    }
+
+    function openStationStaffModal() {
+      if (!stationEditorState.draftData || stationEditorState.isStaffModalSubmitting) return;
+      stationEditorState.isStaffModalOpen = true;
+      stationEditorState.staffForm = {
+        email: '',
+        name: '',
+        title: '',
+        stationCode: stationEditorState.managedSelectedStationCode || '',
+        error: ''
+      };
+      populateStationPersonnelDatalist();
+      populateStationStaffForm();
+      const modal = document.getElementById('station-staff-modal');
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeStationStaffModal() {
+      if (stationEditorState.isStaffModalSubmitting) return;
+      stationEditorState.isStaffModalOpen = false;
+      document.getElementById('station-staff-modal').classList.add('hidden');
+      document.getElementById('station-staff-modal').setAttribute('aria-hidden', 'true');
+    }
+
+    function populateStationPersonnelDatalist() {
+      const dataList = document.getElementById('station-personnel-datalist');
+      const draft = stationEditorState.draftData || {};
+      const personnelOptions = Array.isArray(draft.personnelOptions) ? draft.personnelOptions : [];
+      dataList.innerHTML = personnelOptions.map((item) => (
+        `<option value="${escapeHtml(item.email)}">${escapeHtml(item.name || item.email)}</option>`
+      )).join('');
+    }
+
+    function populateStationStaffForm() {
+      const draft = stationEditorState.draftData || {};
+      const stations = Array.isArray(draft.stationOptions) ? draft.stationOptions : [];
+      const stationSelect = document.getElementById('station-staff-station-select');
+      stationSelect.innerHTML = `
+        <option value="">選擇駐站</option>
+        ${stations.map((station) => `<option value="${escapeHtml(station.code)}">${escapeHtml(station.name)} (${escapeHtml(station.code)})</option>`).join('')}
+      `;
+      document.getElementById('station-staff-email-input').value = stationEditorState.staffForm.email || '';
+      document.getElementById('station-staff-name-input').value = stationEditorState.staffForm.name || '';
+      document.getElementById('station-staff-title-input').value = stationEditorState.staffForm.title || '';
+      stationSelect.value = stationEditorState.staffForm.stationCode || '';
+      document.getElementById('station-staff-email-note').textContent = '可直接輸入新 Email，或從既有人員名單選擇。';
+      renderStationStaffFormError();
+    }
+
+    function handleStationStaffEmailInput() {
+      const emailInput = document.getElementById('station-staff-email-input');
+      const normalizedEmail = String(emailInput.value || '').trim().toLowerCase();
+      stationEditorState.staffForm.email = normalizedEmail;
+      const matched = getPersonnelOptionByEmail(normalizedEmail);
+      const noteEl = document.getElementById('station-staff-email-note');
+      if (matched) {
+        stationEditorState.staffForm.name = matched.name || stationEditorState.staffForm.name;
+        document.getElementById('station-staff-name-input').value = stationEditorState.staffForm.name;
+        noteEl.textContent = `此人已存在於人員主檔，目前狀態：${matched.status || '未設定'}。`;
+      } else {
+        noteEl.textContent = '此 Email 不在既有人員主檔中，送出後會建立新的人員資料。';
+      }
+    }
+
+    function renderStationStaffFormError(message) {
+      const error = typeof message === 'string' ? message : stationEditorState.staffForm.error || '';
+      stationEditorState.staffForm.error = error;
+      document.getElementById('station-staff-form-error').textContent = error;
+      const submitBtn = document.getElementById('station-staff-submit-btn');
+      submitBtn.disabled = stationEditorState.isStaffModalSubmitting;
+      submitBtn.textContent = stationEditorState.isStaffModalSubmitting ? '新增中...' : '新增收案人員';
+    }
+
+    async function submitStationStaffForm() {
+      if (stationEditorState.isStaffModalSubmitting) return;
+      stationEditorState.staffForm.email = String(document.getElementById('station-staff-email-input').value || '').trim().toLowerCase();
+      stationEditorState.staffForm.name = String(document.getElementById('station-staff-name-input').value || '').trim();
+      stationEditorState.staffForm.title = String(document.getElementById('station-staff-title-input').value || '').trim();
+      stationEditorState.staffForm.stationCode = String(document.getElementById('station-staff-station-select').value || '').trim();
+
+      if (!stationEditorState.staffForm.email || !stationEditorState.staffForm.name || !stationEditorState.staffForm.title || !stationEditorState.staffForm.stationCode) {
+        renderStationStaffFormError('請完整填寫 Email、姓名、職稱與駐站。');
+        return;
+      }
+
+      stationEditorState.isStaffModalSubmitting = true;
+      renderStationStaffFormError('');
+      try {
+        const response = await callServer('createStationStaff', {
+          email: stationEditorState.staffForm.email,
+          name: stationEditorState.staffForm.name,
+          title: stationEditorState.staffForm.title,
+          stationCode: stationEditorState.staffForm.stationCode
+        });
+        if (!response || !response.success) {
+          throw new Error(response && response.message ? response.message : '無法新增收案人員。');
+        }
+        applyStationEditorPayload(response, { resetView: false });
+        await refreshUserProfileCard();
+        stationEditorState.isStaffModalSubmitting = false;
+        closeStationStaffModal();
+        showStationEditorToast({ icon: 'success', title: response.message || '收案人員已新增。', timer: 2600 });
+        renderStationEditor();
+      } catch (error) {
+        renderStationStaffFormError(error && error.message ? error.message : '無法新增收案人員。');
+      } finally {
+        stationEditorState.isStaffModalSubmitting = false;
+        renderStationStaffFormError(stationEditorState.staffForm.error || '');
+      }
+    }
+
+    function openStationNodeModal() {
+      if (!stationEditorState.draftData || stationEditorState.isNodeModalSubmitting) return;
+      stationEditorState.isNodeModalOpen = true;
+      stationEditorState.nodeForm = {
+        stationType: 'general',
+        suffix: '',
+        name: '',
+        alias: '',
+        managerSource: 'station',
+        managerEmail: '',
+        error: ''
+      };
+      renderStationNodeTypeButtons();
+      renderStationNodeManagerSourceButtons();
+      populateStationNodeManagerSelect();
+      updateStationNodeCodePreview();
+      document.getElementById('station-node-suffix-input').value = '';
+      document.getElementById('station-node-name-input').value = '';
+      document.getElementById('station-node-alias-input').value = '';
+      renderStationNodeFormError();
+      const modal = document.getElementById('station-node-modal');
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeStationNodeModal() {
+      if (stationEditorState.isNodeModalSubmitting) return;
+      stationEditorState.isNodeModalOpen = false;
+      document.getElementById('station-node-modal').classList.add('hidden');
+      document.getElementById('station-node-modal').setAttribute('aria-hidden', 'true');
+    }
+
+    function renderStationNodeTypeButtons() {
+      document.querySelectorAll('[data-station-type]').forEach((button) => {
+        button.classList.toggle('is-active', button.getAttribute('data-station-type') === stationEditorState.nodeForm.stationType);
+      });
+    }
+
+    function renderStationNodeManagerSourceButtons() {
+      document.querySelectorAll('[data-manager-source]').forEach((button) => {
+        button.classList.toggle('is-active', button.getAttribute('data-manager-source') === stationEditorState.nodeForm.managerSource);
+      });
+    }
+
+    function updateStationNodeCodePreview() {
+      const suffix = String(stationEditorState.nodeForm.suffix || '').trim().toUpperCase();
+      const prefix = stationEditorState.nodeForm.stationType === 'external' ? 'GRP-CO-EX-' : 'GRP-CO-';
+      document.getElementById('station-node-code-preview').textContent = `${prefix}${suffix}`;
+    }
+
+    function populateStationNodeManagerSelect() {
+      const managerSelect = document.getElementById('station-node-manager-select');
+      const options = getStationCreationManagerOptions(stationEditorState.nodeForm.managerSource);
+      managerSelect.innerHTML = `
+        <option value="">選擇駐站管理員</option>
+        ${options.map((item) => `<option value="${escapeHtml(item.email)}">${escapeHtml(item.label || [item.name, item.email].filter(Boolean).join('｜'))}</option>`).join('')}
+      `;
+      if (stationEditorState.nodeForm.managerEmail && options.some((item) => item.email === stationEditorState.nodeForm.managerEmail)) {
+        managerSelect.value = stationEditorState.nodeForm.managerEmail;
+      } else {
+        stationEditorState.nodeForm.managerEmail = '';
+      }
+    }
+
+    function renderStationNodeFormError(message) {
+      const error = typeof message === 'string' ? message : stationEditorState.nodeForm.error || '';
+      stationEditorState.nodeForm.error = error;
+      document.getElementById('station-node-form-error').textContent = error;
+      const submitBtn = document.getElementById('station-node-submit-btn');
+      submitBtn.disabled = stationEditorState.isNodeModalSubmitting;
+      submitBtn.textContent = stationEditorState.isNodeModalSubmitting ? '新增中...' : '新增駐站';
+    }
+
+    async function submitStationNodeForm() {
+      if (stationEditorState.isNodeModalSubmitting) return;
+      stationEditorState.nodeForm.suffix = String(document.getElementById('station-node-suffix-input').value || '').trim().toUpperCase();
+      stationEditorState.nodeForm.name = String(document.getElementById('station-node-name-input').value || '').trim();
+      stationEditorState.nodeForm.alias = String(document.getElementById('station-node-alias-input').value || '').trim();
+      stationEditorState.nodeForm.managerEmail = String(document.getElementById('station-node-manager-select').value || '').trim().toLowerCase();
+
+      if (!stationEditorState.nodeForm.suffix || !stationEditorState.nodeForm.name || !stationEditorState.nodeForm.managerEmail) {
+        renderStationNodeFormError('請完整填寫駐站類型、英文尾碼、名稱與管理員。');
+        return;
+      }
+
+      stationEditorState.isNodeModalSubmitting = true;
+      renderStationNodeFormError('');
+      try {
+        const response = await callServer('createStationNode', {
+          stationType: stationEditorState.nodeForm.stationType,
+          suffix: stationEditorState.nodeForm.suffix,
+          name: stationEditorState.nodeForm.name,
+          alias: stationEditorState.nodeForm.alias,
+          managerEmail: stationEditorState.nodeForm.managerEmail
+        });
+        if (!response || !response.success) {
+          throw new Error(response && response.message ? response.message : '無法新增駐站。');
+        }
+        applyStationEditorPayload(response, { resetView: false });
+        await refreshUserProfileCard();
+        stationEditorState.isNodeModalSubmitting = false;
+        closeStationNodeModal();
+        showStationEditorToast({ icon: 'success', title: response.message || '駐站已新增。', timer: 2600 });
+        renderStationEditor();
+      } catch (error) {
+        renderStationNodeFormError(error && error.message ? error.message : '無法新增駐站。');
+      } finally {
+        stationEditorState.isNodeModalSubmitting = false;
+        renderStationNodeFormError(stationEditorState.nodeForm.error || '');
+      }
     }
 
     function escapeHtml(value) {
