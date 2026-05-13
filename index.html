@@ -1264,7 +1264,7 @@
     const QUIZ_QUESTION_COUNT = 10;
     const POINTS_PER_QUESTION = 10;
     const IDLE_TIME_MS = 15 * 60 * 1000;
-    const REQUIRED_WATCH_TIME_SEC = 60 * 60;
+    const REQUIRED_WATCH_TIME_SEC = 1 * 60;
     const VIDEO_DURATION_FALLBACK_SEC = (2 * 60 * 60) + (31 * 60) + 21;
     const PROGRESS_SCHEMA_VERSION = 2;
     const NATURAL_PLAYBACK_DELTA_SEC = 2.5;
@@ -3482,7 +3482,11 @@
 
     function bindReplayWindowEvents() {
       document.getElementById('open-replay-btn').addEventListener('click', openReplayWindow);
-      document.getElementById('close-replay-btn').addEventListener('click', closeReplayWindow);
+      const closeReplayBtn = document.getElementById('close-replay-btn');
+      closeReplayBtn.addEventListener('click', closeReplayWindow);
+      closeReplayBtn.addEventListener('pointerdown', (event) => {
+        event.stopPropagation();
+      });
 
       const header = document.getElementById('replay-window-header');
       header.addEventListener('pointerdown', startReplayWindowDrag);
@@ -3533,6 +3537,7 @@
     function startReplayWindowDrag(event) {
       const replayWindow = document.getElementById('replay-window');
       if (replayWindow.classList.contains('hidden')) return;
+      if (event.target.closest('button, a, input, select, textarea, [role="button"]')) return;
 
       isDraggingReplayWindow = true;
       dragPointerId = event.pointerId;
