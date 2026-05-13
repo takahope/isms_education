@@ -1264,7 +1264,6 @@
         isSaving: false,
         activeTab: 'managed',
         managedViewMode: 'mine',
-        managerViewMode: 'mine',
         baseData: null,
         draftData: null,
         managerSelections: {},
@@ -1317,7 +1316,6 @@
         stationEditorState.selfNewStationCode = '';
         stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
         stationEditorState.managedViewMode = 'mine';
-        stationEditorState.managerViewMode = 'mine';
       } catch (error) {
         stationEditorState.message = error && error.message ? error.message : '無法載入駐站收案配置。';
       } finally {
@@ -1848,7 +1846,6 @@
       const tabs = [];
       if (draft.viewer.isStationManager) tabs.push({ key: 'managed', label: '調整駐站收案人員' });
       if (draft.viewer.isStationStaff) tabs.push({ key: 'self', label: '我的收案駐站' });
-      if (draft.viewer.isStationManager) tabs.push({ key: 'manager_transfer', label: '調整駐站管理員' });
       if (!tabs.some((item) => item.key === stationEditorState.activeTab)) {
         stationEditorState.activeTab = tabs[0] ? tabs[0].key : 'managed';
       }
@@ -1874,8 +1871,6 @@
       bodyEl.innerHTML = '';
       if (stationEditorState.activeTab === 'managed') {
         renderManagedStationsView(bodyEl, draft);
-      } else if (stationEditorState.activeTab === 'manager_transfer') {
-        renderManagerTransferView(bodyEl, draft);
       } else {
         renderSelfAssignmentsView(bodyEl, draft);
       }
@@ -1931,6 +1926,12 @@
       stations.forEach((station) => {
         const card = document.createElement('section');
         card.className = 'station-card';
+        const managerOptionsHtml = draft.stationManagerCandidates.map((candidate) => `
+          <option value="${escapeHtml(candidate.email)}">${escapeHtml(candidate.label)}</option>
+        `).join('');
+        const warningHtml = Array.isArray(station.warnings) && station.warnings.length
+          ? `<div class="warning-text">${escapeHtml(station.warnings.join('｜'))}</div>`
+          : '';
 
         const memberRows = station.members.map((member) => {
           const rowKey = buildEditorRowKey(member);
@@ -1958,7 +1959,17 @@
             <div>
               <div class="station-card-title">${escapeHtml(station.name)} <span class="station-card-meta">(${escapeHtml(station.code)})</span></div>
               <div class="station-card-meta">駐站管理員：${escapeHtml(station.managerName || station.managerEmail || '未設定')}｜現有收案人員 ${station.members.length} 位</div>
+              ${warningHtml}
             </div>
+          </div>
+          <div class="add-row">
+            <div class="member-main">
+              <div class="member-meta">駐站管理員｜${escapeHtml(station.managerName || station.managerEmail || '未設定')}</div>
+              <div class="member-meta">更換下拉選單後，系統會立即列入待儲存異動；按下下方「儲存變更」才會正式寫回。</div>
+            </div>
+            <select class="inline-select" data-station-manager-select="${escapeHtml(station.code)}">
+              ${managerOptionsHtml}
+            </select>
           </div>
           <div class="member-list">
             ${memberRows || '<div class="editor-empty">目前尚無收案人員。</div>'}
@@ -1989,78 +2000,6 @@
       container.querySelectorAll('[data-delete-row]').forEach((button) => {
         button.addEventListener('click', () => deleteEditorAssignment(button.getAttribute('data-delete-row')));
       });
-    }
-
-    function renderManagerTransferView(container, draft) {
-      const viewMode = stationEditorState.managerViewMode === 'all' ? 'all' : 'mine';
-      const stations = (viewMode === 'all' ? draft.allStations : draft.managedStations).slice();
-
-      const toggle = document.createElement('div');
-      toggle.className = 'manager-scope-toggle';
-      toggle.innerHTML = `
-        <button type="button" class="manager-scope-card ${viewMode === 'mine' ? 'is-active' : ''}" data-manager-view="mine">
-          <span class="manager-scope-title">只看我的管理駐站</span>
-          <span class="manager-scope-desc">聚焦目前由您管理的駐站，快速調整交接。</span>
-        </button>
-        <button type="button" class="manager-scope-card ${viewMode === 'all' ? 'is-active' : ''}" data-manager-view="all">
-          <span class="manager-scope-title">查看全部管理駐站</span>
-          <span class="manager-scope-desc">檢視所有駐站的管理員配置，直接改派任一駐站。</span>
-        </button>
-      `;
-      container.appendChild(toggle);
-
-      toggle.querySelectorAll('[data-manager-view]').forEach((button) => {
-        button.addEventListener('click', () => {
-          stationEditorState.managerViewMode = button.getAttribute('data-manager-view');
-          renderStationEditor();
-        });
-      });
-
-      const hint = document.createElement('div');
-      hint.className = 'manager-transfer-hint';
-      hint.textContent = '更換下拉選單後，系統會立即列入待儲存異動；按下下方「儲存變更」才會正式寫回。';
-      container.appendChild(hint);
-
-      if (!stations.length) {
-        const empty = document.createElement('div');
-        empty.className = 'editor-empty';
-        empty.textContent = viewMode === 'all' ? '目前沒有可調整的駐站。' : '目前沒有您管理的駐站。';
-        container.appendChild(empty);
-        return;
-      }
-
-      const wrapper = document.createElement('div');
-      wrapper.className = 'editor-stack';
-
-      stations.forEach((station) => {
-        const card = document.createElement('section');
-        card.className = 'station-card';
-        const optionsHtml = draft.stationManagerCandidates.map((candidate) => `
-          <option value="${escapeHtml(candidate.email)}">${escapeHtml(candidate.label)}</option>
-        `).join('');
-        const warningHtml = Array.isArray(station.warnings) && station.warnings.length
-          ? `<div class="warning-text">${escapeHtml(station.warnings.join('｜'))}</div>`
-          : '';
-
-        card.innerHTML = `
-          <div class="station-card-header">
-            <div>
-              <div class="station-card-title">${escapeHtml(station.name)} <span class="station-card-meta">(${escapeHtml(station.code)})</span></div>
-              <div class="station-card-meta">目前駐站管理員：${escapeHtml(station.managerName || station.managerEmail || '未設定')}｜現有收案人員 ${station.memberCount} 位</div>
-              ${warningHtml}
-            </div>
-          </div>
-          <div class="add-row">
-            <select class="inline-select" data-station-manager-select="${escapeHtml(station.code)}">
-              ${optionsHtml}
-            </select>
-          </div>
-        `;
-        wrapper.appendChild(card);
-      });
-
-      container.appendChild(wrapper);
-
       container.querySelectorAll('[data-station-manager-select]').forEach((select) => {
         const stationCode = select.getAttribute('data-station-manager-select');
         const station = stations.find((item) => item.code === stationCode);
