@@ -1163,7 +1163,7 @@
         <div class="progress-container" id="progress-container">
           <div class="progress-text" id="progress-text">
             <span>進度：<span id="time-current">00:00:00</span></span>
-            <span>目標：<span id="time-target">01:00:00</span></span>
+            <span>影片長度：<span id="time-target">02:31:21</span></span>
           </div>
           <div class="progress-bar-track">
             <div class="progress-bar-fill" id="progress-fill"></div>
@@ -1182,7 +1182,7 @@
         </div>
         
         <button id="btn-goto-quiz" onclick="proceedToQuiz()" class="btn btn-success hidden">
-          🎉 恭喜達標！點此前往測驗
+          前往測驗
         </button>
       </div>
 
@@ -1276,6 +1276,7 @@
     const POINTS_PER_QUESTION = 10;
     const IDLE_TIME_MS = 15 * 60 * 1000;
     const REQUIRED_WATCH_TIME_SEC = 60 * 60;
+    const VIDEO_DURATION_FALLBACK_SEC = (2 * 60 * 60) + (31 * 60) + 21;
     const PROGRESS_SCHEMA_VERSION = 2;
     const NATURAL_PLAYBACK_DELTA_SEC = 2.5;
     const CLOUD_SYNC_UNIQUE_WATCH_THRESHOLD_SEC = 30 * 60;
@@ -1308,6 +1309,7 @@
     let dragOffsetY = 0;
     let blurCheckTimeout = null;
     let lastFocusAlertAt = 0;
+    let videoDurationSec = VIDEO_DURATION_FALLBACK_SEC;
     let currentUserProfile = null;
     let stationEditorState = createInitialStationEditorState();
 
@@ -2740,6 +2742,13 @@
       return watchedSecondMarks.size;
     }
 
+    function updateVideoDuration(durationSec) {
+      const normalizedDuration = Math.max(0, Number(durationSec) || 0);
+      if (!normalizedDuration) return;
+      videoDurationSec = normalizedDuration;
+      document.getElementById('time-target').textContent = formatTime(videoDurationSec);
+    }
+
     function getProgressPayload() {
       return {
         schemaVersion: PROGRESS_SCHEMA_VERSION,
@@ -3062,7 +3071,7 @@
       }
 
       showSection('step-video');
-      document.getElementById('time-target').textContent = formatTime(REQUIRED_WATCH_TIME_SEC);
+      updateVideoDuration(videoDurationSec);
       updateProgressUI(getWatchedSeconds());
       updateReviewedSegmentState(lastPlaybackPosition);
       initYouTubePlayer();
@@ -3085,6 +3094,10 @@
       if (lastPlaybackPosition > 0) {
         event.target.seekTo(lastPlaybackPosition);
       }
+      if (typeof event.target.getDuration === 'function') {
+        updateVideoDuration(event.target.getDuration());
+      }
+      updateProgressUI(getWatchedSeconds());
       updateReviewedSegmentState(lastPlaybackPosition);
       event.target.playVideo();
     }
@@ -3214,8 +3227,9 @@
       const textEl = document.getElementById('progress-text');
       const btnQuiz = document.getElementById('btn-goto-quiz');
       const currentEl = document.getElementById('time-current');
+      const progressMaxSec = Math.max(videoDurationSec, REQUIRED_WATCH_TIME_SEC, 1);
 
-      let percentage = (currentTime / REQUIRED_WATCH_TIME_SEC) * 100;
+      let percentage = (currentTime / progressMaxSec) * 100;
       if (percentage > 100) percentage = 100;
 
       fillEl.style.width = `${percentage}%`;
@@ -3224,7 +3238,6 @@
       if (currentTime >= REQUIRED_WATCH_TIME_SEC) {
         fillEl.classList.add('success');
         textEl.classList.add('success');
-        currentEl.textContent = `${formatTime(currentTime)} (已達標)`;
         btnQuiz.classList.remove('hidden');
       } else {
         fillEl.classList.remove('success');
