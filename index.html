@@ -1263,6 +1263,7 @@
         isLoading: false,
         isSaving: false,
         activeTab: 'managed',
+        managedViewMode: 'mine',
         managerViewMode: 'mine',
         baseData: null,
         draftData: null,
@@ -1315,6 +1316,7 @@
         stationEditorState.managerSelections = {};
         stationEditorState.selfNewStationCode = '';
         stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
+        stationEditorState.managedViewMode = 'mine';
         stationEditorState.managerViewMode = 'mine';
       } catch (error) {
         stationEditorState.message = error && error.message ? error.message : '無法載入駐站收案配置。';
@@ -1879,9 +1881,37 @@
     }
 
     function renderManagedStationsView(container, draft) {
-      const stations = draft.viewer && draft.viewer.isStationManager ? draft.allStations : draft.managedStations;
+      const viewMode = stationEditorState.managedViewMode === 'all' ? 'all' : 'mine';
+      const stations = viewMode === 'all' ? draft.allStations : draft.managedStations;
+
+      if (draft.viewer && draft.viewer.isStationManager) {
+        const toggle = document.createElement('div');
+        toggle.className = 'manager-scope-toggle';
+        toggle.innerHTML = `
+          <button type="button" class="manager-scope-card ${viewMode === 'mine' ? 'is-active' : ''}" data-managed-view="mine">
+            <span class="manager-scope-title">只看我的駐站</span>
+            <span class="manager-scope-desc">聚焦自己目前管理的駐站，快速調整站內收案人員。</span>
+          </button>
+          <button type="button" class="manager-scope-card ${viewMode === 'all' ? 'is-active' : ''}" data-managed-view="all">
+            <span class="manager-scope-title">看全部駐站</span>
+            <span class="manager-scope-desc">檢視全部駐站的人員配置，直接調整任一駐站的收案人員。</span>
+          </button>
+        `;
+        container.appendChild(toggle);
+
+        toggle.querySelectorAll('[data-managed-view]').forEach((button) => {
+          button.addEventListener('click', () => {
+            stationEditorState.managedViewMode = button.getAttribute('data-managed-view');
+            renderStationEditor();
+          });
+        });
+      }
+
       if (!stations.length) {
-        container.innerHTML = '<div class="editor-empty">目前沒有可編輯的駐站。</div>';
+        const empty = document.createElement('div');
+        empty.className = 'editor-empty';
+        empty.textContent = viewMode === 'all' ? '目前沒有可編輯的駐站。' : '目前沒有您管理的駐站。';
+        container.appendChild(empty);
         return;
       }
 
