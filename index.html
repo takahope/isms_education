@@ -255,6 +255,286 @@
       word-break: break-word;
     }
 
+    .account-tools {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      z-index: 2;
+    }
+
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      border: 1px solid rgba(14, 165, 233, 0.22);
+      background: rgba(255, 255, 255, 0.92);
+      color: #0369a1;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(14, 165, 233, 0.12);
+      transition: transform var(--transition), background-color var(--transition);
+    }
+
+    .icon-btn:hover {
+      transform: translateY(-1px);
+      background: #ffffff;
+    }
+
+    .icon-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .icon-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .editor-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(4px);
+    }
+
+    .editor-dialog {
+      width: min(960px, 100%);
+      max-height: min(88vh, 900px);
+      overflow: hidden;
+      border-radius: 24px;
+      background: #ffffff;
+      box-shadow: 0 28px 72px rgba(15, 23, 42, 0.24);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .editor-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 24px 24px 18px;
+      border-bottom: 1px solid var(--color-border);
+      background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+    }
+
+    .editor-header h3 {
+      font-size: 1.25rem;
+      margin-bottom: 6px;
+    }
+
+    .editor-header p {
+      color: var(--color-text-muted);
+      font-size: 0.9rem;
+    }
+
+    .editor-close {
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--color-border);
+      border-radius: 999px;
+      background: white;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      font-size: 1.25rem;
+      line-height: 1;
+    }
+
+    .editor-tabs {
+      display: flex;
+      gap: 10px;
+      padding: 16px 24px 0;
+      flex-wrap: wrap;
+    }
+
+    .editor-tab {
+      border: 1px solid var(--color-border);
+      background: #ffffff;
+      color: var(--color-text-muted);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .editor-tab.is-active {
+      background: #e0f2fe;
+      color: #0369a1;
+      border-color: #7dd3fc;
+    }
+
+    .editor-body {
+      flex: 1;
+      overflow: auto;
+      padding: 20px 24px 24px;
+      background: #f8fafc;
+    }
+
+    .editor-loading,
+    .editor-empty {
+      padding: 44px 24px;
+      border-radius: 18px;
+      border: 1px dashed var(--color-border);
+      background: #ffffff;
+      text-align: center;
+      color: var(--color-text-muted);
+    }
+
+    .editor-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .station-card,
+    .self-card {
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 20px;
+      background: #ffffff;
+      padding: 18px;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    }
+
+    .station-card-header,
+    .self-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .station-card-title,
+    .self-card-title {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .station-card-meta,
+    .self-card-meta {
+      color: var(--color-text-muted);
+      font-size: 0.8125rem;
+    }
+
+    .member-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .member-row,
+    .self-row {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--color-border);
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    }
+
+    .member-row-top,
+    .self-row-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .member-main {
+      display: grid;
+      gap: 4px;
+    }
+
+    .member-name {
+      font-weight: 700;
+    }
+
+    .member-meta {
+      font-size: 0.8125rem;
+      color: var(--color-text-muted);
+      word-break: break-word;
+    }
+
+    .member-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .inline-select {
+      width: 100%;
+      min-height: 44px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: #ffffff;
+      color: var(--color-text-main);
+      font: inherit;
+    }
+
+    .mini-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--color-border);
+      background: white;
+      color: var(--color-text-main);
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .mini-btn-danger {
+      border-color: rgba(225, 29, 72, 0.18);
+      color: var(--color-error);
+      background: rgba(255, 241, 242, 0.7);
+    }
+
+    .add-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      margin-top: 14px;
+      align-items: center;
+    }
+
+    .editor-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 24px 22px;
+      border-top: 1px solid var(--color-border);
+      background: #ffffff;
+      flex-wrap: wrap;
+    }
+
+    .editor-status {
+      color: var(--color-text-muted);
+      font-size: 0.875rem;
+    }
+
+    .editor-footer-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
     @media (max-width: 640px) {
       .account-card {
         padding: 18px;
@@ -268,6 +548,27 @@
 
       .account-email {
         font-size: 1rem;
+      }
+
+      .account-tools {
+        top: 14px;
+        right: 14px;
+      }
+
+      .editor-modal {
+        padding: 12px;
+      }
+
+      .editor-header,
+      .editor-tabs,
+      .editor-body,
+      .editor-footer {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .add-row {
+        grid-template-columns: 1fr;
       }
     }
 
@@ -578,6 +879,14 @@
       <div id="step-welcome" class="hidden text-center">
         <h2 class="result-title">歡迎開始教育訓練</h2>
         <div class="account-card" id="account-card">
+          <div class="account-tools">
+            <button type="button" id="station-editor-open-btn" class="icon-btn hidden" aria-label="編輯駐站收案配置" title="編輯駐站收案配置">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
+                <path d="m12.5 5.5 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+              </svg>
+            </button>
+          </div>
           <div class="account-chip">目前登入帳號</div>
           <div class="account-primary-line">
             <div class="account-email" id="display-user-email">載入中...</div>
@@ -679,6 +988,29 @@
     <div class="replay-window-note">回放視窗不會影響本次作答，您可以自由拖曳影片時間軸查找內容。</div>
   </div>
 
+  <div id="station-editor-modal" class="editor-modal hidden" aria-hidden="true">
+    <div class="editor-dialog" role="dialog" aria-modal="true" aria-labelledby="station-editor-title">
+      <div class="editor-header">
+        <div>
+          <h3 id="station-editor-title">駐站收案配置</h3>
+          <p id="station-editor-subtitle">載入中...</p>
+        </div>
+        <button type="button" id="station-editor-close-btn" class="editor-close" aria-label="關閉">×</button>
+      </div>
+      <div id="station-editor-tabs" class="editor-tabs hidden"></div>
+      <div id="station-editor-body" class="editor-body">
+        <div class="editor-loading">讀取資料中，請稍候...</div>
+      </div>
+      <div class="editor-footer">
+        <div id="station-editor-status" class="editor-status">尚未載入。</div>
+        <div class="editor-footer-actions">
+          <button type="button" id="station-editor-cancel-btn" class="mini-btn">取消</button>
+          <button type="button" id="station-editor-save-btn" class="mini-btn" disabled>儲存變更</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://www.youtube.com/iframe_api"></script>
   
   <script>
@@ -721,9 +1053,12 @@
     let dragOffsetY = 0;
     let blurCheckTimeout = null;
     let lastFocusAlertAt = 0;
+    let currentUserProfile = null;
+    let stationEditorState = createInitialStationEditorState();
 
     document.addEventListener('DOMContentLoaded', () => {
       bindReplayWindowEvents();
+      bindStationEditorEvents();
       fetchUserProfile();
     });
 
@@ -770,7 +1105,10 @@
       return {
         email: normalizedEmail,
         name: String((profile && profile.name) || '').trim(),
-        assignments
+        assignments,
+        isStationManager: Boolean(profile && profile.isStationManager),
+        isStationStaff: Boolean(profile && profile.isStationStaff),
+        canEditStationAssignments: Boolean(profile && profile.canEditStationAssignments)
       };
     }
 
@@ -778,6 +1116,7 @@
       const emailEl = document.getElementById('display-user-email');
       const nameEl = document.getElementById('display-user-name');
       const assignmentsEl = document.getElementById('display-user-assignments');
+      const editBtn = document.getElementById('station-editor-open-btn');
 
       emailEl.textContent = profile.email;
 
@@ -787,6 +1126,12 @@
       } else {
         nameEl.textContent = '';
         nameEl.classList.add('hidden');
+      }
+
+      if (profile.canEditStationAssignments) {
+        editBtn.classList.remove('hidden');
+      } else {
+        editBtn.classList.add('hidden');
       }
 
       assignmentsEl.textContent = '';
@@ -817,8 +1162,606 @@
     }
 
     function finishLoading(profile) {
+      currentUserProfile = profile;
       renderUserProfile(profile);
       showSection('step-welcome');
+    }
+
+    function createInitialStationEditorState() {
+      return {
+        isOpen: false,
+        isLoading: false,
+        isSaving: false,
+        activeTab: 'managed',
+        baseData: null,
+        draftData: null,
+        managerSelections: {},
+        selfNewStationCode: '',
+        message: ''
+      };
+    }
+
+    function bindStationEditorEvents() {
+      document.getElementById('station-editor-open-btn').addEventListener('click', openStationEditor);
+      document.getElementById('station-editor-close-btn').addEventListener('click', closeStationEditor);
+      document.getElementById('station-editor-cancel-btn').addEventListener('click', closeStationEditor);
+      document.getElementById('station-editor-save-btn').addEventListener('click', saveStationEditorChanges);
+      document.getElementById('station-editor-modal').addEventListener('click', (event) => {
+        if (event.target.id === 'station-editor-modal') closeStationEditor();
+      });
+    }
+
+    async function refreshUserProfileCard() {
+      try {
+        const profile = await callServer('getCurrentUserProfile');
+        const normalizedProfile = normalizeUserProfile(profile, currentUserEmail || 'guest@example.com');
+        currentUserEmail = normalizedProfile.email;
+        currentUserProfile = normalizedProfile;
+        renderUserProfile(normalizedProfile);
+      } catch (error) {
+        console.error('重新整理首頁身分資訊失敗:', error);
+      }
+    }
+
+    async function openStationEditor() {
+      if (stationEditorState.isSaving) return;
+      const modal = document.getElementById('station-editor-modal');
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+      stationEditorState.isOpen = true;
+      stationEditorState.isLoading = true;
+      stationEditorState.message = '';
+      renderStationEditor();
+
+      try {
+        const response = await callServer('getStationAssignmentEditorData');
+        if (!response || !response.success) {
+          throw new Error(response && response.message ? response.message : '無法載入駐站收案配置。');
+        }
+        const normalized = normalizeStationEditorData(response);
+        stationEditorState.baseData = normalized;
+        stationEditorState.draftData = cloneStationEditorData(normalized);
+        stationEditorState.managerSelections = {};
+        stationEditorState.selfNewStationCode = '';
+        stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
+      } catch (error) {
+        stationEditorState.message = error && error.message ? error.message : '無法載入駐站收案配置。';
+      } finally {
+        stationEditorState.isLoading = false;
+        renderStationEditor();
+      }
+    }
+
+    function closeStationEditor() {
+      if (!stationEditorState.isOpen) return;
+      if (hasStationEditorDirtyChanges() && !window.confirm('尚有未儲存的駐站異動，確定要關閉嗎？')) {
+        return;
+      }
+      stationEditorState = createInitialStationEditorState();
+      const modal = document.getElementById('station-editor-modal');
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function normalizeStationEditorData(payload) {
+      const viewer = payload && payload.viewer ? payload.viewer : {};
+      const managedStations = Array.isArray(payload && payload.managedStations) ? payload.managedStations : [];
+      const selfAssignments = Array.isArray(payload && payload.selfAssignments) ? payload.selfAssignments : [];
+      const stationOptions = Array.isArray(payload && payload.stationOptions) ? payload.stationOptions : [];
+      const stationStaffCandidates = Array.isArray(payload && payload.stationStaffCandidates) ? payload.stationStaffCandidates : [];
+
+      return {
+        viewer: {
+          email: String(viewer.email || '').trim(),
+          name: String(viewer.name || '').trim(),
+          isStationManager: Boolean(viewer.isStationManager),
+          isStationStaff: Boolean(viewer.isStationStaff),
+          canEditStationAssignments: Boolean(viewer.canEditStationAssignments)
+        },
+        managedStations: managedStations.map((station) => ({
+          code: String(station.code || '').trim(),
+          name: String(station.name || '').trim(),
+          managerEmail: String(station.managerEmail || '').trim(),
+          managerName: String(station.managerName || '').trim(),
+          memberCount: Number(station.memberCount || 0),
+          members: normalizeStationEditorRows(station.members)
+        })),
+        selfAssignments: normalizeStationEditorRows(selfAssignments),
+        stationOptions: stationOptions.map((station) => ({
+          code: String(station.code || '').trim(),
+          name: String(station.name || '').trim(),
+          managerEmail: String(station.managerEmail || '').trim(),
+          managerName: String(station.managerName || '').trim()
+        })),
+        stationStaffCandidates: stationStaffCandidates.map((item) => ({
+          email: String(item.email || '').trim(),
+          name: String(item.name || '').trim(),
+          label: String(item.label || '').trim(),
+          currentStations: Array.isArray(item.currentStations) ? item.currentStations.map((value) => String(value || '').trim()) : []
+        }))
+      };
+    }
+
+    function normalizeStationEditorRows(rows) {
+      return (Array.isArray(rows) ? rows : []).map((item) => ({
+        rowIndex: Number(item && item.rowIndex || 0),
+        tempId: String(item && item.tempId || '').trim(),
+        email: String(item && item.email || '').trim(),
+        name: String(item && item.name || '').trim(),
+        stationCode: String(item && (item.stationCode || item.orgCode) || '').trim(),
+        stationName: String(item && (item.stationName || item.orgName) || '').trim(),
+        title: String(item && item.title || '').trim(),
+        managerEmail: String(item && item.managerEmail || '').trim(),
+        managerName: String(item && item.managerName || '').trim()
+      }));
+    }
+
+    function cloneStationEditorData(data) {
+      return JSON.parse(JSON.stringify(data));
+    }
+
+    function getStationOptionByCode(stationCode) {
+      const draft = stationEditorState.draftData;
+      const options = draft && Array.isArray(draft.stationOptions) ? draft.stationOptions : [];
+      return options.find((item) => item.code === stationCode) || null;
+    }
+
+    function getStationStaffCandidateByEmail(email) {
+      const draft = stationEditorState.draftData;
+      const candidates = draft && Array.isArray(draft.stationStaffCandidates) ? draft.stationStaffCandidates : [];
+      return candidates.find((item) => item.email === email) || null;
+    }
+
+    function buildEditorRowKey(item) {
+      if (item && item.rowIndex) return `row-${item.rowIndex}`;
+      return `temp-${item && item.tempId ? item.tempId : ''}`;
+    }
+
+    function flattenEditorRows(data) {
+      const rowsByKey = new Map();
+      if (!data) return [];
+
+      (Array.isArray(data.selfAssignments) ? data.selfAssignments : []).forEach((item) => {
+        rowsByKey.set(buildEditorRowKey(item), { ...item });
+      });
+
+      (Array.isArray(data.managedStations) ? data.managedStations : []).forEach((station) => {
+        (Array.isArray(station.members) ? station.members : []).forEach((item) => {
+          const key = buildEditorRowKey(item);
+          if (rowsByKey.has(key)) return;
+          rowsByKey.set(key, { ...item });
+        });
+      });
+
+      return Array.from(rowsByKey.values());
+    }
+
+    function buildStationEditorChanges(baseData = stationEditorState.baseData, draftData = stationEditorState.draftData) {
+      const baseRows = flattenEditorRows(baseData);
+      const draftRows = flattenEditorRows(draftData);
+      const baseByRowIndex = new Map(baseRows.map((item) => [item.rowIndex, item]));
+      const draftByRowIndex = new Map(draftRows.filter((item) => item.rowIndex).map((item) => [item.rowIndex, item]));
+      const changes = [];
+
+      draftRows.forEach((item) => {
+        if (!item.rowIndex) {
+          changes.push({
+            action: 'add',
+            stationCode: item.stationCode,
+            targetEmail: item.email
+          });
+        }
+      });
+
+      baseRows.forEach((item) => {
+        const draftItem = draftByRowIndex.get(item.rowIndex);
+        if (!draftItem) {
+          changes.push({
+            action: 'delete',
+            rowIndex: item.rowIndex
+          });
+          return;
+        }
+
+        if (draftItem.stationCode !== item.stationCode) {
+          changes.push({
+            action: 'move',
+            rowIndex: item.rowIndex,
+            stationCode: draftItem.stationCode
+          });
+        }
+      });
+
+      return changes;
+    }
+
+    function hasStationEditorDirtyChanges() {
+      return buildStationEditorChanges().length > 0;
+    }
+
+    function ensureDraftData() {
+      if (!stationEditorState.draftData) {
+        stationEditorState.draftData = {
+          viewer: { email: currentUserEmail || '' },
+          managedStations: [],
+          selfAssignments: [],
+          stationOptions: [],
+          stationStaffCandidates: []
+        };
+      }
+      return stationEditorState.draftData;
+    }
+
+    function addManagerAssignment(stationCode) {
+      const targetEmail = stationEditorState.managerSelections[stationCode];
+      if (!targetEmail) {
+        window.alert('請先選擇要加入該駐站的收案人員。');
+        return;
+      }
+
+      const draft = ensureDraftData();
+      const station = draft.managedStations.find((item) => item.code === stationCode);
+      const stationInfo = getStationOptionByCode(stationCode);
+      const candidate = getStationStaffCandidateByEmail(targetEmail);
+      if (!station || !stationInfo || !candidate) return;
+
+      const alreadyExists = flattenEditorRows(draft).some((item) => item.email === targetEmail && item.stationCode === stationCode);
+      if (alreadyExists) {
+        window.alert('這位收案人員已經在該駐站。');
+        return;
+      }
+
+      const tempId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+      const row = {
+        rowIndex: 0,
+        tempId,
+        email: candidate.email,
+        name: candidate.name,
+        stationCode: stationInfo.code,
+        stationName: stationInfo.name,
+        title: '收案人員',
+        managerEmail: stationInfo.managerEmail,
+        managerName: stationInfo.managerName
+      };
+
+      station.members.push(row);
+      station.memberCount = station.members.length;
+      if (candidate.email === draft.viewer.email) {
+        draft.selfAssignments.push({ ...row });
+      }
+      stationEditorState.managerSelections[stationCode] = '';
+      renderStationEditor();
+    }
+
+    function addSelfAssignment() {
+      const stationCode = stationEditorState.selfNewStationCode;
+      if (!stationCode) {
+        window.alert('請先選擇要新增的駐站。');
+        return;
+      }
+
+      const draft = ensureDraftData();
+      const stationInfo = getStationOptionByCode(stationCode);
+      if (!stationInfo) return;
+
+      const alreadyExists = flattenEditorRows(draft).some((item) => item.email === draft.viewer.email && item.stationCode === stationCode);
+      if (alreadyExists) {
+        window.alert('您已經配置在這個駐站。');
+        return;
+      }
+
+      const tempId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+      const row = {
+        rowIndex: 0,
+        tempId,
+        email: draft.viewer.email,
+        name: currentUserProfile && currentUserProfile.name ? currentUserProfile.name : '',
+        stationCode: stationInfo.code,
+        stationName: stationInfo.name,
+        title: '收案人員',
+        managerEmail: stationInfo.managerEmail,
+        managerName: stationInfo.managerName
+      };
+
+      draft.selfAssignments.push(row);
+      stationEditorState.selfNewStationCode = '';
+      renderStationEditor();
+    }
+
+    function moveSelfAssignment(rowKey, stationCode) {
+      const draft = ensureDraftData();
+      const target = draft.selfAssignments.find((item) => buildEditorRowKey(item) === rowKey);
+      const stationInfo = getStationOptionByCode(stationCode);
+      if (!target || !stationInfo) return;
+
+      const duplicate = draft.selfAssignments.some((item) => buildEditorRowKey(item) !== rowKey && item.email === target.email && item.stationCode === stationCode);
+      if (duplicate) {
+        window.alert('同一個人不可重複配置到同一駐站。');
+        return;
+      }
+
+      target.stationCode = stationInfo.code;
+      target.stationName = stationInfo.name;
+      target.managerEmail = stationInfo.managerEmail;
+      target.managerName = stationInfo.managerName;
+
+      draft.managedStations.forEach((station) => {
+        station.members.forEach((member) => {
+          if (buildEditorRowKey(member) !== rowKey) return;
+          member.stationCode = target.stationCode;
+          member.stationName = target.stationName;
+          member.managerEmail = target.managerEmail;
+          member.managerName = target.managerName;
+        });
+      });
+
+      renderStationEditor();
+    }
+
+    function deleteEditorAssignment(rowKey) {
+      const draft = ensureDraftData();
+      draft.selfAssignments = draft.selfAssignments.filter((item) => buildEditorRowKey(item) !== rowKey);
+      draft.managedStations.forEach((station) => {
+        station.members = station.members.filter((item) => buildEditorRowKey(item) !== rowKey);
+        station.memberCount = station.members.length;
+      });
+      renderStationEditor();
+    }
+
+    async function saveStationEditorChanges() {
+      if (stationEditorState.isSaving) return;
+      const changes = buildStationEditorChanges();
+      if (changes.length === 0) {
+        closeStationEditor();
+        return;
+      }
+
+      stationEditorState.isSaving = true;
+      stationEditorState.message = '';
+      renderStationEditor();
+
+      try {
+        const response = await callServer('saveStationAssignmentChanges', { changes });
+        if (!response || !response.success) {
+          throw new Error(response && response.message ? response.message : '儲存失敗。');
+        }
+        const normalized = normalizeStationEditorData(response);
+        stationEditorState.baseData = normalized;
+        stationEditorState.draftData = cloneStationEditorData(normalized);
+        stationEditorState.managerSelections = {};
+        stationEditorState.selfNewStationCode = '';
+        stationEditorState.message = response.message || '駐站收案配置已更新。';
+        await refreshUserProfileCard();
+      } catch (error) {
+        stationEditorState.message = error && error.message ? error.message : '儲存失敗。';
+      } finally {
+        stationEditorState.isSaving = false;
+        renderStationEditor();
+      }
+    }
+
+    function renderStationEditor() {
+      const subtitleEl = document.getElementById('station-editor-subtitle');
+      const tabsEl = document.getElementById('station-editor-tabs');
+      const bodyEl = document.getElementById('station-editor-body');
+      const statusEl = document.getElementById('station-editor-status');
+      const saveBtn = document.getElementById('station-editor-save-btn');
+      const hasChanges = hasStationEditorDirtyChanges();
+
+      if (stationEditorState.isLoading) {
+        subtitleEl.textContent = '讀取目前可編輯的駐站收案配置。';
+        tabsEl.classList.add('hidden');
+        bodyEl.innerHTML = '<div class="editor-loading">讀取資料中，請稍候...</div>';
+        statusEl.textContent = '讀取中...';
+        saveBtn.disabled = true;
+        return;
+      }
+
+      if (!stationEditorState.draftData) {
+        subtitleEl.textContent = '目前沒有可編輯的資料。';
+        tabsEl.classList.add('hidden');
+        bodyEl.innerHTML = `<div class="editor-empty">${escapeHtml(stationEditorState.message || '目前沒有可編輯的駐站收案配置。')}</div>`;
+        statusEl.textContent = stationEditorState.message || '沒有可編輯資料。';
+        saveBtn.disabled = true;
+        return;
+      }
+
+      const draft = stationEditorState.draftData;
+      subtitleEl.textContent = '可調整駐站管理員名下的收案人員，或修改自己負責的駐站。';
+      saveBtn.disabled = stationEditorState.isSaving || !hasChanges;
+
+      const tabs = [];
+      if (draft.viewer.isStationManager) tabs.push({ key: 'managed', label: '我管理的駐站' });
+      if (draft.viewer.isStationStaff) tabs.push({ key: 'self', label: '我的收案駐站' });
+      if (!tabs.some((item) => item.key === stationEditorState.activeTab)) {
+        stationEditorState.activeTab = tabs[0] ? tabs[0].key : 'managed';
+      }
+
+      if (tabs.length > 1) {
+        tabsEl.classList.remove('hidden');
+        tabsEl.innerHTML = tabs.map((item) => `
+          <button type="button" class="editor-tab ${item.key === stationEditorState.activeTab ? 'is-active' : ''}" data-editor-tab="${item.key}">
+            ${escapeHtml(item.label)}
+          </button>
+        `).join('');
+        tabsEl.querySelectorAll('[data-editor-tab]').forEach((button) => {
+          button.addEventListener('click', () => {
+            stationEditorState.activeTab = button.getAttribute('data-editor-tab');
+            renderStationEditor();
+          });
+        });
+      } else {
+        tabsEl.classList.add('hidden');
+        tabsEl.innerHTML = '';
+      }
+
+      bodyEl.innerHTML = '';
+      if (stationEditorState.activeTab === 'managed') {
+        renderManagedStationsView(bodyEl, draft);
+      } else {
+        renderSelfAssignmentsView(bodyEl, draft);
+      }
+
+      const statusParts = [];
+      if (hasChanges) statusParts.push(`待儲存異動 ${buildStationEditorChanges().length} 筆`);
+      if (stationEditorState.isSaving) statusParts.push('儲存中...');
+      if (stationEditorState.message) statusParts.push(stationEditorState.message);
+      statusEl.textContent = statusParts.join('｜') || '尚未修改。';
+    }
+
+    function renderManagedStationsView(container, draft) {
+      if (!draft.managedStations.length) {
+        container.innerHTML = '<div class="editor-empty">目前沒有您管理的駐站。</div>';
+        return;
+      }
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'editor-stack';
+
+      draft.managedStations.forEach((station) => {
+        const card = document.createElement('section');
+        card.className = 'station-card';
+
+        const memberRows = station.members.map((member) => {
+          const rowKey = buildEditorRowKey(member);
+          return `
+            <div class="member-row">
+              <div class="member-row-top">
+                <div class="member-main">
+                  <div class="member-name">${escapeHtml(member.name || member.email)}</div>
+                  <div class="member-meta">${escapeHtml([member.email, member.title, member.managerName].filter(Boolean).join('｜'))}</div>
+                </div>
+                <div class="member-actions">
+                  <button type="button" class="mini-btn mini-btn-danger" data-delete-row="${escapeHtml(rowKey)}">移除</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        const optionsHtml = draft.stationStaffCandidates.map((candidate) => `
+          <option value="${escapeHtml(candidate.email)}">${escapeHtml(candidate.label)}${candidate.currentStations.length ? ` (${escapeHtml(candidate.currentStations.join('、'))})` : ''}</option>
+        `).join('');
+
+        card.innerHTML = `
+          <div class="station-card-header">
+            <div>
+              <div class="station-card-title">${escapeHtml(station.name)} <span class="station-card-meta">(${escapeHtml(station.code)})</span></div>
+              <div class="station-card-meta">駐站管理員：${escapeHtml(station.managerName || station.managerEmail || '未設定')}｜現有收案人員 ${station.members.length} 位</div>
+            </div>
+          </div>
+          <div class="member-list">
+            ${memberRows || '<div class="editor-empty">目前尚無收案人員。</div>'}
+          </div>
+          <div class="add-row">
+            <select class="inline-select" data-manager-select="${escapeHtml(station.code)}">
+              <option value="">選擇既有站務人員加入此駐站</option>
+              ${optionsHtml}
+            </select>
+            <button type="button" class="mini-btn" data-manager-add="${escapeHtml(station.code)}">新增收案人員</button>
+          </div>
+        `;
+        wrapper.appendChild(card);
+      });
+
+      container.appendChild(wrapper);
+
+      container.querySelectorAll('[data-manager-select]').forEach((select) => {
+        const stationCode = select.getAttribute('data-manager-select');
+        select.value = stationEditorState.managerSelections[stationCode] || '';
+        select.addEventListener('change', () => {
+          stationEditorState.managerSelections[stationCode] = select.value;
+        });
+      });
+      container.querySelectorAll('[data-manager-add]').forEach((button) => {
+        button.addEventListener('click', () => addManagerAssignment(button.getAttribute('data-manager-add')));
+      });
+      container.querySelectorAll('[data-delete-row]').forEach((button) => {
+        button.addEventListener('click', () => deleteEditorAssignment(button.getAttribute('data-delete-row')));
+      });
+    }
+
+    function renderSelfAssignmentsView(container, draft) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'editor-stack';
+
+      const card = document.createElement('section');
+      card.className = 'self-card';
+
+      const rowsHtml = draft.selfAssignments.map((item) => {
+        const rowKey = buildEditorRowKey(item);
+        const optionsHtml = draft.stationOptions.map((station) => `
+          <option value="${escapeHtml(station.code)}" ${station.code === item.stationCode ? 'selected' : ''}>${escapeHtml(station.name)} (${escapeHtml(station.code)})</option>
+        `).join('');
+
+        return `
+          <div class="self-row">
+            <div class="self-row-top">
+              <div class="member-main">
+                <div class="member-name">${escapeHtml(item.stationName || item.stationCode)}</div>
+                <div class="member-meta">${escapeHtml([item.title, item.managerName || item.managerEmail].filter(Boolean).join('｜'))}</div>
+              </div>
+              <button type="button" class="mini-btn mini-btn-danger" data-delete-row="${escapeHtml(rowKey)}">刪除</button>
+            </div>
+            <select class="inline-select" data-self-move="${escapeHtml(rowKey)}">
+              ${optionsHtml}
+            </select>
+          </div>
+        `;
+      }).join('');
+
+      const stationOptionsHtml = draft.stationOptions.map((station) => `
+        <option value="${escapeHtml(station.code)}">${escapeHtml(station.name)} (${escapeHtml(station.code)})</option>
+      `).join('');
+
+      card.innerHTML = `
+        <div class="self-card-header">
+          <div>
+            <div class="self-card-title">我的收案駐站</div>
+            <div class="self-card-meta">可更換自己負責的駐站，也可新增或刪除自己的駐站配置。</div>
+          </div>
+        </div>
+        <div class="member-list">
+          ${rowsHtml || '<div class="editor-empty">目前沒有您的駐站收案配置。</div>'}
+        </div>
+        <div class="add-row">
+          <select id="self-new-station-select" class="inline-select">
+            <option value="">選擇要新增的駐站</option>
+            ${stationOptionsHtml}
+          </select>
+          <button type="button" id="self-add-station-btn" class="mini-btn">新增我的駐站</button>
+        </div>
+      `;
+
+      wrapper.appendChild(card);
+      container.appendChild(wrapper);
+
+      const newStationSelect = container.querySelector('#self-new-station-select');
+      newStationSelect.value = stationEditorState.selfNewStationCode || '';
+      newStationSelect.addEventListener('change', () => {
+        stationEditorState.selfNewStationCode = newStationSelect.value;
+      });
+
+      const addBtn = container.querySelector('#self-add-station-btn');
+      addBtn.addEventListener('click', addSelfAssignment);
+
+      container.querySelectorAll('[data-self-move]').forEach((select) => {
+        select.addEventListener('change', () => {
+          moveSelfAssignment(select.getAttribute('data-self-move'), select.value);
+        });
+      });
+      container.querySelectorAll('[data-delete-row]').forEach((button) => {
+        button.addEventListener('click', () => deleteEditorAssignment(button.getAttribute('data-delete-row')));
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function formatTime(seconds) {

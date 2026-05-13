@@ -15,6 +15,13 @@ const QUIZ_CONFIG = {
   cacheSeconds: 6 * 60 * 60
 };
 
+const STATION_EDITOR_CONFIG = {
+  personnelSheetName: '人員主檔',
+  orgSheetName: '組織架構樹',
+  assignmentSheetName: '人員職務配置',
+  stationCodePrefix: 'GRP-CO-'
+};
+
 const SHEET_HEADERS = {
   題庫: ['題目ID', '是否啟用', '年度', '主題', '題型', '題目內容', '選項A', '選項B', '選項C', '選項D', '選項E', '正確答案', '答案說明', '來源標註', '備註'],
   訓練紀錄: ['時間戳記', '姓名', '使用者信箱', '課程名稱', '測驗分數', '測驗結果', '測驗批次ID', '題目數', '及格門檻'],
@@ -46,15 +53,28 @@ function getCurrentUserProfile() {
     const email = normalizeEmail_(fallbackEmail);
     const masterSS = getMasterSpreadsheet_();
     const personnelSheet = getRequiredSheet_(masterSS, '人員主檔');
+    const orgSheet = getRequiredSheet_(masterSS, STATION_EDITOR_CONFIG.orgSheetName);
     const assignmentSheet = getRequiredSheet_(masterSS, '人員職務配置');
     const name = findPersonnelNameByEmail_(personnelSheet, email);
     const assignments = buildUserAssignments_(assignmentSheet, email);
+    const allAssignments = readAssignmentsFromSheet_(assignmentSheet);
+    const stationNodes = readStationNodesFromSheet_(orgSheet);
+    const stationManagerEmails = new Set(
+      stationNodes
+        .map((item) => normalizeEmail_(item.managerEmail))
+        .filter(Boolean)
+    );
+    const isStationManager = stationManagerEmails.has(email);
+    const isStationStaff = allAssignments.some((item) => normalizeEmail_(item.email) === email && isStationOrgCode_(item.orgCode));
 
     return {
       success: true,
       email,
       name,
-      assignments
+      assignments,
+      isStationManager,
+      isStationStaff,
+      canEditStationAssignments: isStationManager || isStationStaff
     };
   } catch (error) {
     console.error('讀取首頁人員資料失敗:', error);
@@ -63,8 +83,79 @@ function getCurrentUserProfile() {
       email: fallbackEmail || '',
       name: '',
       assignments: [],
+      isStationManager: false,
+      isStationStaff: false,
+      canEditStationAssignments: false,
       message: error && error.message ? error.message : '無法讀取人員資料'
     };
+  }
+}
+
+function getStationAssignmentEditorData() {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+
+  try {
+    const context = buildStationEditorContext_(viewerEmail);
+    if (!context.viewer.canEditStationAssignments) {
+      throw new Error('您沒有可修改的駐站收案配置。');
+    }
+
+    return {
+      success: true,
+      ...toStationEditorPayload_(context)
+    };
+  } catch (error) {
+    console.error('讀取駐站收案配置資料失敗:', error);
+    return {
+      success: false,
+      viewer: {
+        email: viewerEmail,
+        canEditStationAssignments: false
+      },
+      managedStations: [],
+      selfAssignments: [],
+      stationOptions: [],
+      stationStaffCandidates: [],
+      message: error && error.message ? error.message : '無法讀取駐站收案配置。'
+    };
+  }
+}
+
+function saveStationAssignmentChanges(payload) {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+  const lock = LockService.getScriptLock();
+  let hasLock = false;
+
+  try {
+    lock.waitLock(10000);
+    hasLock = true;
+
+    const context = buildStationEditorContext_(viewerEmail);
+    if (!context.viewer.canEditStationAssignments) {
+      throw new Error('您沒有修改駐站收案配置的權限。');
+    }
+
+    const changes = normalizeStationEditorChanges_(payload);
+    applyStationEditorChanges_(context, changes);
+
+    const refreshedContext = buildStationEditorContext_(viewerEmail);
+    return {
+      success: true,
+      message: '駐站收案配置已更新。',
+      ...toStationEditorPayload_(refreshedContext)
+    };
+  } catch (error) {
+    console.error('儲存駐站收案配置失敗:', error);
+    return {
+      success: false,
+      viewer: {
+        email: viewerEmail,
+        canEditStationAssignments: false
+      },
+      message: error && error.message ? error.message : '無法儲存駐站收案配置。'
+    };
+  } finally {
+    if (hasLock) lock.releaseLock();
   }
 }
 
@@ -148,6 +239,413 @@ function buildUserAssignments_(sheet, email) {
       title: String(assignment.title || '').trim()
     }))
     .sort((a, b) => getAssignmentSortOrder_(a.type) - getAssignmentSortOrder_(b.type));
+}
+
+function buildStationEditorContext_(viewerEmail) {
+  const normalizedViewerEmail = normalizeEmail_(viewerEmail);
+  if (!normalizedViewerEmail) {
+    throw new Error('無法辨識目前登入帳號。');
+  }
+
+  const masterSS = getMasterSpreadsheet_();
+  const personnelSheet = getRequiredSheet_(masterSS, STATION_EDITOR_CONFIG.personnelSheetName);
+  const orgSheet = getRequiredSheet_(masterSS, STATION_EDITOR_CONFIG.orgSheetName);
+  const assignmentSheet = getRequiredSheet_(masterSS, STATION_EDITOR_CONFIG.assignmentSheetName);
+
+  const personnelRecords = readPersonnelRecords_(personnelSheet);
+  const personnelByEmail = buildPersonnelMap_(personnelRecords);
+  const stationNodes = readStationNodesFromSheet_(orgSheet);
+  const stationByCode = new Map(stationNodes.map((item) => [normalizeOrgCode_(item.code), item]));
+  const allAssignments = readAssignmentsFromSheet_(assignmentSheet);
+  const stationAssignments = allAssignments.filter((item) => isStationOrgCode_(item.orgCode));
+
+  const managedStations = stationNodes
+    .filter((station) => normalizeEmail_(station.managerEmail) === normalizedViewerEmail)
+    .map((station) => buildManagedStationCard_(station, stationAssignments, personnelByEmail));
+
+  const selfAssignments = stationAssignments
+    .filter((item) => normalizeEmail_(item.email) === normalizedViewerEmail)
+    .map((item) => toStationAssignmentItem_(item, stationByCode.get(normalizeOrgCode_(item.orgCode))));
+
+  const isStationManager = managedStations.length > 0;
+  const isStationStaff = selfAssignments.length > 0;
+  const canEditStationAssignments = isStationManager || isStationStaff;
+  const uniqueStationStaffMap = new Map();
+
+  stationAssignments.forEach((item) => {
+    const emailKey = normalizeEmail_(item.email);
+    if (!emailKey || uniqueStationStaffMap.has(emailKey)) return;
+    uniqueStationStaffMap.set(emailKey, {
+      email: emailKey,
+      name: String(item.name || (personnelByEmail.get(emailKey) || {}).name || '').trim(),
+      currentStations: []
+    });
+  });
+
+  stationAssignments.forEach((item) => {
+    const emailKey = normalizeEmail_(item.email);
+    const entry = uniqueStationStaffMap.get(emailKey);
+    if (!entry) return;
+    const stationName = String(item.orgName || (stationByCode.get(normalizeOrgCode_(item.orgCode)) || {}).name || '').trim();
+    if (stationName && entry.currentStations.indexOf(stationName) === -1) {
+      entry.currentStations.push(stationName);
+    }
+  });
+
+  const stationStaffCandidates = Array.from(uniqueStationStaffMap.values())
+    .map((item) => ({
+      email: item.email,
+      name: item.name,
+      label: [item.name, item.email].filter(Boolean).join('｜'),
+      currentStations: item.currentStations.slice().sort((a, b) => a.localeCompare(b, 'zh-Hant'))
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
+
+  const stationOptions = stationNodes
+    .map((station) => ({
+      code: station.code,
+      name: station.name,
+      managerEmail: station.managerEmail,
+      managerName: station.managerName
+    }))
+    .sort((a, b) => String(a.name || a.code).localeCompare(String(b.name || b.code), 'zh-Hant'));
+
+  const viewerRecord = personnelByEmail.get(normalizedViewerEmail) || { email: normalizedViewerEmail, name: '' };
+
+  return {
+    viewer: {
+      email: normalizedViewerEmail,
+      name: String(viewerRecord.name || '').trim(),
+      isStationManager,
+      isStationStaff,
+      canEditStationAssignments
+    },
+    managedStations,
+    selfAssignments: selfAssignments.sort((a, b) => String(a.stationName || a.orgCode).localeCompare(String(b.stationName || b.orgCode), 'zh-Hant')),
+    stationOptions,
+    stationStaffCandidates,
+    personnelByEmail,
+    stationByCode,
+    allAssignments,
+    stationAssignments,
+    assignmentSheet
+  };
+}
+
+function toStationEditorPayload_(context) {
+  return {
+    viewer: context.viewer,
+    managedStations: context.managedStations,
+    selfAssignments: context.selfAssignments,
+    stationOptions: context.stationOptions,
+    stationStaffCandidates: context.stationStaffCandidates
+  };
+}
+
+function readPersonnelRecords_(sheet) {
+  const rows = sheet.getDataRange().getDisplayValues();
+  const records = [];
+
+  for (let i = 1; i < rows.length; i += 1) {
+    const email = normalizeEmail_(rows[i][0]);
+    if (!email) continue;
+    records.push({
+      email,
+      name: String(rows[i][1] || '').trim(),
+      status: String(rows[i][2] || '').trim()
+    });
+  }
+
+  return records;
+}
+
+function buildPersonnelMap_(personnelRecords) {
+  const map = new Map();
+  personnelRecords.forEach((item) => {
+    map.set(normalizeEmail_(item.email), item);
+  });
+  return map;
+}
+
+function readAssignmentsFromSheet_(sheet) {
+  const rows = sheet.getDataRange().getDisplayValues();
+  const assignments = [];
+
+  for (let i = 1; i < rows.length; i += 1) {
+    const email = normalizeEmail_(rows[i][0]);
+    if (!email) continue;
+    assignments.push({
+      rowIndex: i + 1,
+      email,
+      name: String(rows[i][1] || '').trim(),
+      orgCode: String(rows[i][2] || '').trim(),
+      orgName: String(rows[i][3] || '').trim(),
+      title: String(rows[i][4] || '').trim(),
+      managerEmail: normalizeEmail_(rows[i][5]),
+      managerName: String(rows[i][6] || '').trim()
+    });
+  }
+
+  return assignments;
+}
+
+function readStationNodesFromSheet_(sheet) {
+  const rows = sheet.getDataRange().getDisplayValues();
+  const stationNodes = [];
+
+  for (let i = 1; i < rows.length; i += 1) {
+    const code = String(rows[i][2] || '').trim();
+    if (!isStationOrgCode_(code)) continue;
+    stationNodes.push({
+      rowIndex: i + 1,
+      type: String(rows[i][0] || '').trim(),
+      level: Number(rows[i][1] || 0),
+      code,
+      name: String(rows[i][3] || '').trim(),
+      alias: String(rows[i][4] || '').trim(),
+      parentCode: String(rows[i][5] || '').trim(),
+      managerEmail: normalizeEmail_(rows[i][6]),
+      managerName: String(rows[i][7] || '').trim()
+    });
+  }
+
+  return stationNodes;
+}
+
+function buildManagedStationCard_(station, stationAssignments, personnelByEmail) {
+  const members = stationAssignments
+    .filter((item) => normalizeOrgCode_(item.orgCode) === normalizeOrgCode_(station.code))
+    .map((item) => {
+      const person = personnelByEmail.get(normalizeEmail_(item.email)) || {};
+      return toStationAssignmentItem_({
+        ...item,
+        name: item.name || person.name || ''
+      }, station);
+    })
+    .sort((a, b) => String(a.name || a.email).localeCompare(String(b.name || b.email), 'zh-Hant'));
+
+  return {
+    code: station.code,
+    name: station.name,
+    managerEmail: station.managerEmail,
+    managerName: station.managerName,
+    memberCount: members.length,
+    members
+  };
+}
+
+function toStationAssignmentItem_(assignment, station) {
+  return {
+    rowIndex: Number(assignment.rowIndex || 0),
+    email: normalizeEmail_(assignment.email),
+    name: String(assignment.name || '').trim(),
+    orgCode: String(assignment.orgCode || '').trim(),
+    stationCode: String(assignment.orgCode || '').trim(),
+    stationName: String(assignment.orgName || (station && station.name) || '').trim(),
+    title: String(assignment.title || '').trim(),
+    managerEmail: normalizeEmail_(assignment.managerEmail || (station && station.managerEmail)),
+    managerName: String(assignment.managerName || (station && station.managerName) || '').trim()
+  };
+}
+
+function normalizeStationEditorChanges_(payload) {
+  const changes = payload && Array.isArray(payload.changes) ? payload.changes : null;
+  if (!changes || changes.length === 0) {
+    throw new Error('沒有可儲存的駐站異動。');
+  }
+
+  return changes.map((item) => ({
+    action: String(item && item.action || '').trim().toLowerCase(),
+    rowIndex: Number(item && item.rowIndex || 0),
+    stationCode: normalizeOrgCode_(item && item.stationCode),
+    targetEmail: normalizeEmail_(item && item.targetEmail)
+  }));
+}
+
+function applyStationEditorChanges_(context, changes) {
+  const assignmentSheet = context.assignmentSheet;
+  const stationByCode = context.stationByCode;
+  const viewerEmail = normalizeEmail_(context.viewer.email);
+  const managedStationSet = new Set(context.managedStations.map((item) => normalizeOrgCode_(item.code)));
+  const candidateEmailSet = new Set(context.stationStaffCandidates.map((item) => normalizeEmail_(item.email)));
+  const baseAssignments = context.allAssignments.map((item) => ({ ...item }));
+  const rowsByIndex = new Map(baseAssignments.map((item) => [Number(item.rowIndex), item]));
+  const simulator = baseAssignments.map((item) => ({ ...item }));
+  const deletes = new Set();
+  const updates = [];
+  const appends = [];
+  let nextVirtualRowIndex = -1;
+
+  changes.forEach((change) => {
+    validateStationEditorChange_(change);
+
+    if (change.action === 'delete') {
+      const target = getAssignmentByRowIndex_(simulator, change.rowIndex);
+      if (!target) throw new Error(`找不到要刪除的駐站職務列：${change.rowIndex}`);
+      assertCanDeleteStationAssignment_(target, viewerEmail, managedStationSet);
+      removeAssignmentByRowIndex_(simulator, change.rowIndex);
+      deletes.add(change.rowIndex);
+      return;
+    }
+
+    if (change.action === 'move') {
+      const target = getAssignmentByRowIndex_(simulator, change.rowIndex);
+      if (!target) throw new Error(`找不到要移動的駐站職務列：${change.rowIndex}`);
+      const station = stationByCode.get(change.stationCode);
+      if (!station) throw new Error(`找不到目標駐站：${change.stationCode}`);
+      assertCanMoveStationAssignment_(target, station, viewerEmail, managedStationSet);
+      assertNoDuplicateStationAssignment_(simulator, target.email, station.code, change.rowIndex);
+
+      target.orgCode = station.code;
+      target.orgName = station.name;
+      target.managerEmail = normalizeEmail_(station.managerEmail);
+      target.managerName = String(station.managerName || '').trim();
+
+      if (!deletes.has(change.rowIndex)) {
+        updates.push({ ...target });
+      }
+      return;
+    }
+
+    if (change.action === 'add') {
+      const station = stationByCode.get(change.stationCode);
+      if (!station) throw new Error(`找不到目標駐站：${change.stationCode}`);
+      const targetEmail = normalizeEmail_(change.targetEmail || viewerEmail);
+      assertCanAddStationAssignment_(targetEmail, station, viewerEmail, managedStationSet, candidateEmailSet);
+      assertNoDuplicateStationAssignment_(simulator, targetEmail, station.code, 0);
+
+      const template = getStationAssignmentTemplate_(baseAssignments, targetEmail);
+      if (!template) {
+        throw new Error(`找不到 ${targetEmail} 的既有站務職務模板，無法新增。`);
+      }
+
+      const appended = {
+        rowIndex: nextVirtualRowIndex,
+        email: targetEmail,
+        name: String(template.name || '').trim(),
+        orgCode: station.code,
+        orgName: station.name,
+        title: String(template.title || '').trim(),
+        managerEmail: normalizeEmail_(station.managerEmail),
+        managerName: String(station.managerName || '').trim()
+      };
+      nextVirtualRowIndex -= 1;
+      simulator.push(appended);
+      appends.push(appended);
+      return;
+    }
+
+    throw new Error(`不支援的異動類型：${change.action}`);
+  });
+
+  const finalizedUpdates = dedupeUpdatesByRowIndex_(updates).filter((item) => !deletes.has(item.rowIndex));
+  finalizedUpdates.forEach((item) => {
+    const baseRow = rowsByIndex.get(Number(item.rowIndex));
+    if (!baseRow) throw new Error(`找不到要更新的駐站職務列：${item.rowIndex}`);
+    writeAssignmentRow_(assignmentSheet, item.rowIndex, item);
+  });
+
+  if (appends.length > 0) {
+    const rows = appends.map((item) => toAssignmentSheetRowValues_(item));
+    assignmentSheet.getRange(assignmentSheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  }
+
+  Array.from(deletes)
+    .sort((a, b) => b - a)
+    .forEach((rowIndex) => {
+      assignmentSheet.deleteRow(rowIndex);
+    });
+
+  SpreadsheetApp.flush();
+}
+
+function validateStationEditorChange_(change) {
+  if (!change.action) throw new Error('異動缺少 action。');
+  if (['move', 'delete'].includes(change.action) && !change.rowIndex) {
+    throw new Error(`異動 ${change.action} 缺少 rowIndex。`);
+  }
+  if (['move', 'add'].includes(change.action) && !change.stationCode) {
+    throw new Error(`異動 ${change.action} 缺少 stationCode。`);
+  }
+}
+
+function assertCanDeleteStationAssignment_(assignment, viewerEmail, managedStationSet) {
+  const assignmentEmail = normalizeEmail_(assignment.email);
+  const orgCode = normalizeOrgCode_(assignment.orgCode);
+  if (assignmentEmail === viewerEmail) return;
+  if (managedStationSet.has(orgCode)) return;
+  throw new Error('您沒有刪除此駐站收案配置的權限。');
+}
+
+function assertCanMoveStationAssignment_(assignment, targetStation, viewerEmail, managedStationSet) {
+  const assignmentEmail = normalizeEmail_(assignment.email);
+  if (assignmentEmail === viewerEmail) return;
+
+  const currentOrgCode = normalizeOrgCode_(assignment.orgCode);
+  const targetOrgCode = normalizeOrgCode_(targetStation.code);
+  if (managedStationSet.has(currentOrgCode) && managedStationSet.has(targetOrgCode)) return;
+  throw new Error('您沒有搬移此駐站收案配置的權限。');
+}
+
+function assertCanAddStationAssignment_(targetEmail, station, viewerEmail, managedStationSet, candidateEmailSet) {
+  if (!candidateEmailSet.has(targetEmail)) {
+    throw new Error('只能新增既有站務人員到駐站。');
+  }
+
+  if (targetEmail === viewerEmail) return;
+  if (managedStationSet.has(normalizeOrgCode_(station.code))) return;
+  throw new Error('您沒有新增此駐站收案配置的權限。');
+}
+
+function assertNoDuplicateStationAssignment_(assignments, email, orgCode, excludedRowIndex) {
+  const duplicateExists = assignments.some((item) => {
+    if (excludedRowIndex && Number(item.rowIndex) === Number(excludedRowIndex)) return false;
+    return normalizeEmail_(item.email) === normalizeEmail_(email)
+      && normalizeOrgCode_(item.orgCode) === normalizeOrgCode_(orgCode);
+  });
+
+  if (duplicateExists) {
+    throw new Error('同一位收案人員不可重複配置到同一個駐站。');
+  }
+}
+
+function getStationAssignmentTemplate_(assignments, email) {
+  return assignments
+    .filter((item) => normalizeEmail_(item.email) === normalizeEmail_(email) && isStationOrgCode_(item.orgCode))
+    .sort((a, b) => Number(a.rowIndex || 0) - Number(b.rowIndex || 0))[0] || null;
+}
+
+function getAssignmentByRowIndex_(assignments, rowIndex) {
+  return assignments.find((item) => Number(item.rowIndex) === Number(rowIndex)) || null;
+}
+
+function removeAssignmentByRowIndex_(assignments, rowIndex) {
+  const index = assignments.findIndex((item) => Number(item.rowIndex) === Number(rowIndex));
+  if (index !== -1) assignments.splice(index, 1);
+}
+
+function dedupeUpdatesByRowIndex_(updates) {
+  const byRowIndex = new Map();
+  updates.forEach((item) => {
+    byRowIndex.set(Number(item.rowIndex), item);
+  });
+  return Array.from(byRowIndex.values());
+}
+
+function writeAssignmentRow_(sheet, rowIndex, assignment) {
+  sheet.getRange(rowIndex, 1, 1, 7).setValues([toAssignmentSheetRowValues_(assignment)]);
+}
+
+function toAssignmentSheetRowValues_(assignment) {
+  return [
+    normalizeEmail_(assignment.email),
+    String(assignment.name || '').trim(),
+    String(assignment.orgCode || '').trim(),
+    String(assignment.orgName || '').trim(),
+    String(assignment.title || '').trim(),
+    normalizeEmail_(assignment.managerEmail),
+    String(assignment.managerName || '').trim()
+  ];
 }
 
 function buildAssignmentTypeMap_(assignments) {
@@ -311,6 +809,14 @@ function getAssignmentSortOrder_(type) {
 
 function normalizeEmail_(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeOrgCode_(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function isStationOrgCode_(orgCode) {
+  return normalizeOrgCode_(orgCode).startsWith(STATION_EDITOR_CONFIG.stationCodePrefix);
 }
 
 function getQuizQuestions() {
