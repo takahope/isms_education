@@ -559,29 +559,60 @@
       flex-wrap: wrap;
     }
 
-    .view-toggle {
+    .manager-scope-toggle {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
       margin-bottom: 16px;
     }
 
-    .view-toggle-btn {
-      border: 1px solid var(--color-border);
-      background: #ffffff;
-      color: var(--color-text-muted);
-      border-radius: 999px;
-      padding: 10px 14px;
+    .manager-scope-card {
+      flex: 1 1 220px;
+      display: grid;
+      gap: 4px;
+      text-align: left;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      color: var(--color-text-main);
+      border-radius: 16px;
+      padding: 14px 16px;
       font: inherit;
-      font-size: 0.875rem;
-      font-weight: 700;
       cursor: pointer;
+      transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
     }
 
-    .view-toggle-btn.is-active {
-      background: #e0f2fe;
-      color: #0369a1;
-      border-color: #7dd3fc;
+    .manager-scope-card:hover {
+      transform: translateY(-1px);
+      border-color: rgba(56, 189, 248, 0.45);
+      box-shadow: 0 10px 22px rgba(14, 116, 144, 0.08);
+    }
+
+    .manager-scope-card.is-active {
+      background: linear-gradient(180deg, #ecfeff 0%, #e0f2fe 100%);
+      border-color: #38bdf8;
+      box-shadow: 0 12px 28px rgba(14, 116, 144, 0.12);
+    }
+
+    .manager-scope-title {
+      font-size: 0.9rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .manager-scope-card.is-active .manager-scope-title {
+      color: #075985;
+    }
+
+    .manager-scope-desc {
+      font-size: 0.8rem;
+      line-height: 1.4;
+      color: var(--color-text-muted);
+    }
+
+    .manager-transfer-hint {
+      margin-top: 12px;
+      font-size: 0.8125rem;
+      color: var(--color-text-muted);
     }
 
     .warning-text {
@@ -1236,7 +1267,6 @@
         baseData: null,
         draftData: null,
         managerSelections: {},
-        stationManagerSelections: {},
         selfNewStationCode: '',
         message: ''
       };
@@ -1283,7 +1313,6 @@
         stationEditorState.baseData = normalized;
         stationEditorState.draftData = cloneStationEditorData(normalized);
         stationEditorState.managerSelections = {};
-        stationEditorState.stationManagerSelections = {};
         stationEditorState.selfNewStationCode = '';
         stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
         stationEditorState.managerViewMode = 'mine';
@@ -1604,19 +1633,15 @@
       return stationEditorState.draftData;
     }
 
-    function reassignStationManager(stationCode) {
-      const targetEmail = stationEditorState.stationManagerSelections[stationCode];
-      if (!targetEmail) {
-        window.alert('請先選擇要接管該駐站的駐站管理員。');
-        return;
-      }
-
+    function reassignStationManager(stationCode, targetEmail) {
+      if (!targetEmail) return;
       const draft = ensureDraftData();
       const candidate = getStationManagerCandidateByEmail(targetEmail);
       if (!candidate) return;
 
       const station = draft.allStations.find((item) => item.code === stationCode);
       if (!station) return;
+      if (station.managerEmail === candidate.email) return;
 
       station.managerEmail = candidate.email;
       station.managerName = candidate.name;
@@ -1636,7 +1661,6 @@
       });
 
       syncManagedStationsFromAllStations(draft);
-      stationEditorState.stationManagerSelections[stationCode] = '';
       renderStationEditor();
     }
 
@@ -1765,7 +1789,6 @@
         stationEditorState.baseData = normalized;
         stationEditorState.draftData = cloneStationEditorData(normalized);
         stationEditorState.managerSelections = {};
-        stationEditorState.stationManagerSelections = {};
         stationEditorState.selfNewStationCode = '';
         stationEditorState.message = response.message || '駐站收案配置已更新。';
         await refreshUserProfileCard();
@@ -1932,10 +1955,16 @@
       const stations = (viewMode === 'all' ? draft.allStations : draft.managedStations).slice();
 
       const toggle = document.createElement('div');
-      toggle.className = 'view-toggle';
+      toggle.className = 'manager-scope-toggle';
       toggle.innerHTML = `
-        <button type="button" class="view-toggle-btn ${viewMode === 'mine' ? 'is-active' : ''}" data-manager-view="mine">只看我的管理駐站</button>
-        <button type="button" class="view-toggle-btn ${viewMode === 'all' ? 'is-active' : ''}" data-manager-view="all">查看全部駐站管理員的駐站</button>
+        <button type="button" class="manager-scope-card ${viewMode === 'mine' ? 'is-active' : ''}" data-manager-view="mine">
+          <span class="manager-scope-title">只看我的管理駐站</span>
+          <span class="manager-scope-desc">聚焦目前由您管理的駐站，快速調整交接。</span>
+        </button>
+        <button type="button" class="manager-scope-card ${viewMode === 'all' ? 'is-active' : ''}" data-manager-view="all">
+          <span class="manager-scope-title">查看全部管理駐站</span>
+          <span class="manager-scope-desc">檢視所有駐站的管理員配置，直接改派任一駐站。</span>
+        </button>
       `;
       container.appendChild(toggle);
 
@@ -1945,6 +1974,11 @@
           renderStationEditor();
         });
       });
+
+      const hint = document.createElement('div');
+      hint.className = 'manager-transfer-hint';
+      hint.textContent = '更換下拉選單後，系統會立即列入待儲存異動；按下下方「儲存變更」才會正式寫回。';
+      container.appendChild(hint);
 
       if (!stations.length) {
         const empty = document.createElement('div');
@@ -1977,10 +2011,8 @@
           </div>
           <div class="add-row">
             <select class="inline-select" data-station-manager-select="${escapeHtml(station.code)}">
-              <option value="">選擇要接管該駐站的駐站管理員</option>
               ${optionsHtml}
             </select>
-            <button type="button" class="mini-btn" data-station-manager-apply="${escapeHtml(station.code)}">改派管理員</button>
           </div>
         `;
         wrapper.appendChild(card);
@@ -1990,14 +2022,11 @@
 
       container.querySelectorAll('[data-station-manager-select]').forEach((select) => {
         const stationCode = select.getAttribute('data-station-manager-select');
-        select.value = stationEditorState.stationManagerSelections[stationCode] || '';
+        const station = stations.find((item) => item.code === stationCode);
+        select.value = station && station.managerEmail ? station.managerEmail : '';
         select.addEventListener('change', () => {
-          stationEditorState.stationManagerSelections[stationCode] = select.value;
+          reassignStationManager(stationCode, select.value);
         });
-      });
-
-      container.querySelectorAll('[data-station-manager-apply]').forEach((button) => {
-        button.addEventListener('click', () => reassignStationManager(button.getAttribute('data-station-manager-apply')));
       });
     }
 
