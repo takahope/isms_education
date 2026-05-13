@@ -305,6 +305,14 @@
       backdrop-filter: blur(4px);
     }
 
+    .station-editor-toast-container {
+      z-index: 2000 !important;
+    }
+
+    .station-editor-toast-popup {
+      z-index: 2001 !important;
+    }
+
     .editor-dialog {
       width: min(960px, 100%);
       max-height: min(88vh, 900px);
@@ -1483,7 +1491,11 @@
         title: config.title,
         showConfirmButton: false,
         timer: Number(config.timer || 2800),
-        timerProgressBar: true
+        timerProgressBar: true,
+        customClass: {
+          container: 'station-editor-toast-container',
+          popup: 'station-editor-toast-popup'
+        }
       });
     }
 
