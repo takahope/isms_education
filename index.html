@@ -318,7 +318,7 @@
 
     .editor-header {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
       gap: 16px;
       padding: 24px 24px 18px;
@@ -326,14 +326,24 @@
       background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
     }
 
+    .editor-heading {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
     .editor-header h3 {
       font-size: 1.25rem;
-      margin-bottom: 6px;
+      margin: 0;
+      white-space: nowrap;
     }
 
     .editor-header p {
       color: var(--color-text-muted);
       font-size: 0.9rem;
+      margin: 0;
     }
 
     .editor-close {
@@ -417,7 +427,7 @@
     .station-card-header,
     .self-card-header {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
       gap: 12px;
       margin-bottom: 14px;
@@ -449,6 +459,13 @@
     .self-card-meta {
       color: var(--color-text-muted);
       font-size: 0.8125rem;
+    }
+
+    .station-card-summary {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
     }
 
     .member-list {
@@ -636,14 +653,16 @@
 
     .manager-scope-card {
       flex: 1 1 220px;
-      display: grid;
-      gap: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
       text-align: left;
       border: 1px solid rgba(148, 163, 184, 0.24);
       background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
       color: var(--color-text-main);
       border-radius: 16px;
-      padding: 14px 16px;
+      padding: 12px 16px;
       font: inherit;
       cursor: pointer;
       transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
@@ -665,6 +684,7 @@
       font-size: 0.9rem;
       font-weight: 800;
       color: #0f172a;
+      white-space: nowrap;
     }
 
     .manager-scope-card.is-active .manager-scope-title {
@@ -679,13 +699,18 @@
       font-size: 0.8rem;
       line-height: 1.4;
       color: var(--color-text-muted);
+      white-space: nowrap;
     }
 
     .station-tools {
       display: grid;
-      grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1fr);
+      grid-template-columns: minmax(0, 1.3fr) minmax(220px, 1fr) minmax(220px, 1fr);
       gap: 12px;
       margin-bottom: 16px;
+    }
+
+    .station-manager-row {
+      margin-bottom: 18px;
     }
 
     .warning-text {
@@ -733,6 +758,17 @@
 
       .station-tools {
         grid-template-columns: 1fr;
+      }
+
+      .editor-heading,
+      .station-card-summary,
+      .manager-scope-card {
+        align-items: flex-start;
+      }
+
+      .manager-scope-title,
+      .manager-scope-desc {
+        white-space: normal;
       }
     }
 
@@ -1155,7 +1191,7 @@
   <div id="station-editor-modal" class="editor-modal hidden" aria-hidden="true">
     <div class="editor-dialog" role="dialog" aria-modal="true" aria-labelledby="station-editor-title">
       <div class="editor-header">
-        <div>
+        <div class="editor-heading">
           <h3 id="station-editor-title">駐站收案配置</h3>
           <p id="station-editor-subtitle">載入中...</p>
         </div>
@@ -1343,6 +1379,8 @@
         managedViewMode: 'all',
         managedSearchKeyword: '',
         managedSelectedStationCode: '',
+        managedManagerFilterEmail: '',
+        managedSearchComposing: false,
         changeListExpanded: false,
         baseData: null,
         draftData: null,
@@ -1398,6 +1436,8 @@
         stationEditorState.managedViewMode = 'all';
         stationEditorState.managedSearchKeyword = '';
         stationEditorState.managedSelectedStationCode = '';
+        stationEditorState.managedManagerFilterEmail = '';
+        stationEditorState.managedSearchComposing = false;
         stationEditorState.changeListExpanded = false;
       } catch (error) {
         stationEditorState.message = error && error.message ? error.message : '無法載入駐站收案配置。';
@@ -1870,9 +1910,10 @@
       return dirtyCodes;
     }
 
-    function renderManagedViewWithFocusRestore(selectionStart, selectionEnd) {
+    function renderManagedViewWithFocusRestore(selectionStart, selectionEnd, options = {}) {
       renderStationEditor();
       requestAnimationFrame(() => {
+        if (options.skipFocus) return;
         const input = document.querySelector('[data-managed-search]');
         if (!input) return;
         input.focus();
@@ -2160,9 +2201,17 @@
     function renderManagedStationsView(container, draft) {
       const viewMode = stationEditorState.managedViewMode === 'all' ? 'all' : 'mine';
       const baseStations = viewMode === 'all' ? draft.allStations : draft.managedStations;
+      const managerFilterEmail = String(stationEditorState.managedManagerFilterEmail || '').trim();
       const searchKeyword = String(stationEditorState.managedSearchKeyword || '').trim().toLowerCase();
       const dirtyStationCodes = buildDirtyStationCodeSet();
-      const stations = baseStations.filter((station) => {
+      const managerFilterOptions = draft.stationManagerCandidates.filter((candidate) =>
+        baseStations.some((station) => station.managerEmail === candidate.email)
+      );
+      const managerFilteredStations = baseStations.filter((station) => {
+        if (!managerFilterEmail) return true;
+        return station.managerEmail === managerFilterEmail;
+      });
+      const stations = managerFilteredStations.filter((station) => {
         if (!searchKeyword) return true;
         const haystacks = [
           station.name,
@@ -2205,6 +2254,12 @@
             placeholder="搜尋駐站名稱、代碼或管理員"
             value="${escapeHtml(stationEditorState.managedSearchKeyword || '')}"
           />
+          <select class="inline-select" data-managed-manager-filter>
+            <option value="">全部駐站管理員</option>
+            ${managerFilterOptions.map((candidate) => `
+              <option value="${escapeHtml(candidate.email)}">${escapeHtml(candidate.label)}</option>
+            `).join('')}
+          </select>
           <select class="inline-select" data-managed-locator>
             <option value="">定位特定駐站</option>
             ${stations.map((station) => `
@@ -2216,11 +2271,15 @@
 
         const searchInput = tools.querySelector('[data-managed-search]');
         if (searchInput) {
-          searchInput.addEventListener('input', () => {
+          searchInput.addEventListener('compositionstart', () => {
+            stationEditorState.managedSearchComposing = true;
+          });
+          searchInput.addEventListener('compositionend', () => {
+            stationEditorState.managedSearchComposing = false;
             stationEditorState.managedSearchKeyword = searchInput.value;
             const selectionStart = searchInput.selectionStart;
             const selectionEnd = searchInput.selectionEnd;
-            const availableStation = baseStations.some((station) => station.code === stationEditorState.managedSelectedStationCode && (
+            const availableStation = managerFilteredStations.some((station) => station.code === stationEditorState.managedSelectedStationCode && (
               !String(stationEditorState.managedSearchKeyword || '').trim()
               || [
                 station.name,
@@ -2231,6 +2290,38 @@
             ));
             if (!availableStation) stationEditorState.managedSelectedStationCode = '';
             renderManagedViewWithFocusRestore(selectionStart, selectionEnd);
+          });
+          searchInput.addEventListener('input', () => {
+            if (stationEditorState.managedSearchComposing) return;
+            stationEditorState.managedSearchKeyword = searchInput.value;
+            const selectionStart = searchInput.selectionStart;
+            const selectionEnd = searchInput.selectionEnd;
+            const availableStation = managerFilteredStations.some((station) => station.code === stationEditorState.managedSelectedStationCode && (
+              !String(stationEditorState.managedSearchKeyword || '').trim()
+              || [
+                station.name,
+                station.code,
+                station.managerName,
+                station.managerEmail
+              ].map((value) => String(value || '').toLowerCase()).some((value) => value.includes(String(stationEditorState.managedSearchKeyword || '').trim().toLowerCase()))
+            ));
+            if (!availableStation) stationEditorState.managedSelectedStationCode = '';
+            renderManagedViewWithFocusRestore(selectionStart, selectionEnd);
+          });
+        }
+
+        const managerFilterSelect = tools.querySelector('[data-managed-manager-filter]');
+        if (managerFilterSelect) {
+          managerFilterSelect.value = stationEditorState.managedManagerFilterEmail || '';
+          managerFilterSelect.addEventListener('change', () => {
+            stationEditorState.managedManagerFilterEmail = managerFilterSelect.value;
+            const availableStation = baseStations.some((station) => {
+              if (station.code !== stationEditorState.managedSelectedStationCode) return false;
+              if (stationEditorState.managedManagerFilterEmail && station.managerEmail !== stationEditorState.managedManagerFilterEmail) return false;
+              return true;
+            });
+            if (!availableStation) stationEditorState.managedSelectedStationCode = '';
+            renderStationEditor();
           });
         }
 
@@ -2298,12 +2389,14 @@
         card.innerHTML = `
           <div class="station-card-header">
             <div>
+              <div class="station-card-summary">
               <div class="station-card-title">${escapeHtml(station.name)} <span class="station-card-meta">(${escapeHtml(station.code)})</span>${isDirty ? '<span class="station-card-badge">待儲存異動</span>' : ''}</div>
               <div class="station-card-meta">駐站管理員：${escapeHtml(station.managerName || station.managerEmail || '未設定')}｜現有收案人員 ${station.members.length} 位</div>
+              </div>
               ${warningHtml}
             </div>
           </div>
-          <div class="add-row">
+          <div class="add-row station-manager-row">
             <select class="inline-select" data-station-manager-select="${escapeHtml(station.code)}">
               ${managerOptionsHtml}
             </select>
