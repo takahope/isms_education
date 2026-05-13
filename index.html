@@ -1170,16 +1170,6 @@
           </div>
           <div id="reviewed-segment-hint" class="progress-hint hidden">目前位於已看過的片段，學習時數不會重複累計。</div>
         </div>
-
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
-          <button
-            type="button"
-            onclick="resetWatchProgress()"
-            style="border: 1px solid var(--color-border); background: white; color: var(--color-text-muted); border-radius: 999px; padding: 6px 12px; font-size: 0.8125rem; cursor: pointer;"
-          >
-            重置觀看進度
-          </button>
-        </div>
         
         <button id="btn-goto-quiz" onclick="proceedToQuiz()" class="btn btn-success hidden">
           前往測驗
@@ -1217,7 +1207,6 @@
         <p id="result-msg" class="result-desc"></p>
         <div class="quiz-actions">
           <button id="retry-quiz-btn" type="button" onclick="retryQuiz()" class="btn btn-secondary hidden">重新測驗</button>
-          <button onclick="location.reload()" class="btn btn-primary">重新開始</button>
         </div>
       </div>
 
@@ -3180,46 +3169,6 @@
       } finally {
         isProgressSyncInFlight = false;
       }
-    }
-
-    function resetWatchProgress() {
-      Swal.fire({
-        title: '重置觀看進度？',
-        text: '這會清除目前儲存的觀看時數，並將影片進度歸零。',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: '確認重置',
-        cancelButtonText: '取消'
-      }).then((result) => {
-        if (!result.isConfirmed) return;
-
-        watchedSecondMarks = new Set();
-        lastPlaybackPosition = 0;
-        progressUpdatedAt = getNowIsoString();
-        lastSyncedAt = '';
-        unsyncedUniqueWatchSeconds = 0;
-        isProgressDirty = true;
-        previousTrackedPosition = null;
-        hasTriggeredThresholdSync = false;
-        setReviewedSegmentHint(false);
-        saveStoredProgress();
-        scheduleProgressSync('reset', { force: true, silent: true });
-        updateProgressUI(0);
-
-        if (player && typeof player.seekTo === 'function') {
-          player.seekTo(0);
-          if (typeof player.pauseVideo === 'function') player.pauseVideo();
-        }
-
-        Swal.fire({
-          toast: true,
-          position: 'top-end',
-          icon: 'success',
-          title: '觀看進度已重置',
-          showConfirmButton: false,
-          timer: 2000
-        });
-      });
     }
 
     function updateProgressUI(currentTime) {
