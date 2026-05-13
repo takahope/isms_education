@@ -3125,6 +3125,10 @@
       clearInterval(checkProgressInterval);
       checkProgressInterval = setInterval(() => {
         if (!player || !player.getCurrentTime) return;
+        if (shouldPauseForAttentionLoss()) {
+          pauseTrainingForFocusLoss('系統偵測到視窗失去焦點。為確保訓練品質，請保持在此畫面觀看。');
+          return;
+        }
 
         const currentTime = player.getCurrentTime();
         flushProgressTracking(currentTime);
@@ -3226,6 +3230,11 @@
       return isManagedPlayerIframe(document.activeElement);
     }
 
+    function shouldPauseForAttentionLoss() {
+      if (!canPauseForFocusLoss()) return false;
+      return !shouldSkipFocusLossPause();
+    }
+
     function pauseTrainingForFocusLoss(message) {
       const now = Date.now();
       if (!canPauseForFocusLoss()) return;
@@ -3294,7 +3303,7 @@
     window.addEventListener('blur', () => {
       clearTimeout(blurCheckTimeout);
       blurCheckTimeout = setTimeout(() => {
-        if (shouldSkipFocusLossPause()) return;
+        if (!shouldPauseForAttentionLoss()) return;
         pauseTrainingForFocusLoss('系統偵測到視窗失去焦點。為確保訓練品質，請保持在此畫面觀看。');
       }, FOCUS_LOSS_GRACE_MS);
     });
