@@ -537,6 +537,24 @@
       font-size: 0.875rem;
     }
 
+    .editor-status-summary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .editor-status-toggle {
+      border: 0;
+      background: transparent;
+      color: #0369a1;
+      padding: 0;
+      font: inherit;
+      font-size: 0.8125rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
     .editor-change-list {
       display: flex;
       flex-direction: column;
@@ -544,6 +562,10 @@
     }
 
     .editor-change-item {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
       font-size: 0.8125rem;
       color: #475569;
       background: #f8fafc;
@@ -551,6 +573,27 @@
       border-radius: 10px;
       padding: 8px 10px;
       line-height: 1.45;
+    }
+
+    .editor-change-text {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .editor-change-remove {
+      border: 0;
+      background: transparent;
+      color: #94a3b8;
+      font: inherit;
+      font-size: 1rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+    }
+
+    .editor-change-remove:hover {
+      color: #e11d48;
     }
 
     .editor-footer-actions {
@@ -1264,6 +1307,7 @@
         isSaving: false,
         activeTab: 'managed',
         managedViewMode: 'mine',
+        changeListExpanded: false,
         baseData: null,
         draftData: null,
         managerSelections: {},
@@ -1316,6 +1360,7 @@
         stationEditorState.selfNewStationCode = '';
         stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
         stationEditorState.managedViewMode = 'mine';
+        stationEditorState.changeListExpanded = false;
       } catch (error) {
         stationEditorState.message = error && error.message ? error.message : '無法載入駐站收案配置。';
       } finally {
@@ -1568,7 +1613,7 @@
       return String(item.stationName || item.name || item.orgName || item.code || '').trim() || '未指定駐站';
     }
 
-    function buildStationEditorChangeDescriptions(baseData = stationEditorState.baseData, draftData = stationEditorState.draftData) {
+    function buildStationEditorChangeEntries(baseData = stationEditorState.baseData, draftData = stationEditorState.draftData) {
       const changes = buildStationEditorChanges(baseData, draftData);
       const baseRows = flattenEditorRows(baseData);
       const draftRows = flattenEditorRows(draftData);
@@ -1579,45 +1624,176 @@
       const managerCandidateByEmail = new Map((Array.isArray(draftData && draftData.stationManagerCandidates) ? draftData.stationManagerCandidates : []).map((item) => [item.email, item]));
 
       return changes.map((change) => {
+        let description = '已調整駐站資料';
+        let key = `${change.action}-${Date.now()}-${Math.random()}`;
+
         if (change.action === 'add') {
           const row = draftRows.find((item) => !item.rowIndex && item.email === change.targetEmail && item.stationCode === change.stationCode);
-          return `${formatStationEditorStationName(row || draftStationByCode.get(change.stationCode))} 新增 收案人員 ${formatStationEditorPersonName(row || { email: change.targetEmail })}`;
+          description = `${formatStationEditorStationName(row || draftStationByCode.get(change.stationCode))} 新增 收案人員 ${formatStationEditorPersonName(row || { email: change.targetEmail })}`;
+          key = `add-${change.stationCode}-${change.targetEmail}`;
+          return { key, change: { ...change }, description };
         }
 
         if (change.action === 'delete') {
           const row = baseRowByIndex.get(change.rowIndex);
-          return `${formatStationEditorStationName(row)} 刪除 收案人員 ${formatStationEditorPersonName(row)}`;
+          description = `${formatStationEditorStationName(row)} 刪除 收案人員 ${formatStationEditorPersonName(row)}`;
+          key = `delete-${change.rowIndex}`;
+          return { key, change: { ...change }, description };
         }
 
         if (change.action === 'move') {
           const baseRow = baseRowByIndex.get(change.rowIndex);
           const draftRow = draftRowByIndex.get(change.rowIndex);
-          return `${formatStationEditorPersonName(draftRow || baseRow)} 從 ${formatStationEditorStationName(baseRow)} 調整至 ${formatStationEditorStationName(draftRow || draftStationByCode.get(change.stationCode))}`;
+          description = `${formatStationEditorPersonName(draftRow || baseRow)} 從 ${formatStationEditorStationName(baseRow)} 調整至 ${formatStationEditorStationName(draftRow || draftStationByCode.get(change.stationCode))}`;
+          key = `move-${change.rowIndex}`;
+          return { key, change: { ...change }, description };
         }
 
         if (change.action === 'reassign_manager') {
           const station = draftStationByCode.get(change.stationCode) || baseStationByCode.get(change.stationCode);
           const candidate = managerCandidateByEmail.get(change.targetManagerEmail) || (station ? { name: station.managerName, email: station.managerEmail } : { email: change.targetManagerEmail });
-          return `${formatStationEditorStationName(station || { code: change.stationCode })} 更改 駐站管理員 ${formatStationEditorPersonName(candidate)}`;
+          description = `${formatStationEditorStationName(station || { code: change.stationCode })} 更改 駐站管理員 ${formatStationEditorPersonName(candidate)}`;
+          key = `reassign-${change.stationCode}`;
+          return { key, change: { ...change }, description };
         }
 
-        return '已調整駐站資料';
+        return { key, change: { ...change }, description };
       });
     }
 
-    function renderStationEditorChangeList(element, descriptions) {
+    function buildStationEditorChangeDescriptions(baseData = stationEditorState.baseData, draftData = stationEditorState.draftData) {
+      return buildStationEditorChangeEntries(baseData, draftData).map((item) => item.description);
+    }
+
+    function getDraftStationByCode(draft, stationCode) {
+      return (draft && Array.isArray(draft.allStations) ? draft.allStations : []).find((item) => item.code === stationCode) || null;
+    }
+
+    function applyDraftStationDetails(row, draft) {
+      if (!row) return null;
+      const station = getDraftStationByCode(draft, row.stationCode);
+      return {
+        ...row,
+        stationName: station ? station.name : row.stationName,
+        managerEmail: station ? station.managerEmail : row.managerEmail,
+        managerName: station ? station.managerName : row.managerName
+      };
+    }
+
+    function upsertSelfAssignmentRow(draft, row) {
+      if (!draft || !row) return;
+      if (row.email !== draft.viewer.email) return;
+      const rowKey = buildEditorRowKey(row);
+      const index = draft.selfAssignments.findIndex((item) => buildEditorRowKey(item) === rowKey);
+      if (index === -1) {
+        draft.selfAssignments.push({ ...row });
+      } else {
+        draft.selfAssignments[index] = { ...row };
+      }
+    }
+
+    function applyStationManagerToDraft(stationCode, managerEmail, managerName, draft) {
+      if (!draft) return;
+      const station = getDraftStationByCode(draft, stationCode);
+      if (!station) return;
+
+      station.managerEmail = managerEmail;
+      station.managerName = managerName;
+      station.warnings = [];
+
+      draft.selfAssignments.forEach((item) => {
+        if (item.stationCode !== stationCode) return;
+        item.managerEmail = managerEmail;
+        item.managerName = managerName;
+      });
+
+      (Array.isArray(draft.allStations) ? draft.allStations : []).forEach((item) => {
+        if (item.code !== stationCode) return;
+        item.members = item.members.map((member) => ({
+          ...member,
+          managerEmail,
+          managerName
+        }));
+        item.memberCount = item.members.length;
+      });
+
+      syncManagedStationsFromAllStations(draft);
+    }
+
+    function revertStationEditorChange(change) {
+      const draft = ensureDraftData();
+      const baseData = stationEditorState.baseData;
+      const baseRows = flattenEditorRows(baseData);
+      const baseRowByIndex = new Map(baseRows.filter((item) => item.rowIndex).map((item) => [item.rowIndex, item]));
+      const baseStationByCode = new Map((Array.isArray(baseData && baseData.allStations) ? baseData.allStations : []).map((item) => [item.code, item]));
+
+      if (change.action === 'add') {
+        const target = flattenEditorRows(draft).find((item) => !item.rowIndex && item.email === change.targetEmail && item.stationCode === change.stationCode);
+        if (!target) return;
+        const rowKey = buildEditorRowKey(target);
+        draft.selfAssignments = draft.selfAssignments.filter((item) => buildEditorRowKey(item) !== rowKey);
+        removeStationMemberRowFromCollections(draft, rowKey);
+        renderStationEditor();
+        return;
+      }
+
+      if (change.action === 'delete') {
+        const baseRow = baseRowByIndex.get(change.rowIndex);
+        if (!baseRow) return;
+        const restoredRow = applyDraftStationDetails({ ...baseRow }, draft);
+        syncStationMemberRowInCollections(draft, restoredRow);
+        upsertSelfAssignmentRow(draft, restoredRow);
+        renderStationEditor();
+        return;
+      }
+
+      if (change.action === 'move') {
+        const baseRow = baseRowByIndex.get(change.rowIndex);
+        const draftRow = flattenEditorRows(draft).find((item) => item.rowIndex === change.rowIndex);
+        if (!baseRow || !draftRow) return;
+        const restoredRow = applyDraftStationDetails({ ...baseRow }, draft);
+        const selfIndex = draft.selfAssignments.findIndex((item) => item.rowIndex === change.rowIndex);
+        if (selfIndex !== -1) {
+          draft.selfAssignments[selfIndex] = { ...restoredRow };
+        }
+        syncStationMemberRowInCollections(draft, restoredRow, draftRow.stationCode);
+        renderStationEditor();
+        return;
+      }
+
+      if (change.action === 'reassign_manager') {
+        const baseStation = baseStationByCode.get(change.stationCode);
+        if (!baseStation) return;
+        applyStationManagerToDraft(baseStation.code, baseStation.managerEmail, baseStation.managerName, draft);
+        renderStationEditor();
+      }
+    }
+
+    function renderStationEditorChangeList(element, entries) {
       if (!element) return;
       element.innerHTML = '';
-      if (!Array.isArray(descriptions) || !descriptions.length) {
+      if (!Array.isArray(entries) || !entries.length || !stationEditorState.changeListExpanded) {
         element.classList.add('hidden');
         return;
       }
 
       const fragment = document.createDocumentFragment();
-      descriptions.forEach((description) => {
+      entries.forEach((entry) => {
         const item = document.createElement('div');
         item.className = 'editor-change-item';
-        item.textContent = description;
+        const text = document.createElement('div');
+        text.className = 'editor-change-text';
+        text.textContent = entry.description;
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'editor-change-remove';
+        removeButton.setAttribute('aria-label', '刪除此筆異動');
+        removeButton.textContent = 'X';
+        removeButton.addEventListener('click', () => revertStationEditorChange(entry.change));
+
+        item.appendChild(text);
+        item.appendChild(removeButton);
         fragment.appendChild(item);
       });
       element.appendChild(fragment);
@@ -1876,13 +2052,31 @@
       }
 
       const changes = buildStationEditorChanges();
-      const changeDescriptions = buildStationEditorChangeDescriptions();
+      const changeEntries = buildStationEditorChangeEntries();
       const statusParts = [];
       if (hasChanges) statusParts.push(`待儲存異動 ${changes.length} 筆`);
       if (stationEditorState.isSaving) statusParts.push('儲存中...');
       if (stationEditorState.message) statusParts.push(stationEditorState.message);
-      statusEl.textContent = statusParts.join('｜') || '尚未修改。';
-      renderStationEditorChangeList(changeListEl, changeDescriptions);
+      if (hasChanges) {
+        statusEl.innerHTML = `
+          <div class="editor-status-summary">
+            <span>${escapeHtml(statusParts.join('｜') || '尚未修改。')}</span>
+            <button type="button" class="editor-status-toggle" data-change-toggle="${stationEditorState.changeListExpanded ? 'collapse' : 'expand'}">
+              ${stationEditorState.changeListExpanded ? '收合明細' : '展開明細'}
+            </button>
+          </div>
+        `;
+        const toggleButton = statusEl.querySelector('[data-change-toggle]');
+        if (toggleButton) {
+          toggleButton.addEventListener('click', () => {
+            stationEditorState.changeListExpanded = !stationEditorState.changeListExpanded;
+            renderStationEditor();
+          });
+        }
+      } else {
+        statusEl.textContent = statusParts.join('｜') || '尚未修改。';
+      }
+      renderStationEditorChangeList(changeListEl, changeEntries);
     }
 
     function renderManagedStationsView(container, draft) {
