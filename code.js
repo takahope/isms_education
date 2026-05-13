@@ -494,7 +494,7 @@ function applyStationEditorChanges_(context, changes) {
   const orgSheet = context.orgSheet;
   const stationByCode = context.stationByCode;
   const viewerEmail = normalizeEmail_(context.viewer.email);
-  const managedStationSet = new Set(context.managedStations.map((item) => normalizeOrgCode_(item.code)));
+  const viewerIsStationManager = Boolean(context.viewer && context.viewer.isStationManager);
   const candidateEmailSet = new Set(context.stationStaffCandidates.map((item) => normalizeEmail_(item.email)));
   const stationManagerCandidateSet = new Set(context.stationManagerCandidates.map((item) => normalizeEmail_(item.email)));
   const baseAssignments = context.allAssignments.map((item) => ({ ...item }));
@@ -512,7 +512,7 @@ function applyStationEditorChanges_(context, changes) {
     if (change.action === 'delete') {
       const target = getAssignmentByRowIndex_(simulator, change.rowIndex);
       if (!target) throw new Error(`找不到要刪除的駐站職務列：${change.rowIndex}`);
-      assertCanDeleteStationAssignment_(target, viewerEmail, managedStationSet);
+      assertCanDeleteStationAssignment_(target, viewerEmail, viewerIsStationManager);
       removeAssignmentByRowIndex_(simulator, change.rowIndex);
       deletes.add(change.rowIndex);
       return;
@@ -523,7 +523,7 @@ function applyStationEditorChanges_(context, changes) {
       if (!target) throw new Error(`找不到要移動的駐站職務列：${change.rowIndex}`);
       const station = stationByCode.get(change.stationCode);
       if (!station) throw new Error(`找不到目標駐站：${change.stationCode}`);
-      assertCanMoveStationAssignment_(target, station, viewerEmail, managedStationSet);
+      assertCanMoveStationAssignment_(target, station, viewerEmail, viewerIsStationManager);
       assertNoDuplicateStationAssignment_(simulator, target.email, station.code, change.rowIndex);
 
       target.orgCode = station.code;
@@ -541,7 +541,7 @@ function applyStationEditorChanges_(context, changes) {
       const station = stationByCode.get(change.stationCode);
       if (!station) throw new Error(`找不到目標駐站：${change.stationCode}`);
       const targetEmail = normalizeEmail_(change.targetEmail || viewerEmail);
-      assertCanAddStationAssignment_(targetEmail, station, viewerEmail, managedStationSet, candidateEmailSet);
+      assertCanAddStationAssignment_(targetEmail, station, viewerEmail, viewerIsStationManager, candidateEmailSet);
       assertNoDuplicateStationAssignment_(simulator, targetEmail, station.code, 0);
 
       const template = getStationAssignmentTemplate_(baseAssignments, targetEmail);
@@ -650,31 +650,28 @@ function validateStationEditorChange_(change) {
   }
 }
 
-function assertCanDeleteStationAssignment_(assignment, viewerEmail, managedStationSet) {
+function assertCanDeleteStationAssignment_(assignment, viewerEmail, viewerIsStationManager) {
   const assignmentEmail = normalizeEmail_(assignment.email);
-  const orgCode = normalizeOrgCode_(assignment.orgCode);
   if (assignmentEmail === viewerEmail) return;
-  if (managedStationSet.has(orgCode)) return;
+  if (viewerIsStationManager) return;
   throw new Error('您沒有刪除此駐站收案配置的權限。');
 }
 
-function assertCanMoveStationAssignment_(assignment, targetStation, viewerEmail, managedStationSet) {
+function assertCanMoveStationAssignment_(assignment, targetStation, viewerEmail, viewerIsStationManager) {
   const assignmentEmail = normalizeEmail_(assignment.email);
   if (assignmentEmail === viewerEmail) return;
 
-  const currentOrgCode = normalizeOrgCode_(assignment.orgCode);
-  const targetOrgCode = normalizeOrgCode_(targetStation.code);
-  if (managedStationSet.has(currentOrgCode) && managedStationSet.has(targetOrgCode)) return;
+  if (viewerIsStationManager) return;
   throw new Error('您沒有搬移此駐站收案配置的權限。');
 }
 
-function assertCanAddStationAssignment_(targetEmail, station, viewerEmail, managedStationSet, candidateEmailSet) {
+function assertCanAddStationAssignment_(targetEmail, station, viewerEmail, viewerIsStationManager, candidateEmailSet) {
   if (!candidateEmailSet.has(targetEmail)) {
     throw new Error('只能新增既有站務人員到駐站。');
   }
 
   if (targetEmail === viewerEmail) return;
-  if (managedStationSet.has(normalizeOrgCode_(station.code))) return;
+  if (viewerIsStationManager) return;
   throw new Error('您沒有新增此駐站收案配置的權限。');
 }
 

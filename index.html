@@ -1672,7 +1672,7 @@
       }
 
       const draft = ensureDraftData();
-      const station = draft.managedStations.find((item) => item.code === stationCode);
+      const station = draft.allStations.find((item) => item.code === stationCode);
       const stationInfo = getStationOptionByCode(stationCode);
       const candidate = getStationStaffCandidateByEmail(targetEmail);
       if (!station || !stationInfo || !candidate) return;
@@ -1834,7 +1834,7 @@
       saveBtn.disabled = stationEditorState.isSaving || !hasChanges;
 
       const tabs = [];
-      if (draft.viewer.isStationManager) tabs.push({ key: 'managed', label: '我管理的駐站' });
+      if (draft.viewer.isStationManager) tabs.push({ key: 'managed', label: '調整駐站收案人員' });
       if (draft.viewer.isStationStaff) tabs.push({ key: 'self', label: '我的收案駐站' });
       if (draft.viewer.isStationManager) tabs.push({ key: 'manager_transfer', label: '調整駐站管理員' });
       if (!tabs.some((item) => item.key === stationEditorState.activeTab)) {
@@ -1879,15 +1879,16 @@
     }
 
     function renderManagedStationsView(container, draft) {
-      if (!draft.managedStations.length) {
-        container.innerHTML = '<div class="editor-empty">目前沒有您管理的駐站。</div>';
+      const stations = draft.viewer && draft.viewer.isStationManager ? draft.allStations : draft.managedStations;
+      if (!stations.length) {
+        container.innerHTML = '<div class="editor-empty">目前沒有可編輯的駐站。</div>';
         return;
       }
 
       const wrapper = document.createElement('div');
       wrapper.className = 'editor-stack';
 
-      draft.managedStations.forEach((station) => {
+      stations.forEach((station) => {
         const card = document.createElement('section');
         card.className = 'station-card';
 
