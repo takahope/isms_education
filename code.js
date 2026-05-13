@@ -52,29 +52,33 @@ function getCurrentUserProfile() {
   try {
     const email = normalizeEmail_(fallbackEmail);
     const masterSS = getMasterSpreadsheet_();
-    const personnelSheet = getRequiredSheet_(masterSS, '人員主檔');
-    const orgSheet = getRequiredSheet_(masterSS, STATION_EDITOR_CONFIG.orgSheetName);
     const assignmentSheet = getRequiredSheet_(masterSS, '人員職務配置');
-    const name = findPersonnelNameByEmail_(personnelSheet, email);
+    const context = buildStationEditorContext_(email);
     const assignments = buildUserAssignments_(assignmentSheet, email);
-    const allAssignments = readAssignmentsFromSheet_(assignmentSheet);
-    const stationNodes = readStationNodesFromSheet_(orgSheet);
-    const stationManagerEmails = new Set(
-      stationNodes
-        .map((item) => normalizeEmail_(item.managerEmail))
-        .filter(Boolean)
-    );
-    const isStationManager = stationManagerEmails.has(email);
-    const isStationStaff = allAssignments.some((item) => normalizeEmail_(item.email) === email && isStationOrgCode_(item.orgCode));
+    const managedStations = context.managedStations.map((station) => ({
+      code: station.code,
+      name: station.name,
+      memberCount: Number(station.memberCount || 0),
+      warnings: Array.isArray(station.warnings) ? station.warnings.slice() : [],
+      members: Array.isArray(station.members)
+        ? station.members.map((member) => ({
+            name: String(member.name || '').trim(),
+            email: normalizeEmail_(member.email),
+            title: String(member.title || '').trim(),
+            managerName: String(member.managerName || '').trim()
+          }))
+        : []
+    }));
 
     return {
       success: true,
       email,
-      name,
+      name: context.viewer.name,
       assignments,
-      isStationManager,
-      isStationStaff,
-      canEditStationAssignments: isStationManager || isStationStaff
+      managedStations,
+      isStationManager: context.viewer.isStationManager,
+      isStationStaff: context.viewer.isStationStaff,
+      canEditStationAssignments: context.viewer.canEditStationAssignments
     };
   } catch (error) {
     console.error('讀取首頁人員資料失敗:', error);
@@ -83,6 +87,7 @@ function getCurrentUserProfile() {
       email: fallbackEmail || '',
       name: '',
       assignments: [],
+      managedStations: [],
       isStationManager: false,
       isStationStaff: false,
       canEditStationAssignments: false,
