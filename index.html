@@ -404,6 +404,16 @@
       box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
     }
 
+    .station-card.is-dirty {
+      border-color: rgba(14, 165, 233, 0.5);
+      background:
+        radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 32%),
+        linear-gradient(180deg, #ffffff 0%, #f8fcff 100%);
+      box-shadow:
+        0 18px 34px rgba(15, 23, 42, 0.08),
+        0 0 0 1px rgba(14, 165, 233, 0.08);
+    }
+
     .station-card-header,
     .self-card-header {
       display: flex;
@@ -418,6 +428,21 @@
     .self-card-title {
       font-size: 1rem;
       font-weight: 700;
+    }
+
+    .station-card-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 10px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(14, 165, 233, 0.12);
+      color: #0c4a6e;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      vertical-align: middle;
     }
 
     .station-card-meta,
@@ -644,6 +669,10 @@
 
     .manager-scope-card.is-active .manager-scope-title {
       color: #075985;
+    }
+
+    .manager-scope-card.is-active .manager-scope-desc {
+      color: #0f766e;
     }
 
     .manager-scope-desc {
@@ -1311,7 +1340,7 @@
         isLoading: false,
         isSaving: false,
         activeTab: 'managed',
-        managedViewMode: 'mine',
+        managedViewMode: 'all',
         managedSearchKeyword: '',
         managedSelectedStationCode: '',
         changeListExpanded: false,
@@ -1366,7 +1395,7 @@
         stationEditorState.managerSelections = {};
         stationEditorState.selfNewStationCode = '';
         stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
-        stationEditorState.managedViewMode = 'mine';
+        stationEditorState.managedViewMode = 'all';
         stationEditorState.managedSearchKeyword = '';
         stationEditorState.managedSelectedStationCode = '';
         stationEditorState.changeListExpanded = false;
@@ -1813,6 +1842,46 @@
       return buildStationEditorChanges().length > 0;
     }
 
+    function buildDirtyStationCodeSet(baseData = stationEditorState.baseData, draftData = stationEditorState.draftData) {
+      const dirtyCodes = new Set();
+      const changes = buildStationEditorChanges(baseData, draftData);
+      const baseRows = flattenEditorRows(baseData);
+      const baseRowByIndex = new Map(baseRows.filter((item) => item.rowIndex).map((item) => [item.rowIndex, item]));
+
+      changes.forEach((change) => {
+        if (change.action === 'add' || change.action === 'reassign_manager') {
+          if (change.stationCode) dirtyCodes.add(change.stationCode);
+          return;
+        }
+
+        if (change.action === 'delete') {
+          const baseRow = baseRowByIndex.get(change.rowIndex);
+          if (baseRow && baseRow.stationCode) dirtyCodes.add(baseRow.stationCode);
+          return;
+        }
+
+        if (change.action === 'move') {
+          const baseRow = baseRowByIndex.get(change.rowIndex);
+          if (baseRow && baseRow.stationCode) dirtyCodes.add(baseRow.stationCode);
+          if (change.stationCode) dirtyCodes.add(change.stationCode);
+        }
+      });
+
+      return dirtyCodes;
+    }
+
+    function renderManagedViewWithFocusRestore(selectionStart, selectionEnd) {
+      renderStationEditor();
+      requestAnimationFrame(() => {
+        const input = document.querySelector('[data-managed-search]');
+        if (!input) return;
+        input.focus();
+        const start = typeof selectionStart === 'number' ? selectionStart : input.value.length;
+        const end = typeof selectionEnd === 'number' ? selectionEnd : start;
+        input.setSelectionRange(start, end);
+      });
+    }
+
     function ensureDraftData() {
       if (!stationEditorState.draftData) {
         stationEditorState.draftData = {
@@ -2092,6 +2161,7 @@
       const viewMode = stationEditorState.managedViewMode === 'all' ? 'all' : 'mine';
       const baseStations = viewMode === 'all' ? draft.allStations : draft.managedStations;
       const searchKeyword = String(stationEditorState.managedSearchKeyword || '').trim().toLowerCase();
+      const dirtyStationCodes = buildDirtyStationCodeSet();
       const stations = baseStations.filter((station) => {
         if (!searchKeyword) return true;
         const haystacks = [
@@ -2107,13 +2177,13 @@
         const toggle = document.createElement('div');
         toggle.className = 'manager-scope-toggle';
         toggle.innerHTML = `
-          <button type="button" class="manager-scope-card ${viewMode === 'mine' ? 'is-active' : ''}" data-managed-view="mine">
-            <span class="manager-scope-title">只看我的駐站</span>
-            <span class="manager-scope-desc">聚焦自己目前管理的駐站，快速調整站內收案人員。</span>
-          </button>
           <button type="button" class="manager-scope-card ${viewMode === 'all' ? 'is-active' : ''}" data-managed-view="all">
             <span class="manager-scope-title">看全部駐站</span>
             <span class="manager-scope-desc">檢視全部駐站的人員配置，直接調整任一駐站的收案人員。</span>
+          </button>
+          <button type="button" class="manager-scope-card ${viewMode === 'mine' ? 'is-active' : ''}" data-managed-view="mine">
+            <span class="manager-scope-title">只看我的駐站</span>
+            <span class="manager-scope-desc">聚焦自己目前管理的駐站，快速調整站內收案人員。</span>
           </button>
         `;
         container.appendChild(toggle);
@@ -2148,6 +2218,8 @@
         if (searchInput) {
           searchInput.addEventListener('input', () => {
             stationEditorState.managedSearchKeyword = searchInput.value;
+            const selectionStart = searchInput.selectionStart;
+            const selectionEnd = searchInput.selectionEnd;
             const availableStation = baseStations.some((station) => station.code === stationEditorState.managedSelectedStationCode && (
               !String(stationEditorState.managedSearchKeyword || '').trim()
               || [
@@ -2158,7 +2230,7 @@
               ].map((value) => String(value || '').toLowerCase()).some((value) => value.includes(String(stationEditorState.managedSearchKeyword || '').trim().toLowerCase()))
             ));
             if (!availableStation) stationEditorState.managedSelectedStationCode = '';
-            renderStationEditor();
+            renderManagedViewWithFocusRestore(selectionStart, selectionEnd);
           });
         }
 
@@ -2192,7 +2264,8 @@
 
       stations.forEach((station) => {
         const card = document.createElement('section');
-        card.className = 'station-card';
+        const isDirty = dirtyStationCodes.has(station.code);
+        card.className = `station-card${isDirty ? ' is-dirty' : ''}`;
         card.setAttribute('data-station-card', station.code);
         const managerOptionsHtml = draft.stationManagerCandidates.map((candidate) => `
           <option value="${escapeHtml(candidate.email)}">${escapeHtml(candidate.label)}</option>
@@ -2225,7 +2298,7 @@
         card.innerHTML = `
           <div class="station-card-header">
             <div>
-              <div class="station-card-title">${escapeHtml(station.name)} <span class="station-card-meta">(${escapeHtml(station.code)})</span></div>
+              <div class="station-card-title">${escapeHtml(station.name)} <span class="station-card-meta">(${escapeHtml(station.code)})</span>${isDirty ? '<span class="station-card-badge">待儲存異動</span>' : ''}</div>
               <div class="station-card-meta">駐站管理員：${escapeHtml(station.managerName || station.managerEmail || '未設定')}｜現有收案人員 ${station.members.length} 位</div>
               ${warningHtml}
             </div>
