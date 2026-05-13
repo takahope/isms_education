@@ -535,6 +535,38 @@
       flex-wrap: wrap;
     }
 
+    .view-toggle {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .view-toggle-btn {
+      border: 1px solid var(--color-border);
+      background: #ffffff;
+      color: var(--color-text-muted);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .view-toggle-btn.is-active {
+      background: #e0f2fe;
+      color: #0369a1;
+      border-color: #7dd3fc;
+    }
+
+    .warning-text {
+      margin-top: 8px;
+      color: #b45309;
+      font-size: 0.8125rem;
+      font-weight: 600;
+    }
+
     @media (max-width: 640px) {
       .account-card {
         padding: 18px;
@@ -1173,9 +1205,11 @@
         isLoading: false,
         isSaving: false,
         activeTab: 'managed',
+        managerViewMode: 'mine',
         baseData: null,
         draftData: null,
         managerSelections: {},
+        stationManagerSelections: {},
         selfNewStationCode: '',
         message: ''
       };
@@ -1222,8 +1256,10 @@
         stationEditorState.baseData = normalized;
         stationEditorState.draftData = cloneStationEditorData(normalized);
         stationEditorState.managerSelections = {};
+        stationEditorState.stationManagerSelections = {};
         stationEditorState.selfNewStationCode = '';
         stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
+        stationEditorState.managerViewMode = 'mine';
       } catch (error) {
         stationEditorState.message = error && error.message ? error.message : '無法載入駐站收案配置。';
       } finally {
@@ -1249,6 +1285,8 @@
       const selfAssignments = Array.isArray(payload && payload.selfAssignments) ? payload.selfAssignments : [];
       const stationOptions = Array.isArray(payload && payload.stationOptions) ? payload.stationOptions : [];
       const stationStaffCandidates = Array.isArray(payload && payload.stationStaffCandidates) ? payload.stationStaffCandidates : [];
+      const allStations = Array.isArray(payload && payload.allStations) ? payload.allStations : [];
+      const stationManagerCandidates = Array.isArray(payload && payload.stationManagerCandidates) ? payload.stationManagerCandidates : [];
 
       return {
         viewer: {
@@ -1258,11 +1296,21 @@
           isStationStaff: Boolean(viewer.isStationStaff),
           canEditStationAssignments: Boolean(viewer.canEditStationAssignments)
         },
+        allStations: allStations.map((station) => ({
+          code: String(station.code || '').trim(),
+          name: String(station.name || '').trim(),
+          managerEmail: String(station.managerEmail || '').trim(),
+          managerName: String(station.managerName || '').trim(),
+          memberCount: Number(station.memberCount || 0),
+          warnings: Array.isArray(station.warnings) ? station.warnings.map((item) => String(item || '').trim()).filter(Boolean) : [],
+          members: normalizeStationEditorRows(station.members)
+        })),
         managedStations: managedStations.map((station) => ({
           code: String(station.code || '').trim(),
           name: String(station.name || '').trim(),
           managerEmail: String(station.managerEmail || '').trim(),
           managerName: String(station.managerName || '').trim(),
+          warnings: Array.isArray(station.warnings) ? station.warnings.map((item) => String(item || '').trim()).filter(Boolean) : [],
           memberCount: Number(station.memberCount || 0),
           members: normalizeStationEditorRows(station.members)
         })),
@@ -1278,6 +1326,11 @@
           name: String(item.name || '').trim(),
           label: String(item.label || '').trim(),
           currentStations: Array.isArray(item.currentStations) ? item.currentStations.map((value) => String(value || '').trim()) : []
+        })),
+        stationManagerCandidates: stationManagerCandidates.map((item) => ({
+          email: String(item.email || '').trim(),
+          name: String(item.name || '').trim(),
+          label: String(item.label || '').trim()
         }))
       };
     }
@@ -1312,6 +1365,55 @@
       return candidates.find((item) => item.email === email) || null;
     }
 
+    function getStationManagerCandidateByEmail(email) {
+      const draft = stationEditorState.draftData;
+      const candidates = draft && Array.isArray(draft.stationManagerCandidates) ? draft.stationManagerCandidates : [];
+      return candidates.find((item) => item.email === email) || null;
+    }
+
+    function syncManagedStationsFromAllStations(draft) {
+      if (!draft || !draft.viewer) return;
+      const viewerEmail = String(draft.viewer.email || '').trim();
+      draft.managedStations = (Array.isArray(draft.allStations) ? draft.allStations : [])
+        .filter((station) => station.managerEmail === viewerEmail)
+        .map((station) => JSON.parse(JSON.stringify(station)));
+    }
+
+    function syncStationMemberRowInCollections(draft, row, previousStationCode = '') {
+      if (!draft || !row) return;
+      const rowKey = buildEditorRowKey(row);
+      const previousCode = String(previousStationCode || '').trim();
+      const nextCode = String(row.stationCode || '').trim();
+
+      (Array.isArray(draft.allStations) ? draft.allStations : []).forEach((station) => {
+        if (previousCode && station.code === previousCode && previousCode !== nextCode) {
+          station.members = station.members.filter((item) => buildEditorRowKey(item) !== rowKey);
+          station.memberCount = station.members.length;
+          return;
+        }
+
+        if (station.code !== nextCode) return;
+        const existingIndex = station.members.findIndex((item) => buildEditorRowKey(item) === rowKey);
+        if (existingIndex === -1) {
+          station.members.push({ ...row });
+        } else {
+          station.members[existingIndex] = { ...row };
+        }
+        station.memberCount = station.members.length;
+      });
+
+      syncManagedStationsFromAllStations(draft);
+    }
+
+    function removeStationMemberRowFromCollections(draft, rowKey) {
+      if (!draft) return;
+      (Array.isArray(draft.allStations) ? draft.allStations : []).forEach((station) => {
+        station.members = station.members.filter((item) => buildEditorRowKey(item) !== rowKey);
+        station.memberCount = station.members.length;
+      });
+      syncManagedStationsFromAllStations(draft);
+    }
+
     function buildEditorRowKey(item) {
       if (item && item.rowIndex) return `row-${item.rowIndex}`;
       return `temp-${item && item.tempId ? item.tempId : ''}`;
@@ -1339,7 +1441,6 @@
     function buildStationEditorChanges(baseData = stationEditorState.baseData, draftData = stationEditorState.draftData) {
       const baseRows = flattenEditorRows(baseData);
       const draftRows = flattenEditorRows(draftData);
-      const baseByRowIndex = new Map(baseRows.map((item) => [item.rowIndex, item]));
       const draftByRowIndex = new Map(draftRows.filter((item) => item.rowIndex).map((item) => [item.rowIndex, item]));
       const changes = [];
 
@@ -1372,6 +1473,22 @@
         }
       });
 
+      const baseStations = Array.isArray(baseData && baseData.allStations) ? baseData.allStations : [];
+      const draftStations = Array.isArray(draftData && draftData.allStations) ? draftData.allStations : [];
+      const draftStationByCode = new Map(draftStations.map((item) => [item.code, item]));
+
+      baseStations.forEach((station) => {
+        const draftStation = draftStationByCode.get(station.code);
+        if (!draftStation) return;
+        if ((draftStation.managerEmail || '') !== (station.managerEmail || '')) {
+          changes.push({
+            action: 'reassign_manager',
+            stationCode: station.code,
+            targetManagerEmail: draftStation.managerEmail
+          });
+        }
+      });
+
       return changes;
     }
 
@@ -1383,13 +1500,51 @@
       if (!stationEditorState.draftData) {
         stationEditorState.draftData = {
           viewer: { email: currentUserEmail || '' },
+          allStations: [],
           managedStations: [],
           selfAssignments: [],
           stationOptions: [],
-          stationStaffCandidates: []
+          stationStaffCandidates: [],
+          stationManagerCandidates: []
         };
       }
       return stationEditorState.draftData;
+    }
+
+    function reassignStationManager(stationCode) {
+      const targetEmail = stationEditorState.stationManagerSelections[stationCode];
+      if (!targetEmail) {
+        window.alert('請先選擇要接管該駐站的駐站管理員。');
+        return;
+      }
+
+      const draft = ensureDraftData();
+      const candidate = getStationManagerCandidateByEmail(targetEmail);
+      if (!candidate) return;
+
+      const station = draft.allStations.find((item) => item.code === stationCode);
+      if (!station) return;
+
+      station.managerEmail = candidate.email;
+      station.managerName = candidate.name;
+      station.warnings = [];
+
+      const managedStation = draft.managedStations.find((item) => item.code === stationCode);
+      if (managedStation) {
+        managedStation.managerEmail = candidate.email;
+        managedStation.managerName = candidate.name;
+        managedStation.warnings = [];
+      }
+
+      draft.selfAssignments.forEach((item) => {
+        if (item.stationCode !== stationCode) return;
+        item.managerEmail = candidate.email;
+        item.managerName = candidate.name;
+      });
+
+      syncManagedStationsFromAllStations(draft);
+      stationEditorState.stationManagerSelections[stationCode] = '';
+      renderStationEditor();
     }
 
     function addManagerAssignment(stationCode) {
@@ -1424,8 +1579,7 @@
         managerName: stationInfo.managerName
       };
 
-      station.members.push(row);
-      station.memberCount = station.members.length;
+      syncStationMemberRowInCollections(draft, row);
       if (candidate.email === draft.viewer.email) {
         draft.selfAssignments.push({ ...row });
       }
@@ -1464,6 +1618,7 @@
       };
 
       draft.selfAssignments.push(row);
+      syncStationMemberRowInCollections(draft, row);
       stationEditorState.selfNewStationCode = '';
       renderStationEditor();
     }
@@ -1480,31 +1635,19 @@
         return;
       }
 
+      const previousStationCode = target.stationCode;
       target.stationCode = stationInfo.code;
       target.stationName = stationInfo.name;
       target.managerEmail = stationInfo.managerEmail;
       target.managerName = stationInfo.managerName;
-
-      draft.managedStations.forEach((station) => {
-        station.members.forEach((member) => {
-          if (buildEditorRowKey(member) !== rowKey) return;
-          member.stationCode = target.stationCode;
-          member.stationName = target.stationName;
-          member.managerEmail = target.managerEmail;
-          member.managerName = target.managerName;
-        });
-      });
-
+      syncStationMemberRowInCollections(draft, target, previousStationCode);
       renderStationEditor();
     }
 
     function deleteEditorAssignment(rowKey) {
       const draft = ensureDraftData();
       draft.selfAssignments = draft.selfAssignments.filter((item) => buildEditorRowKey(item) !== rowKey);
-      draft.managedStations.forEach((station) => {
-        station.members = station.members.filter((item) => buildEditorRowKey(item) !== rowKey);
-        station.memberCount = station.members.length;
-      });
+      removeStationMemberRowFromCollections(draft, rowKey);
       renderStationEditor();
     }
 
@@ -1529,6 +1672,7 @@
         stationEditorState.baseData = normalized;
         stationEditorState.draftData = cloneStationEditorData(normalized);
         stationEditorState.managerSelections = {};
+        stationEditorState.stationManagerSelections = {};
         stationEditorState.selfNewStationCode = '';
         stationEditorState.message = response.message || '駐站收案配置已更新。';
         await refreshUserProfileCard();
@@ -1573,6 +1717,7 @@
       const tabs = [];
       if (draft.viewer.isStationManager) tabs.push({ key: 'managed', label: '我管理的駐站' });
       if (draft.viewer.isStationStaff) tabs.push({ key: 'self', label: '我的收案駐站' });
+      if (draft.viewer.isStationManager) tabs.push({ key: 'manager_transfer', label: '調整駐站管理員' });
       if (!tabs.some((item) => item.key === stationEditorState.activeTab)) {
         stationEditorState.activeTab = tabs[0] ? tabs[0].key : 'managed';
       }
@@ -1598,6 +1743,8 @@
       bodyEl.innerHTML = '';
       if (stationEditorState.activeTab === 'managed') {
         renderManagedStationsView(bodyEl, draft);
+      } else if (stationEditorState.activeTab === 'manager_transfer') {
+        renderManagerTransferView(bodyEl, draft);
       } else {
         renderSelfAssignmentsView(bodyEl, draft);
       }
@@ -1678,6 +1825,80 @@
       });
       container.querySelectorAll('[data-delete-row]').forEach((button) => {
         button.addEventListener('click', () => deleteEditorAssignment(button.getAttribute('data-delete-row')));
+      });
+    }
+
+    function renderManagerTransferView(container, draft) {
+      const viewMode = stationEditorState.managerViewMode === 'all' ? 'all' : 'mine';
+      const stations = (viewMode === 'all' ? draft.allStations : draft.managedStations).slice();
+
+      const toggle = document.createElement('div');
+      toggle.className = 'view-toggle';
+      toggle.innerHTML = `
+        <button type="button" class="view-toggle-btn ${viewMode === 'mine' ? 'is-active' : ''}" data-manager-view="mine">只看我的管理駐站</button>
+        <button type="button" class="view-toggle-btn ${viewMode === 'all' ? 'is-active' : ''}" data-manager-view="all">查看全部駐站管理員的駐站</button>
+      `;
+      container.appendChild(toggle);
+
+      toggle.querySelectorAll('[data-manager-view]').forEach((button) => {
+        button.addEventListener('click', () => {
+          stationEditorState.managerViewMode = button.getAttribute('data-manager-view');
+          renderStationEditor();
+        });
+      });
+
+      if (!stations.length) {
+        const empty = document.createElement('div');
+        empty.className = 'editor-empty';
+        empty.textContent = viewMode === 'all' ? '目前沒有可調整的駐站。' : '目前沒有您管理的駐站。';
+        container.appendChild(empty);
+        return;
+      }
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'editor-stack';
+
+      stations.forEach((station) => {
+        const card = document.createElement('section');
+        card.className = 'station-card';
+        const optionsHtml = draft.stationManagerCandidates.map((candidate) => `
+          <option value="${escapeHtml(candidate.email)}">${escapeHtml(candidate.label)}</option>
+        `).join('');
+        const warningHtml = Array.isArray(station.warnings) && station.warnings.length
+          ? `<div class="warning-text">${escapeHtml(station.warnings.join('｜'))}</div>`
+          : '';
+
+        card.innerHTML = `
+          <div class="station-card-header">
+            <div>
+              <div class="station-card-title">${escapeHtml(station.name)} <span class="station-card-meta">(${escapeHtml(station.code)})</span></div>
+              <div class="station-card-meta">目前駐站管理員：${escapeHtml(station.managerName || station.managerEmail || '未設定')}｜現有收案人員 ${station.memberCount} 位</div>
+              ${warningHtml}
+            </div>
+          </div>
+          <div class="add-row">
+            <select class="inline-select" data-station-manager-select="${escapeHtml(station.code)}">
+              <option value="">選擇要接管該駐站的駐站管理員</option>
+              ${optionsHtml}
+            </select>
+            <button type="button" class="mini-btn" data-station-manager-apply="${escapeHtml(station.code)}">改派管理員</button>
+          </div>
+        `;
+        wrapper.appendChild(card);
+      });
+
+      container.appendChild(wrapper);
+
+      container.querySelectorAll('[data-station-manager-select]').forEach((select) => {
+        const stationCode = select.getAttribute('data-station-manager-select');
+        select.value = stationEditorState.stationManagerSelections[stationCode] || '';
+        select.addEventListener('change', () => {
+          stationEditorState.stationManagerSelections[stationCode] = select.value;
+        });
+      });
+
+      container.querySelectorAll('[data-station-manager-apply]').forEach((button) => {
+        button.addEventListener('click', () => reassignStationManager(button.getAttribute('data-station-manager-apply')));
       });
     }
 
