@@ -602,7 +602,7 @@ function applyStationEditorChanges_(context, changes) {
         if (normalizeOrgCode_(item.orgCode) !== normalizeOrgCode_(station.code)) return;
         item.managerEmail = targetManagerEmail;
         item.managerName = String(targetManager.name || '').trim();
-        if (!deletes.has(item.rowIndex)) {
+        if (Number(item.rowIndex) > 0 && !deletes.has(item.rowIndex)) {
           updates.push({ ...item });
         }
       });
@@ -616,7 +616,7 @@ function applyStationEditorChanges_(context, changes) {
     writeOrgManagerRow_(orgSheet, item.rowIndex, item.managerEmail, item.managerName);
   });
 
-  const finalizedUpdates = dedupeUpdatesByRowIndex_(updates).filter((item) => !deletes.has(item.rowIndex));
+  const finalizedUpdates = dedupeUpdatesByRowIndex_(updates).filter((item) => Number(item.rowIndex) > 0 && !deletes.has(item.rowIndex));
   finalizedUpdates.forEach((item) => {
     const baseRow = rowsByIndex.get(Number(item.rowIndex));
     if (!baseRow) throw new Error(`找不到要更新的駐站職務列：${item.rowIndex}`);
