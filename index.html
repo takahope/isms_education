@@ -586,6 +586,10 @@
       flex-wrap: wrap;
     }
 
+    .editor-status-text {
+      min-width: 0;
+    }
+
     .editor-status-toggle {
       border: 0;
       background: transparent;
@@ -595,6 +599,46 @@
       font-size: 0.8125rem;
       font-weight: 700;
       cursor: pointer;
+    }
+
+    .editor-progress {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .editor-progress.hidden {
+      display: none;
+    }
+
+    .editor-progress-track {
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .editor-progress-fill {
+      height: 100%;
+      width: 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #0ea5e9 0%, #0284c7 100%);
+      transition: width 0.18s ease, background 0.18s ease;
+    }
+
+    .editor-progress.is-success .editor-progress-fill {
+      background: linear-gradient(90deg, #14b8a6 0%, #0f766e 100%);
+    }
+
+    .editor-progress.is-error .editor-progress-fill {
+      background: linear-gradient(90deg, #fb7185 0%, #e11d48 100%);
+    }
+
+    .editor-progress-label {
+      font-size: 0.75rem;
+      color: #64748b;
     }
 
     .editor-change-list {
@@ -1382,6 +1426,11 @@
         managedManagerFilterEmail: '',
         managedSearchComposing: false,
         changeListExpanded: false,
+        saveProgressValue: 0,
+        saveProgressVisible: false,
+        saveProgressPhase: 'idle',
+        saveProgressTimerId: null,
+        statusResetTimerId: null,
         baseData: null,
         draftData: null,
         managerSelections: {},
@@ -1398,6 +1447,111 @@
       document.getElementById('station-editor-modal').addEventListener('click', (event) => {
         if (event.target.id === 'station-editor-modal') closeStationEditor();
       });
+    }
+
+    function clearStationEditorProgressTimer() {
+      if (stationEditorState.saveProgressTimerId) {
+        clearInterval(stationEditorState.saveProgressTimerId);
+        stationEditorState.saveProgressTimerId = null;
+      }
+    }
+
+    function clearStationEditorStatusResetTimer() {
+      if (stationEditorState.statusResetTimerId) {
+        clearTimeout(stationEditorState.statusResetTimerId);
+        stationEditorState.statusResetTimerId = null;
+      }
+    }
+
+    function resetStationEditorSaveFeedback(options = {}) {
+      clearStationEditorProgressTimer();
+      clearStationEditorStatusResetTimer();
+      stationEditorState.saveProgressValue = 0;
+      stationEditorState.saveProgressVisible = false;
+      stationEditorState.saveProgressPhase = 'idle';
+      if (!options.preserveMessage) {
+        stationEditorState.message = '';
+      }
+    }
+
+    function showStationEditorToast(config) {
+      if (typeof Swal === 'undefined' || !config || !config.title) return;
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: config.icon || 'info',
+        title: config.title,
+        showConfirmButton: false,
+        timer: Number(config.timer || 2800),
+        timerProgressBar: true
+      });
+    }
+
+    function startStationEditorSaveProgress(changeCount) {
+      clearStationEditorProgressTimer();
+      clearStationEditorStatusResetTimer();
+      stationEditorState.saveProgressPhase = 'saving';
+      stationEditorState.saveProgressVisible = true;
+      stationEditorState.saveProgressValue = Math.max(6, Math.min(18, Number(changeCount || 0) * 4));
+      stationEditorState.message = '';
+
+      stationEditorState.saveProgressTimerId = setInterval(() => {
+        if (stationEditorState.saveProgressPhase !== 'saving') {
+          clearStationEditorProgressTimer();
+          return;
+        }
+        const current = Number(stationEditorState.saveProgressValue || 0);
+        if (current >= 90) {
+          stationEditorState.saveProgressValue = 90;
+          return;
+        }
+        const remaining = 90 - current;
+        const nextValue = current + Math.max(1.4, remaining * 0.12);
+        stationEditorState.saveProgressValue = Math.min(90, Number(nextValue.toFixed(1)));
+        if (stationEditorState.isOpen) {
+          renderStationEditor();
+        }
+      }, 180);
+    }
+
+    function completeStationEditorSaveProgress(message) {
+      clearStationEditorProgressTimer();
+      clearStationEditorStatusResetTimer();
+      stationEditorState.saveProgressPhase = 'success';
+      stationEditorState.saveProgressVisible = true;
+      stationEditorState.saveProgressValue = 100;
+      stationEditorState.message = message || '駐站收案配置已更新。';
+      renderStationEditor();
+      showStationEditorToast({ icon: 'success', title: stationEditorState.message, timer: 2600 });
+
+      window.setTimeout(() => {
+        if (stationEditorState.saveProgressPhase !== 'success') return;
+        stationEditorState.saveProgressVisible = false;
+        renderStationEditor();
+      }, 320);
+
+      stationEditorState.statusResetTimerId = window.setTimeout(() => {
+        stationEditorState.statusResetTimerId = null;
+        if (stationEditorState.saveProgressPhase !== 'success') return;
+        stationEditorState.saveProgressPhase = 'idle';
+        stationEditorState.message = '';
+        stationEditorState.saveProgressValue = 0;
+        stationEditorState.saveProgressVisible = false;
+        if (stationEditorState.isOpen) {
+          renderStationEditor();
+        }
+      }, 3000);
+    }
+
+    function failStationEditorSaveProgress(message) {
+      clearStationEditorProgressTimer();
+      clearStationEditorStatusResetTimer();
+      stationEditorState.saveProgressPhase = 'error';
+      stationEditorState.saveProgressVisible = false;
+      stationEditorState.saveProgressValue = 0;
+      stationEditorState.message = message || '儲存失敗。';
+      renderStationEditor();
+      showStationEditorToast({ icon: 'error', title: stationEditorState.message, timer: 3200 });
     }
 
     async function refreshUserProfileCard() {
@@ -1419,7 +1573,7 @@
       modal.setAttribute('aria-hidden', 'false');
       stationEditorState.isOpen = true;
       stationEditorState.isLoading = true;
-      stationEditorState.message = '';
+      resetStationEditorSaveFeedback();
       renderStationEditor();
 
       try {
@@ -1452,6 +1606,8 @@
       if (hasStationEditorDirtyChanges() && !window.confirm('尚有未儲存的駐站異動，確定要關閉嗎？')) {
         return;
       }
+      clearStationEditorProgressTimer();
+      clearStationEditorStatusResetTimer();
       stationEditorState = createInitialStationEditorState();
       const modal = document.getElementById('station-editor-modal');
       modal.classList.add('hidden');
@@ -2082,7 +2238,7 @@
       }
 
       stationEditorState.isSaving = true;
-      stationEditorState.message = '';
+      startStationEditorSaveProgress(changes.length);
       renderStationEditor();
 
       try {
@@ -2095,13 +2251,12 @@
         stationEditorState.draftData = cloneStationEditorData(normalized);
         stationEditorState.managerSelections = {};
         stationEditorState.selfNewStationCode = '';
-        stationEditorState.message = response.message || '駐站收案配置已更新。';
         await refreshUserProfileCard();
-      } catch (error) {
-        stationEditorState.message = error && error.message ? error.message : '儲存失敗。';
-      } finally {
         stationEditorState.isSaving = false;
-        renderStationEditor();
+        completeStationEditorSaveProgress(response.message || '駐站收案配置已更新。');
+      } catch (error) {
+        stationEditorState.isSaving = false;
+        failStationEditorSaveProgress(error && error.message ? error.message : '儲存失敗。');
       }
     }
 
@@ -2176,13 +2331,30 @@
       if (hasChanges) statusParts.push(`待儲存異動 ${changes.length} 筆`);
       if (stationEditorState.isSaving) statusParts.push('儲存中...');
       if (stationEditorState.message) statusParts.push(stationEditorState.message);
+      const showProgress = stationEditorState.saveProgressVisible;
+      const progressPhaseClass = stationEditorState.saveProgressPhase === 'success'
+        ? ' is-success'
+        : stationEditorState.saveProgressPhase === 'error'
+          ? ' is-error'
+          : '';
+      const progressLabel = stationEditorState.saveProgressPhase === 'success'
+        ? '儲存完成'
+        : stationEditorState.saveProgressPhase === 'error'
+          ? '儲存失敗'
+          : '正在同步駐站收案配置';
       if (hasChanges) {
         statusEl.innerHTML = `
           <div class="editor-status-summary">
-            <span>${escapeHtml(statusParts.join('｜') || '尚未修改。')}</span>
+            <span class="editor-status-text">${escapeHtml(statusParts.join('｜') || '尚未修改。')}</span>
             <button type="button" class="editor-status-toggle" data-change-toggle="${stationEditorState.changeListExpanded ? 'collapse' : 'expand'}">
               ${stationEditorState.changeListExpanded ? '收合明細' : '展開明細'}
             </button>
+          </div>
+          <div class="editor-progress${progressPhaseClass}${showProgress ? '' : ' hidden'}">
+            <div class="editor-progress-track">
+              <div class="editor-progress-fill" style="width: ${Math.max(0, Math.min(100, Number(stationEditorState.saveProgressValue || 0)))}%;"></div>
+            </div>
+            <div class="editor-progress-label">${escapeHtml(progressLabel)}</div>
           </div>
         `;
         const toggleButton = statusEl.querySelector('[data-change-toggle]');
@@ -2193,7 +2365,17 @@
           });
         }
       } else {
-        statusEl.textContent = statusParts.join('｜') || '尚未修改。';
+        statusEl.innerHTML = `
+          <div class="editor-status-summary">
+            <span class="editor-status-text">${escapeHtml(statusParts.join('｜') || '尚未修改。')}</span>
+          </div>
+          <div class="editor-progress${progressPhaseClass}${showProgress ? '' : ' hidden'}">
+            <div class="editor-progress-track">
+              <div class="editor-progress-fill" style="width: ${Math.max(0, Math.min(100, Number(stationEditorState.saveProgressValue || 0)))}%;"></div>
+            </div>
+            <div class="editor-progress-label">${escapeHtml(progressLabel)}</div>
+          </div>
+        `;
       }
       renderStationEditorChangeList(changeListEl, changeEntries);
     }
