@@ -1481,6 +1481,16 @@
       const rowsByKey = new Map();
       if (!data) return [];
 
+      const allStations = Array.isArray(data.allStations) ? data.allStations : [];
+      if (allStations.length > 0) {
+        allStations.forEach((station) => {
+          (Array.isArray(station.members) ? station.members : []).forEach((item) => {
+            rowsByKey.set(buildEditorRowKey(item), { ...item });
+          });
+        });
+        return Array.from(rowsByKey.values());
+      }
+
       (Array.isArray(data.selfAssignments) ? data.selfAssignments : []).forEach((item) => {
         rowsByKey.set(buildEditorRowKey(item), { ...item });
       });
