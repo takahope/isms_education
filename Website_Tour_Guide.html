@@ -560,6 +560,16 @@
         beforeShow: async () => {
           await ensureStationEditorReadyForTour('managed');
         }
+      },
+      {
+        selector: '#start-training-btn',
+        title: '隨時可以開始訓練',
+        content: '完成首頁確認後，您可以隨時按這裡開始進行教育訓練。',
+        placement: 'top',
+        beforeShow: async () => {
+          closeStationEditorForTour();
+          await sleepForWebsiteTour(120);
+        }
       }
     ];
   }
@@ -704,6 +714,16 @@
     }
     renderStationEditor();
     await sleepForWebsiteTour(80);
+  }
+
+  function closeStationEditorForTour() {
+    if (!stationEditorState.isOpen) return;
+    clearStationEditorProgressTimer();
+    clearStationEditorStatusResetTimer();
+    stationEditorState = createInitialStationEditorState();
+    const modal = document.getElementById('station-editor-modal');
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
   }
 
   function waitForTourVisibility(element, timeoutMs, selector) {
