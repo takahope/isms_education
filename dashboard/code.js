@@ -45,6 +45,45 @@ function authorizeDashboardProject() {
   };
 }
 
+function authorizeDashboardMailAccess() {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+  try {
+    const mailQuota = MailApp.getRemainingDailyQuota();
+    return {
+      success: true,
+      viewerEmail,
+      mailQuota,
+      dashboardUrl: buildDashboardUrl_(),
+      message: '寄信權限已授權，可重新測試通知寄送。'
+    };
+  } catch (error) {
+    return {
+      success: false,
+      viewerEmail,
+      message: `寄信權限授權失敗：${error && error.message ? error.message : String(error)}。請在 Apps Script 編輯器手動執行 authorizeDashboardMailAccess() 並完成 Google 授權。`
+    };
+  }
+}
+
+function checkDashboardMailAccess() {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+  try {
+    const mailQuota = MailApp.getRemainingDailyQuota();
+    return {
+      success: true,
+      viewerEmail,
+      mailQuota,
+      message: '目前寄信權限可用。'
+    };
+  } catch (error) {
+    return {
+      success: false,
+      viewerEmail,
+      message: `目前尚未取得寄信權限：${error && error.message ? error.message : String(error)}。請在 Apps Script 編輯器手動執行 authorizeDashboardMailAccess() 並完成 Google 授權。`
+    };
+  }
+}
+
 function getCurrentUserEmail() {
   try {
     return Session.getActiveUser().getEmail() || '';
