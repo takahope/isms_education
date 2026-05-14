@@ -1,18 +1,22 @@
 const DASHBOARD_CONFIG = {
   allowedEmailsPropertyKey: 'DASHBOARD_ALLOWED_EMAILS',
+  notificationAllowedEmailsPropertyKey: 'DASHBOARD_NOTIFICATION_ALLOWED_EMAILS',
   requiredWatchSeconds: 60 * 60,
   recentActivityDays: 7,
   defaultCourseTitle: '資安暨個資教育訓練',
   maxAlertItems: 8,
   personnelSheetName: '人員主檔',
+  orgSheetName: '組織架構樹',
   assignmentSheetName: '人員職務配置',
   trainingRecordSheetName: '訓練紀錄',
-  progressSheetName: '觀看進度'
+  progressSheetName: '觀看進度',
+  notificationLogSheetName: '通知紀錄'
 };
 
 const TRAINING_SHEET_HEADERS = {
   訓練紀錄: ['時間戳記', '姓名', '使用者信箱', '課程名稱', '測驗分數', '測驗結果', '測驗批次ID', '題目數', '及格門檻'],
-  觀看進度: ['使用者信箱', '課程名稱', '影片ID', '已觀看區間', '已觀看秒數', '最後播放位置', '最後更新時間', '最後同步來源版本']
+  觀看進度: ['使用者信箱', '課程名稱', '影片ID', '已觀看區間', '已觀看秒數', '最後播放位置', '最後更新時間', '最後同步來源版本'],
+  通知紀錄: ['時間戳記', '操作者信箱', '課程名稱', '組織類型', '層級', '組別代碼', '包含下層', '狀態篩選', '主旨', '收件人數', '成功數', '略過數']
 };
 
 function doGet() {
@@ -21,8 +25,9 @@ function doGet() {
 
 function authorizeDashboardProject() {
   const viewerEmail = normalizeEmail_(getCurrentUserEmail());
-  const allowedEmailsRaw = PropertiesService.getScriptProperties()
-    .getProperty(DASHBOARD_CONFIG.allowedEmailsPropertyKey) || '';
+  const properties = PropertiesService.getScriptProperties();
+  const allowedEmailsRaw = properties.getProperty(DASHBOARD_CONFIG.allowedEmailsPropertyKey) || '';
+  const notificationAllowedRaw = properties.getProperty(DASHBOARD_CONFIG.notificationAllowedEmailsPropertyKey) || '';
   const masterSS = getMasterSpreadsheet_();
   const trainingSS = getTrainingSpreadsheet_();
 
@@ -31,6 +36,8 @@ function authorizeDashboardProject() {
     viewerEmail,
     allowedEmailsPropertyKey: DASHBOARD_CONFIG.allowedEmailsPropertyKey,
     allowedEmailsConfigured: Boolean(String(allowedEmailsRaw).trim()),
+    notificationAllowedEmailsPropertyKey: DASHBOARD_CONFIG.notificationAllowedEmailsPropertyKey,
+    notificationAllowedEmailsConfigured: Boolean(String(notificationAllowedRaw).trim()),
     masterSpreadsheetId: masterSS.getId(),
     masterSpreadsheetName: masterSS.getName(),
     trainingSpreadsheetId: trainingSS.getId(),
@@ -49,12 +56,7 @@ function getCurrentUserEmail() {
 function getTrainingDashboardBootstrap() {
   const viewerEmail = normalizeEmail_(getCurrentUserEmail());
   if (!canAccessDashboard_(viewerEmail)) {
-    return {
-      success: false,
-      authorized: false,
-      viewerEmail,
-      message: '您沒有查看學員訓練儀表板的權限。'
-    };
+    return buildDashboardPermissionResponse_(viewerEmail, false, '您沒有查看學員訓練儀表板的權限。');
   }
 
   return {
@@ -63,19 +65,15 @@ function getTrainingDashboardBootstrap() {
     viewerEmail,
     requiredWatchSeconds: DASHBOARD_CONFIG.requiredWatchSeconds,
     dashboardUrl: buildDashboardUrl_(),
-    courseTitle: DASHBOARD_CONFIG.defaultCourseTitle
+    courseTitle: DASHBOARD_CONFIG.defaultCourseTitle,
+    canSendNotifications: canSendDashboardNotifications_(viewerEmail)
   };
 }
 
 function getTrainingDashboardData(filters) {
   const viewerEmail = normalizeEmail_(getCurrentUserEmail());
   if (!canAccessDashboard_(viewerEmail)) {
-    return {
-      success: false,
-      authorized: false,
-      viewerEmail,
-      message: '您沒有查看學員訓練儀表板的權限。'
-    };
+    return buildDashboardPermissionResponse_(viewerEmail, false, '您沒有查看學員訓練儀表板的權限。');
   }
 
   try {
@@ -88,13 +86,55 @@ function getTrainingDashboardData(filters) {
     };
   } catch (error) {
     console.error('載入訓練儀表板失敗:', error);
-    return {
-      success: false,
-      authorized: true,
+    return buildDashboardPermissionResponse_(
       viewerEmail,
-      message: error && error.message ? error.message : '無法載入訓練儀表板資料。'
-    };
+      true,
+      error && error.message ? error.message : '無法載入訓練儀表板資料。'
+    );
   }
+}
+
+function getTrainingNotificationBootstrap() {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+  if (!canAccessDashboard_(viewerEmail)) {
+    return buildDashboardPermissionResponse_(viewerEmail, false, '您沒有查看學員訓練儀表板的權限。');
+  }
+  if (!canSendDashboardNotifications_(viewerEmail)) {
+    return buildDashboardPermissionResponse_(viewerEmail, true, '您目前沒有寄送課程通知的權限。');
+  }
+
+  const context = buildDashboardContext_();
+  const orgOptions = buildNotificationOrgOptions_(context.orgNodes);
+
+  return {
+    success: true,
+    authorized: true,
+    viewerEmail,
+    canSendNotifications: true,
+    dashboardUrl: buildDashboardUrl_(),
+    courseTitle: context.courseTitle,
+    placeholderTokens: [
+      '{{姓名}}',
+      '{{信箱}}',
+      '{{單位}}',
+      '{{職稱}}',
+      '{{課程名稱}}',
+      '{{訓練狀態}}',
+      '{{觀看進度}}',
+      '{{最佳分數}}',
+      '{{儀表板網址}}'
+    ],
+    defaultTemplate: buildDefaultNotificationTemplate_(context.courseTitle),
+    orgOptions
+  };
+}
+
+function previewTrainingNotification(payload) {
+  return executeTrainingNotification_(payload, { dryRun: true });
+}
+
+function sendTrainingNotification(payload) {
+  return executeTrainingNotification_(payload, { dryRun: false });
 }
 
 function renderDashboardPage_() {
@@ -118,8 +158,24 @@ function canAccessDashboard_(viewerEmail) {
   return getDashboardAllowedEmails_().includes(normalizedViewerEmail);
 }
 
+function canSendDashboardNotifications_(viewerEmail) {
+  const normalizedViewerEmail = normalizeEmail_(viewerEmail);
+  if (!normalizedViewerEmail) return false;
+  const explicitAllowed = getDashboardNotificationAllowedEmails_();
+  if (explicitAllowed.length === 0) return getDashboardAllowedEmails_().includes(normalizedViewerEmail);
+  return explicitAllowed.includes(normalizedViewerEmail);
+}
+
 function getDashboardAllowedEmails_() {
-  const raw = PropertiesService.getScriptProperties().getProperty(DASHBOARD_CONFIG.allowedEmailsPropertyKey) || '';
+  return parseEmailListProperty_(DASHBOARD_CONFIG.allowedEmailsPropertyKey);
+}
+
+function getDashboardNotificationAllowedEmails_() {
+  return parseEmailListProperty_(DASHBOARD_CONFIG.notificationAllowedEmailsPropertyKey);
+}
+
+function parseEmailListProperty_(propertyKey) {
+  const raw = PropertiesService.getScriptProperties().getProperty(propertyKey) || '';
   return raw
     .split(/[\n,;]+/)
     .map((item) => normalizeEmail_(item))
@@ -217,16 +273,43 @@ function buildDashboardAccessDeniedHtml_(viewerEmail) {
 }
 
 function buildTrainingDashboardData_() {
-  const generatedAt = new Date();
-  const roster = loadDashboardRoster_();
-  const trainingRecords = loadTrainingRecords_();
-  const progressRecords = loadProgressRecords_();
+  const context = buildDashboardContext_();
+  return {
+    generatedAt: new Date().toISOString(),
+    courseTitle: context.courseTitle,
+    requiredWatchSeconds: DASHBOARD_CONFIG.requiredWatchSeconds,
+    kpis: buildDashboardKpis_(context.learners, new Date()),
+    units: buildDashboardUnitSummary_(context.learners),
+    alerts: buildDashboardAlerts_(context.learners, new Date()),
+    learners: context.learners
+  };
+}
+
+function buildDashboardContext_() {
+  const masterSS = getMasterSpreadsheet_();
+  const trainingSS = getTrainingSpreadsheet_();
+  const personnelSheet = getRequiredSheet_(masterSS, DASHBOARD_CONFIG.personnelSheetName);
+  const assignmentSheet = getOptionalSheet_(masterSS, DASHBOARD_CONFIG.assignmentSheetName);
+  const orgSheet = getOptionalSheet_(masterSS, DASHBOARD_CONFIG.orgSheetName);
+
+  const personnelRows = personnelSheet.getDataRange().getDisplayValues();
+  const assignments = assignmentSheet ? readAllAssignments_(assignmentSheet) : [];
+  const orgNodes = orgSheet ? readOrgNodes_(orgSheet) : [];
+  const orgNodeMap = buildOrgNodeMap_(orgNodes);
+  const assignmentSummaries = buildDashboardAssignmentSummaryByEmail_(assignments, orgNodeMap);
+  const trainingRecords = loadTrainingRecords_(trainingSS);
+  const progressRecords = loadProgressRecords_(trainingSS);
   const quizByEmail = buildQuizSummaryByEmail_(trainingRecords);
   const progressByEmail = buildProgressSummaryByEmail_(progressRecords);
-  const learnerRows = roster.map((person) => {
-    const normalizedEmail = normalizeEmail_(person.email);
-    const quiz = quizByEmail.get(normalizedEmail) || createEmptyQuizSummary_();
-    const progress = progressByEmail.get(normalizedEmail) || createEmptyProgressSummary_();
+  const learners = [];
+
+  for (let i = 1; i < personnelRows.length; i += 1) {
+    const email = normalizeEmail_(personnelRows[i][0]);
+    if (!email) continue;
+    const name = String(personnelRows[i][1] || '').trim();
+    const assignment = assignmentSummaries.get(email) || createEmptyAssignmentSummary_();
+    const quiz = quizByEmail.get(email) || createEmptyQuizSummary_();
+    const progress = progressByEmail.get(email) || createEmptyProgressSummary_();
     const watchedPercent = DASHBOARD_CONFIG.requiredWatchSeconds > 0
       ? Math.min(100, Math.round((progress.watchedSecondsCount / DASHBOARD_CONFIG.requiredWatchSeconds) * 100))
       : 0;
@@ -234,13 +317,16 @@ function buildTrainingDashboardData_() {
     const status = resolveLearnerTrainingStatus_(watchCompleted, quiz.hasPassed, progress.watchedSecondsCount, quiz.attemptCount);
     const lastActivityAt = getLatestTimestampString_(progress.updatedAt, quiz.latestAttemptAt);
 
-    return {
-      email: normalizedEmail,
-      name: person.name,
-      assignmentLabel: person.assignmentLabel,
-      assignmentType: person.assignmentType,
-      assignmentOrgName: person.assignmentOrgName,
-      assignmentTitle: person.assignmentTitle,
+    learners.push({
+      email,
+      name,
+      assignmentLabel: assignment.assignmentLabel,
+      assignmentType: assignment.assignmentType,
+      assignmentOrgCode: assignment.assignmentOrgCode,
+      assignmentOrgName: assignment.assignmentOrgName,
+      assignmentOrgLevel: assignment.assignmentOrgLevel,
+      assignmentOrgType: assignment.assignmentOrgType,
+      assignmentTitle: assignment.assignmentTitle,
       watchedSecondsCount: progress.watchedSecondsCount,
       watchedPercent,
       watchCompleted,
@@ -258,10 +344,10 @@ function buildTrainingDashboardData_() {
       statusLabel: getLearnerStatusLabel_(status),
       lastActivityAt,
       hasAnyActivity: Boolean(progress.watchedSecondsCount > 0 || quiz.attemptCount > 0)
-    };
-  });
+    });
+  }
 
-  learnerRows.sort((left, right) => {
+  learners.sort((left, right) => {
     const statusDiff = getDashboardStatusSortOrder_(left.status) - getDashboardStatusSortOrder_(right.status);
     if (statusDiff !== 0) return statusDiff;
     const activityDiff = compareDashboardTimestamps_(right.lastActivityAt, left.lastActivityAt);
@@ -270,38 +356,12 @@ function buildTrainingDashboardData_() {
   });
 
   return {
-    generatedAt: generatedAt.toISOString(),
-    courseTitle: resolveDashboardCourseTitle_(learnerRows),
-    requiredWatchSeconds: DASHBOARD_CONFIG.requiredWatchSeconds,
-    kpis: buildDashboardKpis_(learnerRows, generatedAt),
-    units: buildDashboardUnitSummary_(learnerRows),
-    alerts: buildDashboardAlerts_(learnerRows, generatedAt),
-    learners: learnerRows
+    learners,
+    assignments,
+    orgNodes,
+    orgNodeMap,
+    courseTitle: resolveDashboardCourseTitle_(learners)
   };
-}
-
-function loadDashboardRoster_() {
-  const masterSS = getMasterSpreadsheet_();
-  const personnelSheet = getRequiredSheet_(masterSS, DASHBOARD_CONFIG.personnelSheetName);
-  const assignmentSheet = getOptionalSheet_(masterSS, DASHBOARD_CONFIG.assignmentSheetName);
-  const personnelRows = personnelSheet.getDataRange().getDisplayValues();
-  const allAssignments = assignmentSheet ? readAllAssignments_(assignmentSheet) : [];
-  const assignmentByEmail = buildDashboardAssignmentSummaryByEmail_(allAssignments);
-  const roster = [];
-
-  for (let i = 1; i < personnelRows.length; i += 1) {
-    const email = normalizeEmail_(personnelRows[i][0]);
-    if (!email) continue;
-    const name = String(personnelRows[i][1] || '').trim();
-    const assignment = assignmentByEmail.get(email) || createEmptyAssignmentSummary_();
-    roster.push({
-      email,
-      name,
-      ...assignment
-    });
-  }
-
-  return roster;
 }
 
 function readAllAssignments_(sheet) {
@@ -317,21 +377,55 @@ function readAllAssignments_(sheet) {
       orgCode: String(rows[i][2] || '').trim(),
       orgName: String(rows[i][3] || '').trim(),
       title: String(rows[i][4] || '').trim(),
-      managerEmail: normalizeEmail_(rows[i][5])
+      managerEmail: normalizeEmail_(rows[i][5]),
+      managerName: String(rows[i][6] || '').trim()
     });
   }
   return assignments;
 }
 
-function buildDashboardAssignmentSummaryByEmail_(assignments) {
+function readOrgNodes_(sheet) {
+  const rows = sheet.getDataRange().getDisplayValues();
+  const nodes = [];
+  for (let i = 1; i < rows.length; i += 1) {
+    const code = String(rows[i][2] || '').trim();
+    if (!code) continue;
+    nodes.push({
+      rowIndex: i + 1,
+      type: String(rows[i][0] || '').trim(),
+      level: Number(rows[i][1] || 0),
+      code,
+      name: String(rows[i][3] || '').trim(),
+      alias: String(rows[i][4] || '').trim(),
+      parentCode: String(rows[i][5] || '').trim(),
+      managerEmail: normalizeEmail_(rows[i][6]),
+      managerName: String(rows[i][7] || '').trim()
+    });
+  }
+  return nodes;
+}
+
+function buildOrgNodeMap_(orgNodes) {
+  const map = new Map();
+  orgNodes.forEach((node) => {
+    map.set(normalizeOrgCode_(node.code), node);
+  });
+  return map;
+}
+
+function buildDashboardAssignmentSummaryByEmail_(assignments, orgNodeMap) {
   const assignmentTypeMap = buildAssignmentTypeMap_(assignments);
   const grouped = new Map();
 
   assignments.forEach((assignment) => {
     const email = normalizeEmail_(assignment.email);
     if (!grouped.has(email)) grouped.set(email, []);
+    const orgNode = orgNodeMap.get(normalizeOrgCode_(assignment.orgCode)) || null;
     grouped.get(email).push({
+      orgCode: assignment.orgCode,
       orgName: assignment.orgName,
+      orgType: orgNode ? String(orgNode.type || '').trim() : '',
+      orgLevel: orgNode ? Number(orgNode.level || 0) : 0,
       title: assignment.title,
       type: assignmentTypeMap.get(getAssignmentIdentityKey_(assignment)) || '兼任'
     });
@@ -352,7 +446,10 @@ function buildDashboardAssignmentSummaryByEmail_(assignments) {
     summaryByEmail.set(email, {
       assignmentLabel,
       assignmentType: primaryItem ? primaryItem.type : '',
+      assignmentOrgCode: primaryItem ? primaryItem.orgCode : '',
       assignmentOrgName: primaryItem ? primaryItem.orgName : '',
+      assignmentOrgType: primaryItem ? primaryItem.orgType : '',
+      assignmentOrgLevel: primaryItem ? Number(primaryItem.orgLevel || 0) : 0,
       assignmentTitle: primaryItem ? primaryItem.title : ''
     });
   });
@@ -364,17 +461,21 @@ function createEmptyAssignmentSummary_() {
   return {
     assignmentLabel: '未設定職務',
     assignmentType: '',
+    assignmentOrgCode: '',
     assignmentOrgName: '',
+    assignmentOrgType: '',
+    assignmentOrgLevel: 0,
     assignmentTitle: ''
   };
 }
 
-function loadTrainingRecords_() {
-  const ss = getTrainingSpreadsheet_();
-  const sheet = getOptionalSheet_(ss, DASHBOARD_CONFIG.trainingRecordSheetName);
+function loadTrainingRecords_(trainingSS) {
+  const sheet = getOptionalSheet_(trainingSS, DASHBOARD_CONFIG.trainingRecordSheetName);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
-  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, TRAINING_SHEET_HEADERS[DASHBOARD_CONFIG.trainingRecordSheetName].length).getDisplayValues();
+  const rows = sheet
+    .getRange(2, 1, sheet.getLastRow() - 1, TRAINING_SHEET_HEADERS[DASHBOARD_CONFIG.trainingRecordSheetName].length)
+    .getDisplayValues();
   return rows
     .filter((row) => normalizeEmail_(row[2]))
     .map((row) => ({
@@ -387,12 +488,13 @@ function loadTrainingRecords_() {
     }));
 }
 
-function loadProgressRecords_() {
-  const ss = getTrainingSpreadsheet_();
-  const sheet = getOptionalSheet_(ss, DASHBOARD_CONFIG.progressSheetName);
+function loadProgressRecords_(trainingSS) {
+  const sheet = getOptionalSheet_(trainingSS, DASHBOARD_CONFIG.progressSheetName);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
-  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, TRAINING_SHEET_HEADERS[DASHBOARD_CONFIG.progressSheetName].length).getDisplayValues();
+  const rows = sheet
+    .getRange(2, 1, sheet.getLastRow() - 1, TRAINING_SHEET_HEADERS[DASHBOARD_CONFIG.progressSheetName].length)
+    .getDisplayValues();
   return rows
     .filter((row) => normalizeEmail_(row[0]))
     .map((row) => ({
@@ -562,24 +664,18 @@ function buildDashboardUnitSummary_(learners) {
 
 function buildDashboardAlerts_(learners, now) {
   const recentThresholdMs = now.getTime() - (DASHBOARD_CONFIG.recentActivityDays * 24 * 60 * 60 * 1000);
-  const pendingQuiz = learners
-    .filter((learner) => learner.status === 'pending_quiz')
-    .slice(0, DASHBOARD_CONFIG.maxAlertItems);
-  const staleInProgress = learners
-    .filter((learner) => {
-      if (learner.status !== 'in_progress') return false;
-      const activityMs = parseDashboardTimestampMs_(learner.lastActivityAt);
-      return !activityMs || activityMs < recentThresholdMs;
-    })
-    .slice(0, DASHBOARD_CONFIG.maxAlertItems);
-  const latestFailed = learners
-    .filter((learner) => learner.latestResult === '未通過' && !learner.hasPassed)
-    .slice(0, DASHBOARD_CONFIG.maxAlertItems);
-
   return {
-    pendingQuiz,
-    staleInProgress,
-    latestFailed
+    pendingQuiz: learners.filter((learner) => learner.status === 'pending_quiz').slice(0, DASHBOARD_CONFIG.maxAlertItems),
+    staleInProgress: learners
+      .filter((learner) => {
+        if (learner.status !== 'in_progress') return false;
+        const activityMs = parseDashboardTimestampMs_(learner.lastActivityAt);
+        return !activityMs || activityMs < recentThresholdMs;
+      })
+      .slice(0, DASHBOARD_CONFIG.maxAlertItems),
+    latestFailed: learners
+      .filter((learner) => learner.latestResult === '未通過' && !learner.hasPassed)
+      .slice(0, DASHBOARD_CONFIG.maxAlertItems)
   };
 }
 
@@ -607,6 +703,324 @@ function parseDashboardTimestampMs_(value) {
   return Number.isNaN(time) ? 0 : time;
 }
 
+function buildNotificationOrgOptions_(orgNodes) {
+  const typeMap = new Map();
+  orgNodes.forEach((node) => {
+    const typeKey = String(node.type || '').trim();
+    if (!typeKey) return;
+    if (!typeMap.has(typeKey)) typeMap.set(typeKey, new Map());
+    const levelMap = typeMap.get(typeKey);
+    const levelKey = Number(node.level || 0);
+    if (!levelMap.has(levelKey)) levelMap.set(levelKey, []);
+    levelMap.get(levelKey).push({
+      code: node.code,
+      name: node.name,
+      alias: node.alias,
+      parentCode: node.parentCode,
+      managerName: node.managerName
+    });
+  });
+
+  return Array.from(typeMap.keys())
+    .sort((left, right) => left.localeCompare(right, 'en'))
+    .map((typeKey) => ({
+      type: typeKey,
+      levels: Array.from(typeMap.get(typeKey).keys())
+        .sort((left, right) => left - right)
+        .map((levelKey) => ({
+          level: levelKey,
+          groups: typeMap.get(typeKey).get(levelKey)
+            .slice()
+            .sort((left, right) => `${left.name}${left.code}`.localeCompare(`${right.name}${right.code}`, 'zh-Hant'))
+        }))
+    }));
+}
+
+function buildDefaultNotificationTemplate_(courseTitle) {
+  return {
+    subject: `【教育訓練通知】${courseTitle} 尚待完成`,
+    htmlBody: [
+      '<p>{{姓名}} 您好：</p>',
+      `<p>提醒您，<strong>${escapeHtml_(courseTitle)}</strong> 尚待完成。</p>`,
+      '<p>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}<br>觀看進度：{{觀看進度}}<br>最佳分數：{{最佳分數}}</p>',
+      '<p>請盡速至教育訓練系統完成課程與測驗。</p>',
+      '<p><a href="{{儀表板網址}}">前往儀表板</a></p>'
+    ].join('')
+  };
+}
+
+function executeTrainingNotification_(payload, options) {
+  const dryRun = Boolean(options && options.dryRun);
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+  if (!canAccessDashboard_(viewerEmail)) {
+    return buildDashboardPermissionResponse_(viewerEmail, false, '您沒有查看學員訓練儀表板的權限。');
+  }
+  if (!canSendDashboardNotifications_(viewerEmail)) {
+    return buildDashboardPermissionResponse_(viewerEmail, true, '您目前沒有寄送課程通知的權限。');
+  }
+
+  try {
+    const normalizedPayload = normalizeNotificationPayload_(payload);
+    const context = buildDashboardContext_();
+    const selection = selectNotificationRecipients_(context, normalizedPayload);
+    const previewRecipient = selection.recipients[0] || null;
+    const sampleSubject = previewRecipient
+      ? applyNotificationTemplate_(normalizedPayload.template.subject, previewRecipient, context.courseTitle, buildDashboardUrl_())
+      : normalizedPayload.template.subject;
+    const sampleHtmlBody = previewRecipient
+      ? applyNotificationTemplate_(normalizedPayload.template.htmlBody, previewRecipient, context.courseTitle, buildDashboardUrl_())
+      : normalizedPayload.template.htmlBody;
+
+    if (dryRun) {
+      return {
+        success: true,
+        authorized: true,
+        viewerEmail,
+        mode: 'preview',
+        courseTitle: context.courseTitle,
+        criteriaSummary: buildNotificationCriteriaSummary_(normalizedPayload),
+        recipientCount: selection.recipients.length,
+        skippedCount: selection.skipped.length,
+        recipients: selection.recipients.slice(0, 200),
+        skipped: selection.skipped.slice(0, 200),
+        sampleSubject,
+        sampleHtmlBody
+      };
+    }
+
+    const failures = [];
+    let sentCount = 0;
+    selection.recipients.forEach((recipient) => {
+      const subject = applyNotificationTemplate_(normalizedPayload.template.subject, recipient, context.courseTitle, buildDashboardUrl_());
+      const htmlBody = applyNotificationTemplate_(normalizedPayload.template.htmlBody, recipient, context.courseTitle, buildDashboardUrl_());
+      try {
+        MailApp.sendEmail({
+          to: recipient.email,
+          subject,
+          htmlBody
+        });
+        sentCount += 1;
+      } catch (error) {
+        failures.push({
+          email: recipient.email,
+          name: recipient.name,
+          message: error && error.message ? error.message : String(error)
+        });
+      }
+    });
+
+    appendNotificationLog_({
+      operatorEmail: viewerEmail,
+      courseTitle: context.courseTitle,
+      payload: normalizedPayload,
+      recipientCount: selection.recipients.length,
+      sentCount,
+      skippedCount: selection.skipped.length + failures.length
+    });
+
+    return {
+      success: true,
+      authorized: true,
+      viewerEmail,
+      mode: 'send',
+      courseTitle: context.courseTitle,
+      criteriaSummary: buildNotificationCriteriaSummary_(normalizedPayload),
+      recipientCount: selection.recipients.length,
+      sentCount,
+      skippedCount: selection.skipped.length,
+      failureCount: failures.length,
+      skipped: selection.skipped.slice(0, 200),
+      failed: failures.slice(0, 200)
+    };
+  } catch (error) {
+    console.error('寄送通知失敗:', error);
+    return buildDashboardPermissionResponse_(
+      viewerEmail,
+      true,
+      error && error.message ? error.message : '寄送通知失敗。'
+    );
+  }
+}
+
+function normalizeNotificationPayload_(payload) {
+  const target = payload && payload.target ? payload.target : {};
+  const template = payload && payload.template ? payload.template : {};
+  const trainingStatus = String(payload && payload.trainingStatus || 'incomplete').trim() || 'incomplete';
+  const includeDescendants = Boolean(target.includeDescendants);
+  const orgType = String(target.orgType || '').trim();
+  const levelValue = String(typeof target.level === 'undefined' || target.level === null ? '' : target.level).trim();
+  const orgLevel = levelValue === '' ? '' : Number(levelValue);
+  const orgCode = String(target.orgCode || '').trim();
+  const assignmentMatch = String(target.assignmentMatch || 'primary_only').trim() || 'primary_only';
+  const subject = String(template.subject || '').trim();
+  const htmlBody = String(template.htmlBody || '').trim();
+
+  if (!subject) throw new Error('通知主旨不得為空。');
+  if (!htmlBody) throw new Error('通知內文不得為空。');
+  if (!orgType) throw new Error('請選擇組織類型。');
+  if (assignmentMatch !== 'primary_only') throw new Error('目前僅支援依主職寄送。');
+  if (levelValue !== '' && (!Number.isFinite(orgLevel) || orgLevel <= 0)) throw new Error('組織層級格式不正確。');
+
+  return {
+    target: {
+      orgType,
+      level: levelValue === '' ? '' : orgLevel,
+      orgCode,
+      includeDescendants,
+      assignmentMatch
+    },
+    trainingStatus,
+    template: {
+      subject,
+      htmlBody
+    }
+  };
+}
+
+function selectNotificationRecipients_(context, payload) {
+  const orgCodes = resolveNotificationTargetOrgCodes_(context.orgNodes, payload.target);
+  const orgCodeSet = new Set(orgCodes.map((item) => normalizeOrgCode_(item)));
+  const dedupe = new Set();
+  const recipients = [];
+  const skipped = [];
+
+  context.learners.forEach((learner) => {
+    const reasons = [];
+    if (!learner.email) reasons.push('缺少信箱');
+    if (learner.assignmentType && learner.assignmentType !== '主職') reasons.push('非主職');
+    if (learner.assignmentOrgType !== payload.target.orgType) reasons.push('組織類型不符');
+    if (payload.target.level !== '' && Number(learner.assignmentOrgLevel || 0) !== Number(payload.target.level)) reasons.push('層級不符');
+    if (orgCodeSet.size > 0 && !orgCodeSet.has(normalizeOrgCode_(learner.assignmentOrgCode))) reasons.push('不在目標組織');
+    if (!matchesNotificationStatusFilter_(learner.status, payload.trainingStatus)) reasons.push('訓練狀態不符');
+    if (!isValidEmail_(learner.email)) reasons.push('信箱格式不正確');
+    if (dedupe.has(learner.email)) reasons.push('重複信箱');
+
+    if (reasons.length > 0) {
+      if (reasons[0] === '缺少信箱' || reasons[0] === '信箱格式不正確' || reasons[0] === '重複信箱') {
+        skipped.push({
+          email: learner.email,
+          name: learner.name,
+          reason: reasons[0]
+        });
+      }
+      return;
+    }
+
+    dedupe.add(learner.email);
+    recipients.push({
+      email: learner.email,
+      name: learner.name,
+      assignmentOrgName: learner.assignmentOrgName,
+      assignmentTitle: learner.assignmentTitle,
+      watchedPercent: learner.watchedPercent,
+      bestScore: learner.bestScore,
+      status: learner.status,
+      statusLabel: learner.statusLabel
+    });
+  });
+
+  return { recipients, skipped };
+}
+
+function resolveNotificationTargetOrgCodes_(orgNodes, target) {
+  const filteredByType = orgNodes.filter((node) => String(node.type || '').trim() === target.orgType);
+  if (!target.orgCode) {
+    if (target.level === '') return filteredByType.map((node) => node.code);
+    return filteredByType
+      .filter((node) => Number(node.level || 0) === Number(target.level))
+      .map((node) => node.code);
+  }
+
+  const baseCode = normalizeOrgCode_(target.orgCode);
+  if (!target.includeDescendants) return [baseCode];
+
+  const childMap = buildOrgChildrenMap_(orgNodes);
+  return Array.from(collectDescendantOrgCodes_(baseCode, childMap));
+}
+
+function buildOrgChildrenMap_(orgNodes) {
+  const childMap = new Map();
+  orgNodes.forEach((node) => {
+    const parentCode = normalizeOrgCode_(node.parentCode);
+    if (!parentCode) return;
+    if (!childMap.has(parentCode)) childMap.set(parentCode, []);
+    childMap.get(parentCode).push(normalizeOrgCode_(node.code));
+  });
+  return childMap;
+}
+
+function collectDescendantOrgCodes_(startCode, childMap) {
+  const collected = new Set();
+  const queue = [normalizeOrgCode_(startCode)];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || collected.has(current)) continue;
+    collected.add(current);
+    const children = childMap.get(current) || [];
+    children.forEach((child) => {
+      if (!collected.has(child)) queue.push(child);
+    });
+  }
+  return collected;
+}
+
+function matchesNotificationStatusFilter_(learnerStatus, filterValue) {
+  if (filterValue === 'all') return true;
+  if (filterValue === 'incomplete') return learnerStatus !== 'completed';
+  return learnerStatus === filterValue;
+}
+
+function applyNotificationTemplate_(template, recipient, courseTitle, dashboardUrl) {
+  const replacements = {
+    '{{姓名}}': recipient.name || '',
+    '{{信箱}}': recipient.email || '',
+    '{{單位}}': recipient.assignmentOrgName || '',
+    '{{職稱}}': recipient.assignmentTitle || '',
+    '{{課程名稱}}': courseTitle || DASHBOARD_CONFIG.defaultCourseTitle,
+    '{{訓練狀態}}': recipient.statusLabel || '',
+    '{{觀看進度}}': `${Math.max(0, Number(recipient.watchedPercent || 0))}%`,
+    '{{最佳分數}}': recipient.bestScore || recipient.bestScore === 0 ? `${Number(recipient.bestScore || 0)} 分` : '未作答',
+    '{{儀表板網址}}': dashboardUrl || ''
+  };
+
+  let output = String(template || '');
+  Object.keys(replacements).forEach((token) => {
+    output = output.split(token).join(String(replacements[token]));
+  });
+  return output;
+}
+
+function buildNotificationCriteriaSummary_(payload) {
+  return {
+    orgType: payload.target.orgType,
+    level: payload.target.level,
+    orgCode: payload.target.orgCode,
+    includeDescendants: payload.target.includeDescendants,
+    trainingStatus: payload.trainingStatus,
+    assignmentMatch: payload.target.assignmentMatch
+  };
+}
+
+function appendNotificationLog_(entry) {
+  const ss = getTrainingSpreadsheet_();
+  const sheet = getOrCreateSheetWithHeaders_(ss, DASHBOARD_CONFIG.notificationLogSheetName, TRAINING_SHEET_HEADERS[DASHBOARD_CONFIG.notificationLogSheetName]);
+  sheet.appendRow([
+    Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss'),
+    entry.operatorEmail || '',
+    entry.courseTitle || '',
+    entry.payload.target.orgType || '',
+    entry.payload.target.level === '' ? '' : Number(entry.payload.target.level || 0),
+    entry.payload.target.orgCode || '',
+    entry.payload.target.includeDescendants ? '是' : '否',
+    entry.payload.trainingStatus || '',
+    entry.payload.template.subject || '',
+    Number(entry.recipientCount || 0),
+    Number(entry.sentCount || 0),
+    Number(entry.skippedCount || 0)
+  ]);
+  SpreadsheetApp.flush();
+}
+
 function getMasterSpreadsheet_() {
   if (typeof ENV === 'undefined' || !ENV.MASTER_SHEET_ID || ENV.MASTER_SHEET_ID.includes('請填入')) {
     throw new Error('未設定人員總表 ID');
@@ -631,6 +1045,23 @@ function getRequiredSheet_(spreadsheet, sheetName) {
 
 function getOptionalSheet_(spreadsheet, sheetName) {
   return spreadsheet.getSheetByName(sheetName);
+}
+
+function getOrCreateSheetWithHeaders_(spreadsheet, sheetName, headers) {
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(sheetName);
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  } else {
+    const currentHeaders = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
+    const isSame = headers.every((header, index) => String(currentHeaders[index] || '').trim() === String(header || '').trim());
+    if (!isSame) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    }
+  }
+  return sheet;
 }
 
 function buildAssignmentTypeMap_(assignments) {
@@ -792,8 +1223,27 @@ function getAssignmentSortOrder_(type) {
   return orderMap[type] || 99;
 }
 
+function buildDashboardPermissionResponse_(viewerEmail, authorized, message) {
+  return {
+    success: false,
+    authorized,
+    viewerEmail,
+    message
+  };
+}
+
 function normalizeEmail_(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeOrgCode_(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function isValidEmail_(value) {
+  const email = normalizeEmail_(value);
+  if (!email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 function escapeHtml_(value) {

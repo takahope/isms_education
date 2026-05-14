@@ -11,7 +11,6 @@
   <style>
     :root {
       --bg: #edf3f4;
-      --bg-strong: #dbe9eb;
       --panel: rgba(255, 255, 255, 0.82);
       --panel-strong: #ffffff;
       --text: #112031;
@@ -59,15 +58,19 @@
       gap: 20px;
     }
 
+    .hero,
+    .panel {
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
     .hero {
       position: relative;
-      overflow: hidden;
-      border-radius: var(--radius-xl);
-      background:
-        linear-gradient(135deg, rgba(17, 32, 49, 0.98) 0%, rgba(15, 118, 110, 0.92) 58%, rgba(8, 145, 178, 0.9) 100%);
       color: #f8fbfc;
       padding: 28px;
-      box-shadow: var(--shadow);
+      background:
+        linear-gradient(135deg, rgba(17, 32, 49, 0.98) 0%, rgba(15, 118, 110, 0.92) 58%, rgba(8, 145, 178, 0.9) 100%);
     }
 
     .hero::after {
@@ -86,7 +89,6 @@
       z-index: 1;
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
       gap: 20px;
       flex-wrap: wrap;
     }
@@ -123,13 +125,13 @@
     .hero-meta {
       display: grid;
       gap: 10px;
-      min-width: 240px;
+      min-width: 260px;
       justify-items: end;
     }
 
     .meta-card {
       width: 100%;
-      max-width: 280px;
+      max-width: 300px;
       padding: 14px 16px;
       border-radius: var(--radius-md);
       background: rgba(255, 255, 255, 0.1);
@@ -156,42 +158,52 @@
       flex-wrap: wrap;
     }
 
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    .ghost-btn,
+    .solid-btn,
+    .filter-reset {
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.18s ease, opacity 0.18s ease, background-color 0.18s ease;
+    }
+
     .ghost-btn {
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(255, 255, 255, 0.08);
       color: #f8fbfc;
-      border-radius: 999px;
-      padding: 10px 16px;
-      font: inherit;
-      font-weight: 700;
-      cursor: pointer;
-      transition: transform 0.18s ease, background-color 0.18s ease;
     }
 
-    .ghost-btn:hover {
+    .ghost-btn:hover,
+    .solid-btn:hover,
+    .filter-reset:hover {
       transform: translateY(-1px);
-      background: rgba(255, 255, 255, 0.15);
     }
 
-    .dashboard-grid {
-      display: grid;
-      grid-template-columns: 1.25fr 0.75fr;
-      gap: 20px;
-      align-items: start;
+    .solid-btn {
+      border: none;
+      background: var(--text);
+      color: #fff;
     }
 
-    .stack {
-      display: grid;
-      gap: 20px;
+    .solid-btn[disabled],
+    .ghost-btn[disabled] {
+      cursor: not-allowed;
+      opacity: 0.45;
+      transform: none;
     }
 
     .panel {
-      border-radius: var(--radius-xl);
       background: var(--panel);
       border: 1px solid rgba(255, 255, 255, 0.7);
-      box-shadow: var(--shadow);
       backdrop-filter: blur(18px);
-      overflow: hidden;
     }
 
     .panel-inner {
@@ -217,6 +229,197 @@
       margin: 6px 0 0;
       color: var(--muted);
       font-size: 13px;
+    }
+
+    .notification-panel {
+      display: none;
+    }
+
+    .notification-panel.open {
+      display: block;
+    }
+
+    .notification-grid,
+    .filters-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .notification-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      align-items: end;
+    }
+
+    .filters-grid {
+      grid-template-columns: 1.15fr 0.7fr 0.7fr 0.6fr auto;
+      align-items: end;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line-strong);
+      background: #fff;
+      color: var(--text);
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .field input,
+    .field select {
+      height: 46px;
+      padding: 0 14px;
+    }
+
+    .field textarea {
+      min-height: 170px;
+      padding: 14px;
+      resize: vertical;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      outline: none;
+      border-color: rgba(15, 118, 110, 0.44);
+      box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
+    }
+
+    .checkbox-field {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 46px;
+      padding: 0 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line-strong);
+      background: #fff;
+    }
+
+    .checkbox-field input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--teal);
+    }
+
+    .filter-reset {
+      height: 46px;
+      border: none;
+      background: var(--text);
+      color: #fff;
+    }
+
+    .inline-note,
+    .template-note,
+    .muted,
+    .small {
+      color: var(--muted);
+    }
+
+    .small {
+      font-size: 12px;
+    }
+
+    .inline-note {
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .template-note {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .notification-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      margin-top: 18px;
+    }
+
+    .preview-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 0.9fr 1.1fr;
+      margin-top: 18px;
+    }
+
+    .preview-card {
+      padding: 16px;
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--line);
+    }
+
+    .preview-card h3 {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+
+    .summary-list,
+    .recipient-list,
+    .alert-list,
+    .unit-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .summary-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .summary-chip,
+    .alert-card,
+    .unit-card,
+    .recipient-item {
+      padding: 16px;
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--line);
+    }
+
+    .summary-chip strong {
+      display: block;
+      font-size: 26px;
+      line-height: 1.1;
+      margin-top: 6px;
+    }
+
+    .preview-html {
+      min-height: 180px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 14px;
+      overflow: auto;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .stack {
+      display: grid;
+      gap: 20px;
     }
 
     .kpi-grid {
@@ -270,75 +473,6 @@
       font-size: 12px;
     }
 
-    .filters-grid {
-      display: grid;
-      grid-template-columns: 1.15fr 0.7fr 0.7fr 0.6fr auto;
-      gap: 12px;
-      align-items: end;
-    }
-
-    .field {
-      display: grid;
-      gap: 8px;
-    }
-
-    .field label {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
-    .field input,
-    .field select {
-      width: 100%;
-      height: 46px;
-      padding: 0 14px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--line-strong);
-      background: #fff;
-      color: var(--text);
-      font: inherit;
-      transition: border-color 0.18s ease, box-shadow 0.18s ease;
-    }
-
-    .field input:focus,
-    .field select:focus {
-      outline: none;
-      border-color: rgba(15, 118, 110, 0.44);
-      box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
-    }
-
-    .checkbox-field {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      height: 46px;
-      padding: 0 14px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--line-strong);
-      background: #fff;
-    }
-
-    .checkbox-field input {
-      width: 18px;
-      height: 18px;
-      accent-color: var(--teal);
-    }
-
-    .filter-reset {
-      height: 46px;
-      padding: 0 18px;
-      border: none;
-      border-radius: var(--radius-sm);
-      background: var(--text);
-      color: #fff;
-      font: inherit;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
     .metric-ribbon {
       display: flex;
       border-radius: 999px;
@@ -380,22 +514,9 @@
       gap: 14px;
     }
 
-    .alert-list,
-    .unit-list {
-      display: grid;
-      gap: 12px;
-    }
-
-    .alert-card,
-    .unit-card {
-      padding: 16px;
-      border-radius: var(--radius-md);
-      background: rgba(255, 255, 255, 0.9);
-      border: 1px solid var(--line);
-    }
-
     .alert-title,
-    .unit-title {
+    .unit-title,
+    .recipient-title {
       display: flex;
       justify-content: space-between;
       gap: 10px;
@@ -403,19 +524,22 @@
     }
 
     .alert-title strong,
-    .unit-title strong {
+    .unit-title strong,
+    .recipient-title strong {
       font-size: 14px;
       font-weight: 800;
     }
 
     .alert-title span,
-    .unit-title span {
+    .unit-title span,
+    .recipient-title span {
       color: var(--muted);
       font-size: 12px;
     }
 
     .alert-meta,
-    .unit-meta {
+    .unit-meta,
+    .recipient-meta {
       margin-top: 8px;
       color: var(--muted);
       font-size: 12px;
@@ -527,16 +651,8 @@
       background: linear-gradient(90deg, #0f766e 0%, #2dd4bf 100%);
     }
 
-    .muted {
-      color: var(--muted);
-    }
-
-    .small {
-      font-size: 12px;
-    }
-
-    .empty-state,
-    .loading-state {
+    .loading-state,
+    .empty-state {
       display: grid;
       place-items: center;
       min-height: 300px;
@@ -563,7 +679,8 @@
     }
 
     @media (max-width: 1180px) {
-      .dashboard-grid {
+      .dashboard-grid,
+      .preview-grid {
         grid-template-columns: 1fr;
       }
 
@@ -573,6 +690,13 @@
 
       .status-grid {
         grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 880px) {
+      .notification-grid,
+      .summary-list {
+        grid-template-columns: 1fr 1fr;
       }
     }
 
@@ -597,7 +721,9 @@
       }
 
       .kpi-grid,
-      .filters-grid {
+      .filters-grid,
+      .notification-grid,
+      .summary-list {
         grid-template-columns: 1fr;
       }
     }
@@ -623,7 +749,94 @@
           </div>
           <div class="hero-actions">
             <button id="refresh-btn" class="ghost-btn">重新整理資料</button>
+            <button id="toggle-notification-btn" class="ghost-btn hidden">寄送通知</button>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="notification-panel" class="panel notification-panel">
+      <div class="panel-inner">
+        <div class="panel-heading">
+          <div>
+            <h2 class="panel-title">課程通知寄送</h2>
+            <p class="panel-subtitle">依組織類型、層級與組別鎖定收件人，先預覽後寄送。</p>
+          </div>
+        </div>
+        <div class="notification-grid">
+          <div class="field">
+            <label for="notify-org-type">組織類型</label>
+            <select id="notify-org-type"></select>
+          </div>
+          <div class="field">
+            <label for="notify-org-level">層級</label>
+            <select id="notify-org-level"></select>
+          </div>
+          <div class="field">
+            <label for="notify-org-code">組別</label>
+            <select id="notify-org-code"></select>
+          </div>
+          <div class="field">
+            <label for="notify-status">訓練狀態</label>
+            <select id="notify-status">
+              <option value="incomplete">未完成</option>
+              <option value="not_started">未開始</option>
+              <option value="in_progress">進行中</option>
+              <option value="pending_quiz">待補測</option>
+              <option value="completed">已完成</option>
+              <option value="all">全部</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>寄送範圍</label>
+            <div class="checkbox-field">
+              <input id="notify-include-descendants" type="checkbox">
+              <span>包含下層組織</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>職務比對</label>
+            <div class="checkbox-field">
+              <span>主職寄送</span>
+            </div>
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <label for="notify-subject">郵件主旨</label>
+            <input id="notify-subject" type="text" placeholder="請輸入通知主旨">
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <label for="notify-body">郵件 HTML 內文</label>
+            <textarea id="notify-body" placeholder="請輸入 HTML 內容"></textarea>
+            <div id="placeholder-note" class="template-note"></div>
+          </div>
+        </div>
+        <div class="notification-actions">
+          <button id="preview-notification-btn" class="solid-btn">預覽寄送對象</button>
+          <button id="send-notification-btn" class="solid-btn" disabled>確認寄送</button>
+        </div>
+        <div id="notification-feedback" class="inline-note" style="margin-top:12px;"></div>
+        <div id="notification-preview" class="preview-grid hidden">
+          <section class="preview-card">
+            <h3>預覽摘要</h3>
+            <div class="summary-list">
+              <div class="summary-chip">
+                收件人數
+                <strong id="preview-recipient-count">0</strong>
+              </div>
+              <div class="summary-chip">
+                略過人數
+                <strong id="preview-skipped-count">0</strong>
+              </div>
+            </div>
+            <div id="preview-criteria" class="template-note"></div>
+            <div class="recipient-list" id="preview-recipient-list" style="margin-top:14px;"></div>
+            <div class="recipient-list" id="preview-skipped-list" style="margin-top:14px;"></div>
+          </section>
+          <section class="preview-card">
+            <h3>首封實際內容預覽</h3>
+            <div class="template-note"><strong id="preview-subject"></strong></div>
+            <div id="preview-html" class="preview-html"></div>
+          </section>
         </div>
       </div>
     </section>
@@ -777,6 +990,7 @@
       viewerEmail: '',
       generatedAt: '',
       courseTitle: '',
+      dashboardUrl: '',
       requiredWatchSeconds: 3600,
       allLearners: [],
       filters: {
@@ -784,6 +998,13 @@
         status: '',
         unit: '',
         incompleteOnly: false
+      },
+      notification: {
+        enabled: false,
+        orgOptions: [],
+        placeholders: [],
+        lastPreviewPayloadJson: '',
+        previewLoaded: false
       }
     };
 
@@ -795,6 +1016,9 @@
     function bindEvents() {
       document.getElementById('refresh-btn').addEventListener('click', loadDashboardData);
       document.getElementById('reset-filters-btn').addEventListener('click', resetFilters);
+      document.getElementById('toggle-notification-btn').addEventListener('click', toggleNotificationPanel);
+      document.getElementById('preview-notification-btn').addEventListener('click', handleNotificationPreview);
+      document.getElementById('send-notification-btn').addEventListener('click', handleNotificationSend);
       document.getElementById('search-input').addEventListener('input', (event) => {
         state.filters.search = String(event.target.value || '').trim().toLowerCase();
         renderDashboard();
@@ -811,6 +1035,19 @@
         state.filters.incompleteOnly = Boolean(event.target.checked);
         renderDashboard();
       });
+      document.getElementById('notify-org-type').addEventListener('change', () => {
+        populateNotificationLevelOptions();
+        resetNotificationPreview();
+      });
+      document.getElementById('notify-org-level').addEventListener('change', () => {
+        populateNotificationGroupOptions();
+        resetNotificationPreview();
+      });
+      document.getElementById('notify-org-code').addEventListener('change', resetNotificationPreview);
+      document.getElementById('notify-status').addEventListener('change', resetNotificationPreview);
+      document.getElementById('notify-include-descendants').addEventListener('change', resetNotificationPreview);
+      document.getElementById('notify-subject').addEventListener('input', resetNotificationPreview);
+      document.getElementById('notify-body').addEventListener('input', resetNotificationPreview);
     }
 
     async function bootstrapDashboard() {
@@ -823,12 +1060,34 @@
         state.viewerEmail = bootstrap.viewerEmail || '';
         state.requiredWatchSeconds = Number(bootstrap.requiredWatchSeconds) || 3600;
         state.courseTitle = bootstrap.courseTitle || '';
+        state.dashboardUrl = bootstrap.dashboardUrl || '';
+        state.notification.enabled = Boolean(bootstrap.canSendNotifications);
         document.getElementById('viewer-email').textContent = state.viewerEmail || '未取得帳號';
         document.getElementById('hero-summary').textContent = `${state.courseTitle || '本次訓練'} 的管理視圖，整合觀看達標、測驗通過、最後活動與職務資訊，方便即時掌握整體完成風險。`;
+        if (state.notification.enabled) {
+          document.getElementById('toggle-notification-btn').classList.remove('hidden');
+          await bootstrapNotification();
+        }
         await loadDashboardData();
       } catch (error) {
         showError(error && error.message ? error.message : '無法載入儀表板。');
       }
+    }
+
+    async function bootstrapNotification() {
+      const response = await callServer('getTrainingNotificationBootstrap');
+      if (!response || !response.success) {
+        throw new Error((response && response.message) || '無法載入通知設定。');
+      }
+      state.notification.orgOptions = Array.isArray(response.orgOptions) ? response.orgOptions : [];
+      state.notification.placeholders = Array.isArray(response.placeholderTokens) ? response.placeholderTokens : [];
+      state.courseTitle = response.courseTitle || state.courseTitle;
+      state.dashboardUrl = response.dashboardUrl || state.dashboardUrl;
+      document.getElementById('notify-subject').value = response.defaultTemplate && response.defaultTemplate.subject ? response.defaultTemplate.subject : '';
+      document.getElementById('notify-body').value = response.defaultTemplate && response.defaultTemplate.htmlBody ? response.defaultTemplate.htmlBody : '';
+      document.getElementById('placeholder-note').textContent = `可用變數：${state.notification.placeholders.join('、')}`;
+      populateNotificationTypeOptions();
+      resetNotificationPreview();
     }
 
     async function loadDashboardData() {
@@ -991,10 +1250,10 @@
     function renderRibbon(kpis) {
       const total = Math.max(kpis.total, 1);
       const segments = [
-        { key: 'completed', label: '已完成', value: kpis.completed, color: '#0f766e' },
-        { key: 'pendingQuiz', label: '待補測', value: kpis.pendingQuiz, color: '#c77700' },
-        { key: 'inProgress', label: '進行中', value: kpis.inProgress, color: '#c2415d' },
-        { key: 'notStarted', label: '未開始', value: kpis.notStarted, color: '#4b5563' }
+        { label: '已完成', value: kpis.completed, color: '#0f766e' },
+        { label: '待補測', value: kpis.pendingQuiz, color: '#c77700' },
+        { label: '進行中', value: kpis.inProgress, color: '#c2415d' },
+        { label: '未開始', value: kpis.notStarted, color: '#4b5563' }
       ];
       const ribbon = document.getElementById('completion-ribbon');
       const legend = document.getElementById('completion-legend');
@@ -1165,6 +1424,179 @@
         `;
         tbody.appendChild(row);
       });
+    }
+
+    function populateNotificationTypeOptions() {
+      const select = document.getElementById('notify-org-type');
+      select.innerHTML = '';
+      state.notification.orgOptions.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.type;
+        option.textContent = item.type;
+        select.appendChild(option);
+      });
+      populateNotificationLevelOptions();
+    }
+
+    function populateNotificationLevelOptions() {
+      const typeValue = document.getElementById('notify-org-type').value;
+      const levelSelect = document.getElementById('notify-org-level');
+      const current = getNotificationTypeConfig(typeValue);
+      levelSelect.innerHTML = '<option value="">全部層級</option>';
+      (current && Array.isArray(current.levels) ? current.levels : []).forEach((levelItem) => {
+        const option = document.createElement('option');
+        option.value = String(levelItem.level);
+        option.textContent = `第 ${levelItem.level} 層`;
+        levelSelect.appendChild(option);
+      });
+      populateNotificationGroupOptions();
+    }
+
+    function populateNotificationGroupOptions() {
+      const typeValue = document.getElementById('notify-org-type').value;
+      const levelValue = document.getElementById('notify-org-level').value;
+      const current = getNotificationTypeConfig(typeValue);
+      const groupSelect = document.getElementById('notify-org-code');
+      groupSelect.innerHTML = '<option value="">全部組別</option>';
+      let groups = [];
+      if (current && Array.isArray(current.levels)) {
+        if (levelValue) {
+          const foundLevel = current.levels.find((item) => String(item.level) === String(levelValue));
+          groups = foundLevel ? foundLevel.groups : [];
+        } else {
+          current.levels.forEach((levelItem) => {
+            groups = groups.concat(levelItem.groups || []);
+          });
+        }
+      }
+      groups.forEach((group) => {
+        const option = document.createElement('option');
+        option.value = group.code;
+        option.textContent = `${group.name || group.code}｜${group.code}`;
+        groupSelect.appendChild(option);
+      });
+    }
+
+    function getNotificationTypeConfig(typeValue) {
+      return state.notification.orgOptions.find((item) => item.type === typeValue) || null;
+    }
+
+    function toggleNotificationPanel() {
+      const panel = document.getElementById('notification-panel');
+      panel.classList.toggle('open');
+    }
+
+    function buildNotificationPayload() {
+      return {
+        target: {
+          orgType: String(document.getElementById('notify-org-type').value || '').trim(),
+          level: String(document.getElementById('notify-org-level').value || '').trim(),
+          orgCode: String(document.getElementById('notify-org-code').value || '').trim(),
+          includeDescendants: Boolean(document.getElementById('notify-include-descendants').checked),
+          assignmentMatch: 'primary_only'
+        },
+        trainingStatus: String(document.getElementById('notify-status').value || 'incomplete').trim(),
+        template: {
+          subject: String(document.getElementById('notify-subject').value || '').trim(),
+          htmlBody: String(document.getElementById('notify-body').value || '').trim()
+        }
+      };
+    }
+
+    async function handleNotificationPreview() {
+      try {
+        const payload = buildNotificationPayload();
+        setNotificationFeedback('正在產生寄送預覽...');
+        document.getElementById('send-notification-btn').disabled = true;
+        const response = await callServer('previewTrainingNotification', payload);
+        if (!response || !response.success) {
+          throw new Error((response && response.message) || '無法產生寄送預覽。');
+        }
+        state.notification.previewLoaded = true;
+        state.notification.lastPreviewPayloadJson = JSON.stringify(payload);
+        renderNotificationPreview(response);
+        document.getElementById('send-notification-btn').disabled = response.recipientCount <= 0;
+        setNotificationFeedback(`預覽完成，共 ${response.recipientCount} 位收件人。`);
+      } catch (error) {
+        setNotificationFeedback(error && error.message ? error.message : '通知預覽失敗。', true);
+      }
+    }
+
+    async function handleNotificationSend() {
+      try {
+        const payload = buildNotificationPayload();
+        const payloadJson = JSON.stringify(payload);
+        if (!state.notification.previewLoaded || state.notification.lastPreviewPayloadJson !== payloadJson) {
+          throw new Error('請先使用目前條件完成一次預覽，再執行寄送。');
+        }
+        if (!window.confirm('確認要正式寄送這批課程通知嗎？')) return;
+        setNotificationFeedback('正在寄送通知...');
+        document.getElementById('send-notification-btn').disabled = true;
+        const response = await callServer('sendTrainingNotification', payload);
+        if (!response || !response.success) {
+          throw new Error((response && response.message) || '通知寄送失敗。');
+        }
+        const message = `寄送完成：成功 ${response.sentCount} 封，略過 ${response.skippedCount} 封，失敗 ${response.failureCount || 0} 封。`;
+        setNotificationFeedback(message);
+        await loadDashboardData();
+      } catch (error) {
+        setNotificationFeedback(error && error.message ? error.message : '通知寄送失敗。', true);
+      }
+    }
+
+    function renderNotificationPreview(response) {
+      document.getElementById('notification-preview').classList.remove('hidden');
+      document.getElementById('preview-recipient-count').textContent = String(response.recipientCount || 0);
+      document.getElementById('preview-skipped-count').textContent = String(response.skippedCount || 0);
+      document.getElementById('preview-subject').textContent = response.sampleSubject || '';
+      document.getElementById('preview-html').innerHTML = response.sampleHtmlBody || '';
+
+      const criteria = response.criteriaSummary || {};
+      document.getElementById('preview-criteria').textContent =
+        `條件：${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.includeDescendants ? ' / 含下層' : ''} / 狀態 ${criteria.trainingStatus || ''}`;
+
+      renderRecipientList('preview-recipient-list', response.recipients || [], false);
+      renderRecipientList('preview-skipped-list', response.skipped || [], true);
+    }
+
+    function renderRecipientList(containerId, items, isSkipped) {
+      const container = document.getElementById(containerId);
+      container.textContent = '';
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'recipient-item';
+        empty.textContent = isSkipped ? '沒有略過名單。' : '沒有符合條件的收件人。';
+        container.appendChild(empty);
+        return;
+      }
+
+      items.slice(0, 20).forEach((item) => {
+        const node = document.createElement('div');
+        node.className = 'recipient-item';
+        node.innerHTML = `
+          <div class="recipient-title">
+            <strong>${escapeHtml(item.name || item.email || '未命名')}</strong>
+            <span>${isSkipped ? escapeHtml(item.reason || '') : escapeHtml(item.statusLabel || '')}</span>
+          </div>
+          <div class="recipient-meta">${escapeHtml([item.email, item.assignmentOrgName, item.assignmentTitle].filter(Boolean).join('｜'))}</div>
+        `;
+        container.appendChild(node);
+      });
+    }
+
+    function resetNotificationPreview() {
+      state.notification.previewLoaded = false;
+      state.notification.lastPreviewPayloadJson = '';
+      document.getElementById('send-notification-btn').disabled = true;
+      document.getElementById('notification-preview').classList.add('hidden');
+      document.getElementById('preview-recipient-list').textContent = '';
+      document.getElementById('preview-skipped-list').textContent = '';
+    }
+
+    function setNotificationFeedback(message, isError) {
+      const el = document.getElementById('notification-feedback');
+      el.textContent = message || '';
+      el.style.color = isError ? '#b91c1c' : '';
     }
 
     function callServer(name, payload) {
