@@ -7,15 +7,25 @@
 
   .website-tour-backdrop {
     position: absolute;
-    inset: 0;
     background: rgba(15, 23, 42, 0.6);
+  }
+
+  .website-tour-backdrop.is-top,
+  .website-tour-backdrop.is-bottom {
+    left: 0;
+    right: 0;
+  }
+
+  .website-tour-backdrop.is-left,
+  .website-tour-backdrop.is-right {
+    top: 0;
+    bottom: 0;
   }
 
   .website-tour-highlight {
     position: absolute;
     border-radius: 18px;
     border: 2px solid rgba(255, 255, 255, 0.92);
-    box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.6);
     background: transparent;
     pointer-events: none;
     transition: top 0.26s ease, left 0.26s ease, width 0.26s ease, height 0.26s ease;
@@ -141,7 +151,10 @@
 </style>
 
 <div id="website-tour-overlay" class="website-tour-overlay hidden" aria-hidden="true">
-  <div class="website-tour-backdrop"></div>
+  <div id="website-tour-backdrop-top" class="website-tour-backdrop is-top"></div>
+  <div id="website-tour-backdrop-right" class="website-tour-backdrop is-right"></div>
+  <div id="website-tour-backdrop-bottom" class="website-tour-backdrop is-bottom"></div>
+  <div id="website-tour-backdrop-left" class="website-tour-backdrop is-left"></div>
   <div id="website-tour-highlight" class="website-tour-highlight"></div>
   <div id="website-tour-tooltip" class="website-tour-tooltip">
     <div class="website-tour-pill">操作導覽</div>
@@ -168,6 +181,10 @@
       this.profile = null;
       this.dom = {
         overlay: document.getElementById('website-tour-overlay'),
+        backdropTop: document.getElementById('website-tour-backdrop-top'),
+        backdropRight: document.getElementById('website-tour-backdrop-right'),
+        backdropBottom: document.getElementById('website-tour-backdrop-bottom'),
+        backdropLeft: document.getElementById('website-tour-backdrop-left'),
         highlight: document.getElementById('website-tour-highlight'),
         tooltip: document.getElementById('website-tour-tooltip'),
         title: document.getElementById('website-tour-title'),
@@ -305,6 +322,7 @@
       this.dom.highlight.style.left = `${highlightRect.left}px`;
       this.dom.highlight.style.width = `${highlightRect.width}px`;
       this.dom.highlight.style.height = `${highlightRect.height}px`;
+      this.positionBackdrop(highlightRect);
 
       const tooltipWidth = Math.min(340, window.innerWidth - 32);
       const tooltipHeight = this.dom.tooltip.offsetHeight || 190;
@@ -368,6 +386,31 @@
         this.dom.arrow.style.left = `${clamp(rect.left + (rect.width / 2) - (arrowSize / 2), placement.left + 20, placement.left + this.dom.tooltip.offsetWidth - 28)}px`;
         this.dom.arrow.style.transform = 'rotate(45deg)';
       }
+    }
+
+    positionBackdrop(highlightRect) {
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const holeTop = Math.max(0, highlightRect.top);
+      const holeLeft = Math.max(0, highlightRect.left);
+      const holeRight = Math.min(viewportWidth, highlightRect.left + highlightRect.width);
+      const holeBottom = Math.min(viewportHeight, highlightRect.top + highlightRect.height);
+
+      this.dom.backdropTop.style.top = '0px';
+      this.dom.backdropTop.style.height = `${holeTop}px`;
+
+      this.dom.backdropBottom.style.top = `${holeBottom}px`;
+      this.dom.backdropBottom.style.height = `${Math.max(0, viewportHeight - holeBottom)}px`;
+
+      this.dom.backdropLeft.style.left = '0px';
+      this.dom.backdropLeft.style.width = `${holeLeft}px`;
+      this.dom.backdropLeft.style.top = `${holeTop}px`;
+      this.dom.backdropLeft.style.height = `${Math.max(0, holeBottom - holeTop)}px`;
+
+      this.dom.backdropRight.style.left = `${holeRight}px`;
+      this.dom.backdropRight.style.width = `${Math.max(0, viewportWidth - holeRight)}px`;
+      this.dom.backdropRight.style.top = `${holeTop}px`;
+      this.dom.backdropRight.style.height = `${Math.max(0, holeBottom - holeTop)}px`;
     }
 
     handleViewportChange() {
@@ -455,7 +498,7 @@
         }
       },
       {
-        selector: '#station-editor-subtitle',
+        selector: '#station-editor-dialog',
         title: '這裡是駐站配置編輯區',
         content: '進入後會看到您可調整的駐站資料。接下來會依序說明最常用的功能。',
         placement: 'bottom',

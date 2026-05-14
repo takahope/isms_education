@@ -1635,7 +1635,7 @@
   </div>
 
   <div id="station-editor-modal" class="editor-modal hidden" aria-hidden="true">
-    <div class="editor-dialog" role="dialog" aria-modal="true" aria-labelledby="station-editor-title">
+    <div id="station-editor-dialog" class="editor-dialog" role="dialog" aria-modal="true" aria-labelledby="station-editor-title" data-tour="station-editor-dialog">
       <div class="editor-header">
         <div class="editor-heading">
           <h3 id="station-editor-title">駐站收案配置</h3>
@@ -1832,6 +1832,7 @@
     let videoDurationSec = VIDEO_DURATION_FALLBACK_SEC;
     let currentUserProfile = null;
     let stationEditorState = createInitialStationEditorState();
+    let stationEditorPrefetchState = createInitialStationEditorPrefetchState();
     let activeStationOverview = null;
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -2134,6 +2135,9 @@
       currentUserProfile = profile;
       renderUserProfile(profile);
       showSection('step-welcome');
+      if (profile && profile.canEditStationAssignments) {
+        preloadStationEditorData();
+      }
       if (typeof maybeStartWebsiteTour === 'function') {
         maybeStartWebsiteTour(profile);
       }
@@ -2181,6 +2185,16 @@
           error: ''
         },
         message: ''
+      };
+    }
+
+    function createInitialStationEditorPrefetchState() {
+      return {
+        isPrefetching: false,
+        prefetchedData: null,
+        prefetchPromise: null,
+        prefetchError: '',
+        prefetchedAt: ''
       };
     }
 
@@ -2379,6 +2393,13 @@
       stationEditorState.draftData = cloneStationEditorData(normalized);
       stationEditorState.managerSelections = {};
       stationEditorState.selfNewStationCode = '';
+      if (response && response.success) {
+        stationEditorPrefetchState.prefetchedData = cloneStationEditorData(normalized);
+        stationEditorPrefetchState.prefetchedAt = new Date().toISOString();
+        stationEditorPrefetchState.prefetchError = '';
+        stationEditorPrefetchState.isPrefetching = false;
+        stationEditorPrefetchState.prefetchPromise = null;
+      }
       if (options.resetView) {
         stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
         stationEditorState.managedViewMode = 'all';
@@ -2388,6 +2409,59 @@
         stationEditorState.managedSearchComposing = false;
         stationEditorState.changeListExpanded = false;
       }
+    }
+
+    function syncStationEditorPrefetchFromResponse(response) {
+      if (!response || !response.success) return null;
+      const normalized = normalizeStationEditorData(response);
+      stationEditorPrefetchState.prefetchedData = normalized;
+      stationEditorPrefetchState.prefetchedAt = new Date().toISOString();
+      stationEditorPrefetchState.prefetchError = '';
+      stationEditorPrefetchState.isPrefetching = false;
+      stationEditorPrefetchState.prefetchPromise = null;
+      return normalized;
+    }
+
+    async function requestStationEditorData() {
+      const response = await callServer('getStationAssignmentEditorData');
+      if (!response || !response.success) {
+        throw new Error(response && response.message ? response.message : '無法載入駐站收案配置。');
+      }
+      return response;
+    }
+
+    async function preloadStationEditorData(options = {}) {
+      if (stationEditorPrefetchState.prefetchedData && !options.force) {
+        return stationEditorPrefetchState.prefetchedData;
+      }
+      if (stationEditorPrefetchState.prefetchPromise && !options.force) {
+        return stationEditorPrefetchState.prefetchPromise;
+      }
+
+      stationEditorPrefetchState.isPrefetching = true;
+      stationEditorPrefetchState.prefetchError = '';
+      const prefetchPromise = requestStationEditorData()
+        .then((response) => syncStationEditorPrefetchFromResponse(response))
+        .catch((error) => {
+          stationEditorPrefetchState.prefetchedData = null;
+          stationEditorPrefetchState.prefetchedAt = '';
+          stationEditorPrefetchState.prefetchError = error && error.message ? error.message : '無法預載入駐站收案配置。';
+          stationEditorPrefetchState.isPrefetching = false;
+          stationEditorPrefetchState.prefetchPromise = null;
+          throw error;
+        });
+      stationEditorPrefetchState.prefetchPromise = prefetchPromise;
+      return prefetchPromise;
+    }
+
+    async function consumeOrAwaitStationEditorPrefetch() {
+      if (stationEditorPrefetchState.prefetchedData) {
+        return stationEditorPrefetchState.prefetchedData;
+      }
+      if (stationEditorPrefetchState.prefetchPromise) {
+        return stationEditorPrefetchState.prefetchPromise;
+      }
+      return preloadStationEditorData();
     }
 
     function getPersonnelOptionByEmail(email) {
@@ -2407,6 +2481,29 @@
     async function openStationEditor() {
       if (stationEditorState.isSaving) return;
       const modal = document.getElementById('station-editor-modal');
+      const prefetched = stationEditorPrefetchState.prefetchedData;
+
+      if (prefetched) {
+        stationEditorState.isOpen = true;
+        stationEditorState.isLoading = false;
+        resetStationEditorSaveFeedback();
+        stationEditorState.baseData = prefetched;
+        stationEditorState.draftData = cloneStationEditorData(prefetched);
+        stationEditorState.managerSelections = {};
+        stationEditorState.selfNewStationCode = '';
+        stationEditorState.activeTab = prefetched.viewer.isStationManager ? 'managed' : 'self';
+        stationEditorState.managedViewMode = 'all';
+        stationEditorState.managedSearchKeyword = '';
+        stationEditorState.managedSelectedStationCode = '';
+        stationEditorState.managedManagerFilterEmail = '';
+        stationEditorState.managedSearchComposing = false;
+        stationEditorState.changeListExpanded = false;
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        renderStationEditor();
+        return;
+      }
+
       modal.classList.remove('hidden');
       modal.setAttribute('aria-hidden', 'false');
       stationEditorState.isOpen = true;
@@ -2415,11 +2512,20 @@
       renderStationEditor();
 
       try {
-        const response = await callServer('getStationAssignmentEditorData');
-        if (!response || !response.success) {
-          throw new Error(response && response.message ? response.message : '無法載入駐站收案配置。');
+        const prefetched = await consumeOrAwaitStationEditorPrefetch();
+        if (prefetched) {
+          stationEditorState.baseData = prefetched;
+          stationEditorState.draftData = cloneStationEditorData(prefetched);
+          stationEditorState.managerSelections = {};
+          stationEditorState.selfNewStationCode = '';
+          stationEditorState.activeTab = prefetched.viewer.isStationManager ? 'managed' : 'self';
+          stationEditorState.managedViewMode = 'all';
+          stationEditorState.managedSearchKeyword = '';
+          stationEditorState.managedSelectedStationCode = '';
+          stationEditorState.managedManagerFilterEmail = '';
+          stationEditorState.managedSearchComposing = false;
+          stationEditorState.changeListExpanded = false;
         }
-        applyStationEditorPayload(response, { resetView: true });
       } catch (error) {
         stationEditorState.message = error && error.message ? error.message : '無法載入駐站收案配置。';
       } finally {
@@ -3080,11 +3186,7 @@
         if (!response || !response.success) {
           throw new Error(response && response.message ? response.message : '儲存失敗。');
         }
-        const normalized = normalizeStationEditorData(response);
-        stationEditorState.baseData = normalized;
-        stationEditorState.draftData = cloneStationEditorData(normalized);
-        stationEditorState.managerSelections = {};
-        stationEditorState.selfNewStationCode = '';
+        applyStationEditorPayload(response, { resetView: false });
         await refreshUserProfileCard();
         stationEditorState.isSaving = false;
         completeStationEditorSaveProgress(response.message || '駐站收案配置已更新。');
