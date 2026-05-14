@@ -219,9 +219,10 @@
     }
 
     start(profile) {
-      if (!profile || (!profile.isStationManager && !profile.isStationStaff)) return;
+      if (!isWebsiteTourEligible(profile)) return false;
       this.profile = profile;
       this.steps = buildWebsiteTourSteps(profile);
+      if (!Array.isArray(this.steps) || this.steps.length === 0) return false;
       this.currentIndex = 0;
       this.isActive = true;
       this.setPresentationVisible(false);
@@ -233,6 +234,7 @@
       window.addEventListener('scroll', this.handleViewportChange, true);
       document.addEventListener('keydown', this.handleKeydown);
       this.render();
+      return true;
     }
 
     close() {
@@ -836,19 +838,19 @@
 
   function getWebsiteTourSeenKey(profile) {
     const email = String(profile && profile.email || '').trim().toLowerCase();
-    return `gas_training_tour_seen_${email || 'guest'}_v1`;
+    return `gas_training_tour_seen_${email || 'guest'}_v2`;
   }
 
   function isWebsiteTourEligible(profile) {
-    return Boolean(profile && profile.email);
+    return Boolean(profile && profile.email && !profile.profileLoadFailed);
   }
 
   window.startWebsiteTour = function startWebsiteTour(forceReplay) {
     if (!window.websiteTourGuide || !isWebsiteTourEligible(currentUserProfile)) return;
     if (!document.getElementById('step-welcome') || document.getElementById('step-welcome').classList.contains('hidden')) return;
     window.websiteTourGuide.close();
-    window.websiteTourGuide.start(currentUserProfile);
-    if (forceReplay && currentUserProfile) {
+    const started = window.websiteTourGuide.start(currentUserProfile);
+    if (started && currentUserProfile) {
       localStorage.setItem(getWebsiteTourSeenKey(currentUserProfile), '1');
     }
   };
@@ -863,7 +865,6 @@
     if (!document.getElementById('step-welcome') || document.getElementById('step-welcome').classList.contains('hidden')) return;
     const seenKey = getWebsiteTourSeenKey(profile);
     if (localStorage.getItem(seenKey)) return;
-    localStorage.setItem(seenKey, '1');
     window.setTimeout(() => {
       if (!currentUserProfile || !isWebsiteTourEligible(currentUserProfile)) return;
       if (document.getElementById('step-welcome').classList.contains('hidden')) return;

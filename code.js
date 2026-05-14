@@ -55,35 +55,14 @@ function getCurrentUserProfile() {
   const fallbackEmail = getCurrentUserEmail();
 
   try {
-    const email = normalizeEmail_(fallbackEmail);
-    const masterSS = getMasterSpreadsheet_();
-    const assignmentSheet = getRequiredSheet_(masterSS, '人員職務配置');
-    const context = buildStationEditorContext_(email);
-    const assignments = buildUserAssignments_(assignmentSheet, email, context.stationByCode);
-    const managedStations = context.managedStations.map((station) => ({
-      code: station.code,
-      name: station.name,
-      isIsoCertified: Boolean(station.isIsoCertified),
-      memberCount: Number(station.memberCount || 0),
-      activeMemberCount: Number(station.activeMemberCount || 0),
-      canDelete: Boolean(station.canDelete),
-      warnings: Array.isArray(station.warnings) ? station.warnings.slice() : [],
-      members: Array.isArray(station.members)
-        ? station.members.map((member) => ({
-            name: String(member.name || '').trim(),
-            email: normalizeEmail_(member.email),
-            title: String(member.title || '').trim(),
-            managerName: String(member.managerName || '').trim()
-          }))
-        : []
-    }));
+    const context = buildHomeProfileContext_(fallbackEmail);
 
     return {
       success: true,
-      email,
+      email: context.viewer.email,
       name: context.viewer.name,
-      assignments,
-      managedStations,
+      assignments: context.assignments,
+      managedStations: context.managedStations,
       isStationManager: context.viewer.isStationManager,
       isStationStaff: context.viewer.isStationStaff,
       canEditStationAssignments: context.viewer.canEditStationAssignments
@@ -406,6 +385,10 @@ function getAssignmentsByEmail_(sheet, email) {
 
 function buildUserAssignments_(sheet, email, stationByCode) {
   const assignments = getAssignmentsByEmail_(sheet, email);
+  return buildUserAssignmentsFromRecords_(assignments, stationByCode);
+}
+
+function buildUserAssignmentsFromRecords_(assignments, stationByCode) {
   if (assignments.length === 0) return [];
 
   const assignmentTypeMap = buildAssignmentTypeMap_(assignments);
@@ -422,6 +405,72 @@ function buildUserAssignments_(sheet, email, stationByCode) {
       };
     })
     .sort((a, b) => getAssignmentSortOrder_(a.type) - getAssignmentSortOrder_(b.type));
+}
+
+function buildHomeProfileContext_(viewerEmail) {
+  const normalizedViewerEmail = normalizeEmail_(viewerEmail);
+  if (!normalizedViewerEmail) {
+    throw new Error('無法辨識目前登入帳號。');
+  }
+
+  const masterSS = getMasterSpreadsheet_();
+  const personnelSheet = getRequiredSheet_(masterSS, STATION_EDITOR_CONFIG.personnelSheetName);
+  const orgSheet = getRequiredSheet_(masterSS, STATION_EDITOR_CONFIG.orgSheetName);
+  const assignmentSheet = getRequiredSheet_(masterSS, STATION_EDITOR_CONFIG.assignmentSheetName);
+
+  const personnelRecords = readPersonnelRecords_(personnelSheet);
+  const personnelByEmail = buildPersonnelMap_(personnelRecords);
+  const stationNodes = readStationNodesFromSheet_(orgSheet);
+  const stationByCode = new Map(stationNodes.map((item) => [normalizeOrgCode_(item.code), item]));
+  const allAssignments = readAssignmentsFromSheet_(assignmentSheet);
+  const viewerAssignments = allAssignments.filter((item) => normalizeEmail_(item.email) === normalizedViewerEmail);
+  const visibleStationAssignments = allAssignments.filter((item) => (
+    isStationOrgCode_(item.orgCode)
+    && !isLegacyStationManagerAssignment_(item)
+  ));
+  const managedStations = stationNodes
+    .filter((station) => normalizeEmail_(station.managerEmail) === normalizedViewerEmail)
+    .map((station) => cloneManagedStationForProfile_(buildManagedStationCard_(station, visibleStationAssignments, personnelByEmail)));
+  const selfAssignments = visibleStationAssignments
+    .filter((item) => normalizeEmail_(item.email) === normalizedViewerEmail);
+  const viewerRecord = personnelByEmail.get(normalizedViewerEmail) || {};
+  const viewerName = String(
+    viewerRecord.name
+    || (viewerAssignments[0] && viewerAssignments[0].name)
+    || ''
+  ).trim();
+
+  return {
+    viewer: {
+      email: normalizedViewerEmail,
+      name: viewerName,
+      isStationManager: managedStations.length > 0,
+      isStationStaff: selfAssignments.length > 0,
+      canEditStationAssignments: managedStations.length > 0 || selfAssignments.length > 0
+    },
+    assignments: buildUserAssignmentsFromRecords_(viewerAssignments, stationByCode),
+    managedStations
+  };
+}
+
+function cloneManagedStationForProfile_(station) {
+  return {
+    code: station.code,
+    name: station.name,
+    isIsoCertified: Boolean(station.isIsoCertified),
+    memberCount: Number(station.memberCount || 0),
+    activeMemberCount: Number(station.activeMemberCount || 0),
+    canDelete: Boolean(station.canDelete),
+    warnings: Array.isArray(station.warnings) ? station.warnings.slice() : [],
+    members: Array.isArray(station.members)
+      ? station.members.map((member) => ({
+          name: String(member.name || '').trim(),
+          email: normalizeEmail_(member.email),
+          title: String(member.title || '').trim(),
+          managerName: String(member.managerName || '').trim()
+        }))
+      : []
+  };
 }
 
 function buildStationEditorContext_(viewerEmail) {

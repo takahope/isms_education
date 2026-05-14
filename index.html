@@ -1945,6 +1945,7 @@
     const CLOUD_SYNC_UNIQUE_WATCH_THRESHOLD_SEC = 30 * 60;
     const FOCUS_LOSS_GRACE_MS = 80;
     const FOCUS_ALERT_COOLDOWN_MS = 1000;
+    const USER_PROFILE_LOAD_TIMEOUT_MS = 12000;
     const STATION_EDITOR_PROGRESS_TO_90_MS = 8000;
     const STATION_EDITOR_PROGRESS_TICK_MS = 200;
 
@@ -1987,18 +1988,58 @@
       fetchUserProfile();
     });
 
+    function createProfileLoadFallbackProfile(message, fallbackEmail = '') {
+      return {
+        email: String(fallbackEmail || '').trim(),
+        name: String(message || '人員資料讀取逾時，請重新整理頁面後再試。').trim(),
+        assignments: [],
+        managedStations: [],
+        isStationManager: false,
+        isStationStaff: false,
+        canEditStationAssignments: false,
+        profileLoadFailed: true
+      };
+    }
+
     function fetchUserProfile() {
       if (typeof google !== 'undefined' && google.script) {
+        let isSettled = false;
+        const profileLoadTimeoutId = window.setTimeout(() => {
+          if (isSettled) return;
+          isSettled = true;
+          const fallbackProfile = createProfileLoadFallbackProfile('人員資料讀取逾時，請重新整理頁面後再試。', currentUserEmail);
+          currentUserEmail = fallbackProfile.email;
+          finishLoading(fallbackProfile);
+        }, USER_PROFILE_LOAD_TIMEOUT_MS);
+
+        const finalizeProfileLoad = (profile, fallbackEmail) => {
+          if (isSettled) return;
+          isSettled = true;
+          window.clearTimeout(profileLoadTimeoutId);
+          const normalizedProfile = normalizeUserProfile(profile, fallbackEmail);
+          currentUserEmail = normalizedProfile.email;
+          finishLoading(normalizedProfile);
+        };
+
+        const finalizeProfileLoadFallback = (message) => {
+          if (isSettled) return;
+          isSettled = true;
+          window.clearTimeout(profileLoadTimeoutId);
+          const fallbackProfile = createProfileLoadFallbackProfile(message, currentUserEmail);
+          currentUserEmail = fallbackProfile.email;
+          finishLoading(fallbackProfile);
+        };
+
         google.script.run
           .withSuccessHandler((profile) => {
-            const normalizedProfile = normalizeUserProfile(profile, 'guest@example.com');
-            currentUserEmail = normalizedProfile.email;
-            finishLoading(normalizedProfile);
+            if (profile && profile.success === false) {
+              finalizeProfileLoadFallback(profile.message || '目前無法讀取人員資料，請稍後重新整理頁面。');
+              return;
+            }
+            finalizeProfileLoad(profile, 'guest@example.com');
           })
           .withFailureHandler(() => {
-            const fallbackProfile = normalizeUserProfile(null, 'local-tester@example.com');
-            currentUserEmail = fallbackProfile.email;
-            finishLoading(fallbackProfile);
+            finalizeProfileLoadFallback('目前無法讀取人員資料，請稍後重新整理頁面。');
           })
           .getCurrentUserProfile();
       } else {
@@ -2035,7 +2076,8 @@
         managedStations: normalizeManagedStations(profile && profile.managedStations),
         isStationManager: Boolean(profile && profile.isStationManager),
         isStationStaff: Boolean(profile && profile.isStationStaff),
-        canEditStationAssignments: Boolean(profile && profile.canEditStationAssignments)
+        canEditStationAssignments: Boolean(profile && profile.canEditStationAssignments),
+        profileLoadFailed: Boolean(profile && profile.profileLoadFailed)
       };
     }
 
@@ -2075,6 +2117,8 @@
       const editBtn = document.getElementById('station-editor-open-btn');
       const tourBtn = document.getElementById('website-tour-open-btn');
       const stationSummaryEl = document.getElementById('station-overview-summary');
+      const startTrainingBtn = document.getElementById('start-training-btn');
+      const welcomeDescEl = document.querySelector('#step-welcome .result-desc');
 
       emailEl.textContent = profile.email;
 
@@ -2091,7 +2135,25 @@
       } else {
         editBtn.classList.add('hidden');
       }
-      tourBtn.classList.remove('hidden');
+      if (profile.profileLoadFailed) {
+        tourBtn.classList.add('hidden');
+      } else {
+        tourBtn.classList.remove('hidden');
+      }
+
+      if (profile.profileLoadFailed) {
+        startTrainingBtn.disabled = true;
+        startTrainingBtn.textContent = '請重新整理後再試';
+        if (welcomeDescEl) {
+          welcomeDescEl.textContent = '目前無法完成帳號與職務資料讀取，請重新整理頁面後再試。';
+        }
+      } else {
+        startTrainingBtn.disabled = false;
+        startTrainingBtn.textContent = '開始觀看影片';
+        if (welcomeDescEl) {
+          welcomeDescEl.textContent = '請確認您的帳號、職務無誤後再開始本次訓練，包含一段核心觀念影片，以及課後評量測驗。';
+        }
+      }
 
       assignmentsEl.textContent = '';
       if (profile.assignments.length === 0) {
