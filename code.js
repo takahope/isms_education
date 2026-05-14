@@ -65,6 +65,8 @@ function getCurrentUserProfile() {
       name: station.name,
       isIsoCertified: Boolean(station.isIsoCertified),
       memberCount: Number(station.memberCount || 0),
+      activeMemberCount: Number(station.activeMemberCount || 0),
+      canDelete: Boolean(station.canDelete),
       warnings: Array.isArray(station.warnings) ? station.warnings.slice() : [],
       members: Array.isArray(station.members)
         ? station.members.map((member) => ({
@@ -245,6 +247,7 @@ function createStationNode(payload) {
     if (context.stationByCode.has(normalized.code)) {
       throw new Error(`駐站代碼 ${normalized.code} 已存在。`);
     }
+    const stationManagerOrgName = findOrgNameByCode_(context.orgSheet, 'GRP-CO');
 
     context.orgSheet.getRange(context.orgSheet.getLastRow() + 1, 1, 1, 9).setValues([[
       '行政',
@@ -267,8 +270,8 @@ function createStationNode(payload) {
       context.assignmentSheet.getRange(context.assignmentSheet.getLastRow() + 1, 1, 1, 7).setValues([[
         normalized.managerEmail,
         String(personnel.name || '').trim(),
-        normalized.code,
-        normalized.name,
+        'GRP-CO',
+        stationManagerOrgName,
         '駐站管理員',
         managerTemplate ? normalizeEmail_(managerTemplate.managerEmail) : '',
         managerTemplate ? String(managerTemplate.managerName || '').trim() : ''
@@ -288,6 +291,48 @@ function createStationNode(payload) {
       success: false,
       message: error && error.message ? error.message : '無法新增駐站。'
     };
+  }
+}
+
+function deleteStationNode(payload) {
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+  const lock = LockService.getScriptLock();
+  let hasLock = false;
+
+  try {
+    lock.waitLock(10000);
+    hasLock = true;
+
+    const context = buildStationEditorContext_(viewerEmail);
+    if (!context.viewer.isStationManager) {
+      throw new Error('您沒有刪除駐站的權限。');
+    }
+
+    const normalized = normalizeDeleteStationNodePayload_(payload);
+    const station = context.stationByCode.get(normalized.stationCode);
+    if (!station) {
+      throw new Error('找不到指定駐站。');
+    }
+    if (hasActiveStationStaffAssignments_(context.allAssignments, station.code)) {
+      throw new Error('此駐站仍有收案人員，無法刪除。');
+    }
+
+    context.orgSheet.deleteRow(Number(station.rowIndex));
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: '駐站已刪除。',
+      ...toStationEditorPayload_(buildStationEditorContext_(viewerEmail))
+    };
+  } catch (error) {
+    console.error('刪除駐站失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法刪除駐站。'
+    };
+  } finally {
+    if (hasLock) lock.releaseLock();
   }
 }
 
@@ -396,15 +441,16 @@ function buildStationEditorContext_(viewerEmail) {
   const stationByCode = new Map(stationNodes.map((item) => [normalizeOrgCode_(item.code), item]));
   const allAssignments = readAssignmentsFromSheet_(assignmentSheet);
   const stationAssignments = allAssignments.filter((item) => isStationOrgCode_(item.orgCode));
+  const visibleStationAssignments = stationAssignments.filter((item) => !isLegacyStationManagerAssignment_(item));
 
   const allStations = stationNodes
-    .map((station) => buildManagedStationCard_(station, stationAssignments, personnelByEmail));
+    .map((station) => buildManagedStationCard_(station, visibleStationAssignments, personnelByEmail));
 
   const managedStations = allStations
     .filter((station) => normalizeEmail_(station.managerEmail) === normalizedViewerEmail)
     .map((station) => ({ ...station, members: station.members.map((item) => ({ ...item })) }));
 
-  const selfAssignments = stationAssignments
+  const selfAssignments = visibleStationAssignments
     .filter((item) => normalizeEmail_(item.email) === normalizedViewerEmail)
     .map((item) => toStationAssignmentItem_(item, stationByCode.get(normalizeOrgCode_(item.orgCode))));
 
@@ -413,7 +459,7 @@ function buildStationEditorContext_(viewerEmail) {
   const canEditStationAssignments = isStationManager || isStationStaff;
   const uniqueStationStaffMap = new Map();
 
-  stationAssignments.forEach((item) => {
+  visibleStationAssignments.forEach((item) => {
     const emailKey = normalizeEmail_(item.email);
     if (!emailKey || uniqueStationStaffMap.has(emailKey)) return;
     uniqueStationStaffMap.set(emailKey, {
@@ -423,7 +469,7 @@ function buildStationEditorContext_(viewerEmail) {
     });
   });
 
-  stationAssignments.forEach((item) => {
+  visibleStationAssignments.forEach((item) => {
     const emailKey = normalizeEmail_(item.email);
     const entry = uniqueStationStaffMap.get(emailKey);
     if (!entry) return;
@@ -613,6 +659,8 @@ function buildManagedStationCard_(station, stationAssignments, personnelByEmail)
     managerEmail: station.managerEmail,
     managerName: station.managerName,
     memberCount: members.length,
+    activeMemberCount: countActiveStationStaffAssignments_(members),
+    canDelete: countActiveStationStaffAssignments_(members) === 0,
     warnings: hasManagerMismatch ? ['部分成員主管資訊與駐站負責人不一致'] : [],
     members
   };
@@ -920,6 +968,14 @@ function normalizeCreateStationNodePayload_(payload) {
   };
 }
 
+function normalizeDeleteStationNodePayload_(payload) {
+  const stationCode = normalizeOrgCode_(payload && payload.stationCode);
+  if (!stationCode || !isStationOrgCode_(stationCode)) {
+    throw new Error('請提供有效的駐站代碼。');
+  }
+  return { stationCode };
+}
+
 function buildStationCode_(stationType, suffix) {
   return stationType === 'external'
     ? `GRP-CO-EX-${String(suffix || '').trim().toUpperCase()}`
@@ -928,6 +984,34 @@ function buildStationCode_(stationType, suffix) {
 
 function getPersonnelStatusForStation_(stationCode) {
   return normalizeOrgCode_(stationCode).startsWith('GRP-CO-EX-') ? '委外廠商' : '在職';
+}
+
+function findOrgNameByCode_(sheet, orgCode) {
+  const normalizedCode = normalizeOrgCode_(orgCode);
+  const rows = sheet.getDataRange().getDisplayValues();
+  for (let i = 1; i < rows.length; i += 1) {
+    if (normalizeOrgCode_(rows[i][2]) === normalizedCode) {
+      return String(rows[i][3] || '').trim() || normalizedCode;
+    }
+  }
+  return normalizedCode;
+}
+
+function countActiveStationStaffAssignments_(assignments) {
+  return (Array.isArray(assignments) ? assignments : [])
+    .filter((item) => !isLegacyStationManagerAssignment_(item))
+    .length;
+}
+
+function hasActiveStationStaffAssignments_(assignments, stationCode) {
+  return (Array.isArray(assignments) ? assignments : []).some((item) => (
+    normalizeOrgCode_(item.orgCode) === normalizeOrgCode_(stationCode)
+    && !isLegacyStationManagerAssignment_(item)
+  ));
+}
+
+function isLegacyStationManagerAssignment_(assignment) {
+  return String(assignment && assignment.title || '').trim() === '駐站管理員';
 }
 
 function writeAssignmentRow_(sheet, rowIndex, assignment) {

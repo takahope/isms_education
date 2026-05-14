@@ -987,6 +987,20 @@
       flex-wrap: wrap;
     }
 
+    .station-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .station-delete-note {
+      font-size: 0.76rem;
+      color: var(--color-text-muted);
+      text-align: right;
+    }
+
     .inline-select {
       width: 100%;
       min-height: 44px;
@@ -1012,6 +1026,12 @@
       font-size: 0.875rem;
       font-weight: 700;
       cursor: pointer;
+    }
+
+    .mini-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.56;
+      box-shadow: none;
     }
 
     .mini-btn-danger {
@@ -2008,6 +2028,8 @@
           name: String(station && station.name || '').trim(),
           isIsoCertified: Boolean(station && station.isIsoCertified),
           memberCount: Number(station && station.memberCount || 0),
+          activeMemberCount: Number(station && station.activeMemberCount || 0),
+          canDelete: Boolean(station && station.canDelete),
           warnings: Array.isArray(station && station.warnings)
             ? station.warnings.map((item) => String(item || '').trim()).filter(Boolean)
             : [],
@@ -2139,7 +2161,7 @@
 
         const memberPill = document.createElement('div');
         memberPill.className = 'station-overview-member-pill';
-        memberPill.textContent = `${station.memberCount} 人`;
+        memberPill.textContent = `${Number(station.activeMemberCount || station.memberCount || 0)} 人`;
 
         head.appendChild(textWrap);
         head.appendChild(memberPill);
@@ -2200,7 +2222,7 @@
       document.getElementById('station-overview-meta').textContent = [
         station.code,
         station.isIsoCertified ? 'ISO 驗證範圍' : '',
-        `收案人員 ${station.memberCount} 位`
+        `收案人員 ${Number(station.activeMemberCount || station.memberCount || 0)} 位`
       ].filter(Boolean).join('｜');
 
       renderStationOverviewMembers(station);
@@ -2275,6 +2297,7 @@
         managedManagerFilterEmail: '',
         managedSearchComposing: false,
         changeListExpanded: false,
+        deletingStationCode: '',
         saveProgressValue: 0,
         saveProgressVisible: false,
         saveProgressPhase: 'idle',
@@ -2517,6 +2540,7 @@
       stationEditorState.draftData = cloneStationEditorData(normalized);
       stationEditorState.managerSelections = {};
       stationEditorState.selfNewStationCode = '';
+      stationEditorState.deletingStationCode = '';
       if (response && response.success) {
         stationEditorPrefetchState.prefetchedData = cloneStationEditorData(normalized);
         stationEditorPrefetchState.prefetchedAt = new Date().toISOString();
@@ -2532,6 +2556,15 @@
         stationEditorState.managedManagerFilterEmail = '';
         stationEditorState.managedSearchComposing = false;
         stationEditorState.changeListExpanded = false;
+        return;
+      }
+
+      const availableStationCodes = new Set((Array.isArray(normalized.allStations) ? normalized.allStations : []).map((item) => item.code));
+      if (!availableStationCodes.has(stationEditorState.managedSelectedStationCode)) {
+        stationEditorState.managedSelectedStationCode = '';
+      }
+      if (stationEditorState.selfNewStationCode && !availableStationCodes.has(stationEditorState.selfNewStationCode)) {
+        stationEditorState.selfNewStationCode = '';
       }
     }
 
@@ -2696,6 +2729,8 @@
           managerEmail: String(station.managerEmail || '').trim(),
           managerName: String(station.managerName || '').trim(),
           memberCount: Number(station.memberCount || 0),
+          activeMemberCount: Number(station.activeMemberCount || 0),
+          canDelete: Boolean(station.canDelete),
           warnings: Array.isArray(station.warnings) ? station.warnings.map((item) => String(item || '').trim()).filter(Boolean) : [],
           members: normalizeStationEditorRows(station.members)
         })),
@@ -2707,6 +2742,8 @@
           managerName: String(station.managerName || '').trim(),
           warnings: Array.isArray(station.warnings) ? station.warnings.map((item) => String(item || '').trim()).filter(Boolean) : [],
           memberCount: Number(station.memberCount || 0),
+          activeMemberCount: Number(station.activeMemberCount || 0),
+          canDelete: Boolean(station.canDelete),
           members: normalizeStationEditorRows(station.members)
         })),
         selfAssignments: normalizeStationEditorRows(selfAssignments),
@@ -3482,6 +3519,7 @@
       const managerFilterEmail = String(stationEditorState.managedManagerFilterEmail || '').trim();
       const searchKeyword = String(stationEditorState.managedSearchKeyword || '').trim().toLowerCase();
       const dirtyStationCodes = buildDirtyStationCodeSet();
+      const hasPendingChanges = dirtyStationCodes.size > 0;
       const managerFilterOptions = draft.stationManagerCandidates.filter((candidate) =>
         baseStations.some((station) => station.managerEmail === candidate.email)
       );
@@ -3627,6 +3665,13 @@
           ? `<div class="warning-text">${escapeHtml(station.warnings.join('｜'))}</div>`
           : '';
         const isoBadgeHtml = station.isIsoCertified ? buildIsoBadgeHtml({ compact: true }) : '';
+        const canDeleteStation = Boolean(station.canDelete);
+        const isDeletingStation = stationEditorState.deletingStationCode === station.code;
+        const deleteButtonLabel = isDeletingStation ? '刪除中...' : '刪除駐站';
+        const deleteDisabledAttr = (!canDeleteStation || isDeletingStation || stationEditorState.isSaving || hasPendingChanges) ? 'disabled' : '';
+        const deleteHintText = hasPendingChanges
+          ? '請先儲存或取消目前異動。'
+          : (canDeleteStation ? '未使用的駐站可直接移除。' : '仍有收案人員時不可刪除。');
 
         const memberRows = station.members.map((member) => {
           const rowKey = buildEditorRowKey(member);
@@ -3658,9 +3703,13 @@
                 ${isoBadgeHtml}
                 ${isDirty ? '<span class="station-card-badge">待儲存異動</span>' : ''}
               </div>
-              <div class="station-card-meta">駐站管理員：${escapeHtml(station.managerName || station.managerEmail || '未設定')}｜現有收案人員 ${station.members.length} 位</div>
+              <div class="station-card-meta">駐站管理員：${escapeHtml(station.managerName || station.managerEmail || '未設定')}｜現有收案人員 ${Number(station.activeMemberCount || station.members.length || 0)} 位</div>
               </div>
               ${warningHtml}
+            </div>
+            <div class="station-card-actions">
+              <button type="button" class="mini-btn mini-btn-danger" data-delete-station="${escapeHtml(station.code)}" ${deleteDisabledAttr}>${deleteButtonLabel}</button>
+              <div class="station-delete-note">${escapeHtml(deleteHintText)}</div>
             </div>
           </div>
           <div class="add-row station-manager-row">
@@ -3705,6 +3754,9 @@
         select.addEventListener('change', () => {
           reassignStationManager(stationCode, select.value);
         });
+      });
+      container.querySelectorAll('[data-delete-station]').forEach((button) => {
+        button.addEventListener('click', () => deleteStationNodeFromEditor(button.getAttribute('data-delete-station')));
       });
     }
 
@@ -4011,6 +4063,64 @@
       } finally {
         stationEditorState.isNodeModalSubmitting = false;
         renderStationNodeFormError(stationEditorState.nodeForm.error || '');
+      }
+    }
+
+    async function deleteStationNodeFromEditor(stationCode) {
+      if (!stationCode || stationEditorState.deletingStationCode) return;
+      if (hasStationEditorDirtyChanges()) {
+        showStationEditorToast({ icon: 'info', title: '請先儲存或取消目前異動，再刪除駐站。', timer: 2800 });
+        return;
+      }
+
+      const draft = stationEditorState.draftData || {};
+      const station = (Array.isArray(draft.allStations) ? draft.allStations : []).find((item) => item.code === stationCode);
+      if (!station) return;
+      if (!station.canDelete) {
+        showStationEditorToast({ icon: 'warning', title: '此駐站仍有收案人員，無法刪除。', timer: 3000 });
+        return;
+      }
+
+      let confirmed = true;
+      if (typeof Swal !== 'undefined') {
+        const result = await Swal.fire({
+          icon: 'warning',
+          title: '確定刪除駐站？',
+          html: `
+            <div style="text-align:left; line-height:1.7;">
+              <div><b>${escapeHtml(station.name || station.code)}</b></div>
+              <div style="color:#64748b; font-size:0.92rem;">${escapeHtml(station.code)}</div>
+              <div style="margin-top:10px;">刪除後會從組織架構樹移除此駐站。</div>
+              <div style="margin-top:6px; color:#b45309;">若駐站已被收案人員使用，系統會阻擋刪除。</div>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: '確認刪除',
+          cancelButtonText: '取消',
+          confirmButtonColor: '#dc2626',
+          reverseButtons: true
+        });
+        confirmed = result.isConfirmed;
+      } else {
+        confirmed = window.confirm(`確定要刪除駐站「${station.name || station.code}」嗎？`);
+      }
+      if (!confirmed) return;
+
+      stationEditorState.deletingStationCode = stationCode;
+      renderStationEditor();
+      try {
+        const response = await callServer('deleteStationNode', { stationCode });
+        if (!response || !response.success) {
+          throw new Error(response && response.message ? response.message : '無法刪除駐站。');
+        }
+        applyStationEditorPayload(response, { resetView: false });
+        await refreshUserProfileCard();
+        showStationEditorToast({ icon: 'success', title: response.message || '駐站已刪除。', timer: 2600 });
+        renderStationEditor();
+      } catch (error) {
+        stationEditorState.deletingStationCode = '';
+        showStationEditorToast({ icon: 'error', title: error && error.message ? error.message : '無法刪除駐站。', timer: 3200 });
+        renderStationEditor();
       }
     }
 
