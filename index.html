@@ -388,6 +388,11 @@
       top: 18px;
       right: 18px;
       z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
     .icon-btn {
@@ -419,6 +424,34 @@
       opacity: 0.6;
       cursor: not-allowed;
       transform: none;
+    }
+
+    .tour-trigger-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(14, 165, 233, 0.2);
+      background: rgba(255, 255, 255, 0.92);
+      color: #0369a1;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(14, 165, 233, 0.1);
+      transition: transform var(--transition), background-color var(--transition), border-color var(--transition);
+    }
+
+    .tour-trigger-btn:hover {
+      transform: translateY(-1px);
+      background: #ffffff;
+      border-color: rgba(14, 165, 233, 0.32);
+    }
+
+    .tour-trigger-btn svg {
+      width: 16px;
+      height: 16px;
     }
 
     .editor-modal {
@@ -1496,6 +1529,13 @@
         <h2 class="result-title">歡迎開始教育訓練</h2>
         <div class="account-card" id="account-card">
           <div class="account-tools">
+            <button type="button" id="website-tour-open-btn" class="tour-trigger-btn hidden" aria-label="操作導覽" title="操作導覽">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5A8.51 8.51 0 0 0 12 3.5Zm0 12.5a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2Zm1.42-4.11-.47.32a1.83 1.83 0 0 0-.82 1.56v.23" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M9.64 9.58a2.45 2.45 0 1 1 4.38 1.52c-.31.36-.65.67-.93.86" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              <span>操作導覽</span>
+            </button>
             <button type="button" id="station-editor-open-btn" class="icon-btn hidden" aria-label="編輯駐站收案配置" title="編輯駐站收案配置">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path>
@@ -1508,7 +1548,7 @@
             <div class="account-email" id="display-user-email">載入中...</div>
             <div class="account-name hidden" id="display-user-name"></div>
           </div>
-          <div class="assignment-list hidden" id="display-user-assignments"></div>
+          <div class="assignment-list hidden" id="display-user-assignments" data-tour="assignments"></div>
           <div class="station-overview-summary hidden" id="station-overview-summary"></div>
         </div>
         <p class="result-desc">請確認您的帳號無誤。本次訓練包含一段核心觀念影片，以及課後評量測驗。</p>
@@ -1878,6 +1918,7 @@
       const nameEl = document.getElementById('display-user-name');
       const assignmentsEl = document.getElementById('display-user-assignments');
       const editBtn = document.getElementById('station-editor-open-btn');
+      const tourBtn = document.getElementById('website-tour-open-btn');
       const stationSummaryEl = document.getElementById('station-overview-summary');
 
       emailEl.textContent = profile.email;
@@ -1892,8 +1933,10 @@
 
       if (profile.canEditStationAssignments) {
         editBtn.classList.remove('hidden');
+        tourBtn.classList.remove('hidden');
       } else {
         editBtn.classList.add('hidden');
+        tourBtn.classList.add('hidden');
       }
 
       assignmentsEl.textContent = '';
@@ -2091,6 +2134,9 @@
       currentUserProfile = profile;
       renderUserProfile(profile);
       showSection('step-welcome');
+      if (typeof maybeStartWebsiteTour === 'function') {
+        maybeStartWebsiteTour(profile);
+      }
     }
 
     function createInitialStationEditorState() {
@@ -3203,6 +3249,7 @@
       if (draft.viewer && draft.viewer.isStationManager) {
         const toggle = document.createElement('div');
         toggle.className = 'manager-scope-toggle';
+        toggle.setAttribute('data-tour', 'manager-scope-toggle');
         toggle.innerHTML = `
           <button type="button" class="manager-scope-card ${viewMode === 'all' ? 'is-active' : ''}" data-managed-view="all">
             <span class="manager-scope-title">看全部駐站</span>
@@ -3224,6 +3271,7 @@
 
         const tools = document.createElement('div');
         tools.className = 'station-tools';
+        tools.setAttribute('data-tour', 'station-tools');
         tools.innerHTML = `
           <input
             type="text"
@@ -3336,6 +3384,7 @@
         const isDirty = dirtyStationCodes.has(station.code);
         card.className = `station-card${isDirty ? ' is-dirty' : ''}`;
         card.setAttribute('data-station-card', station.code);
+        card.setAttribute('data-tour', 'station-card');
         const managerOptionsHtml = draft.stationManagerCandidates.map((candidate) => `
           <option value="${escapeHtml(candidate.email)}">${escapeHtml(candidate.label)}</option>
         `).join('');
@@ -3353,7 +3402,7 @@
                   <div class="member-meta">${escapeHtml([member.email, member.title, member.managerName].filter(Boolean).join('｜'))}</div>
                 </div>
                 <div class="member-actions">
-                  <button type="button" class="mini-btn mini-btn-danger" data-delete-row="${escapeHtml(rowKey)}">移除</button>
+                  <button type="button" class="mini-btn mini-btn-danger" data-delete-row="${escapeHtml(rowKey)}" data-tour="delete-staff-btn">移除</button>
                 </div>
               </div>
             </div>
@@ -3375,7 +3424,7 @@
             </div>
           </div>
           <div class="add-row station-manager-row">
-            <select class="inline-select" data-station-manager-select="${escapeHtml(station.code)}">
+            <select class="inline-select" data-station-manager-select="${escapeHtml(station.code)}" data-tour="station-manager-select">
               ${managerOptionsHtml}
             </select>
             <div></div>
@@ -3384,11 +3433,11 @@
             ${memberRows || '<div class="editor-empty">目前尚無收案人員。</div>'}
           </div>
           <div class="add-row">
-            <select class="inline-select" data-manager-select="${escapeHtml(station.code)}">
+            <select class="inline-select" data-manager-select="${escapeHtml(station.code)}" data-tour="existing-staff-select">
               <option value="">選擇既有收案人員加入此駐站</option>
               ${optionsHtml}
             </select>
-            <button type="button" class="mini-btn" data-manager-add="${escapeHtml(station.code)}">新增</button>
+            <button type="button" class="mini-btn" data-manager-add="${escapeHtml(station.code)}" data-tour="existing-staff-add">新增</button>
           </div>
         `;
         wrapper.appendChild(card);
@@ -3425,6 +3474,7 @@
 
       const card = document.createElement('section');
       card.className = 'self-card';
+      card.setAttribute('data-tour', 'self-card');
 
       const rowsHtml = draft.selfAssignments.map((item) => {
         const rowKey = buildEditorRowKey(item);
@@ -3438,10 +3488,10 @@
               <div class="member-main">
                 <div class="member-name">${escapeHtml(item.stationName || item.stationCode)}</div>
                 <div class="member-meta">${escapeHtml(['駐站管理員', item.managerName || item.managerEmail].filter(Boolean).join('｜'))}</div>
-              </div>
-              <button type="button" class="mini-btn mini-btn-danger" data-delete-row="${escapeHtml(rowKey)}">刪除</button>
             </div>
-            <select class="inline-select" data-self-move="${escapeHtml(rowKey)}">
+              <button type="button" class="mini-btn mini-btn-danger" data-delete-row="${escapeHtml(rowKey)}" data-tour="self-delete-assignment">刪除</button>
+            </div>
+            <select class="inline-select" data-self-move="${escapeHtml(rowKey)}" data-tour="self-move-assignment">
               ${optionsHtml}
             </select>
           </div>
@@ -3462,12 +3512,12 @@
         <div class="member-list">
           ${rowsHtml || '<div class="editor-empty">目前沒有您的駐站收案配置。</div>'}
         </div>
-        <div class="add-row">
+        <div class="add-row" data-tour="self-add-row">
           <select id="self-new-station-select" class="inline-select">
             <option value="">選擇要新增的駐站</option>
             ${stationOptionsHtml}
           </select>
-          <button type="button" id="self-add-station-btn" class="mini-btn">新增我的駐站</button>
+          <button type="button" id="self-add-station-btn" class="mini-btn" data-tour="self-add-station-btn">新增我的駐站</button>
         </div>
       `;
 
@@ -4771,5 +4821,6 @@
       return cloned;
     }
   </script>
+  <?!= include('Website_Tour_Guide'); ?>
 </body>
 </html>

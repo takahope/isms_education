@@ -1,0 +1,745 @@
+<style>
+  .website-tour-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2400;
+  }
+
+  .website-tour-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+  }
+
+  .website-tour-highlight {
+    position: absolute;
+    border-radius: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.92);
+    box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.6);
+    background: transparent;
+    pointer-events: none;
+    transition: top 0.26s ease, left 0.26s ease, width 0.26s ease, height 0.26s ease;
+  }
+
+  .website-tour-tooltip {
+    position: absolute;
+    width: min(340px, calc(100vw - 32px));
+    padding: 18px 18px 16px;
+    border-radius: 20px;
+    background: #ffffff;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: 0 28px 60px rgba(15, 23, 42, 0.24);
+    transition: top 0.26s ease, left 0.26s ease;
+  }
+
+  .website-tour-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.1);
+    color: #0369a1;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+  }
+
+  .website-tour-title {
+    margin-top: 12px;
+    font-size: 1.04rem;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .website-tour-content {
+    margin-top: 8px;
+    color: #475569;
+    font-size: 0.92rem;
+    line-height: 1.7;
+  }
+
+  .website-tour-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 18px;
+  }
+
+  .website-tour-counter {
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .website-tour-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .website-tour-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 88px;
+    min-height: 38px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(14, 165, 233, 0.18);
+    background: #ffffff;
+    color: #0369a1;
+    font-size: 0.84rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+  }
+
+  .website-tour-btn:hover {
+    transform: translateY(-1px);
+    background: #f8fbff;
+    border-color: rgba(14, 165, 233, 0.32);
+  }
+
+  .website-tour-btn.is-primary {
+    background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+    border-color: rgba(2, 132, 199, 0.44);
+    color: #ffffff;
+  }
+
+  .website-tour-btn.is-primary:hover {
+    background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%);
+  }
+
+  .website-tour-arrow {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: #ffffff;
+    border-left: 1px solid rgba(148, 163, 184, 0.2);
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    transform: rotate(45deg);
+    transition: top 0.26s ease, left 0.26s ease;
+  }
+
+  @media (max-width: 720px) {
+    .website-tour-tooltip {
+      width: calc(100vw - 24px);
+      padding: 16px 16px 14px;
+    }
+
+    .website-tour-footer {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .website-tour-actions {
+      justify-content: flex-end;
+    }
+  }
+</style>
+
+<div id="website-tour-overlay" class="website-tour-overlay hidden" aria-hidden="true">
+  <div class="website-tour-backdrop"></div>
+  <div id="website-tour-highlight" class="website-tour-highlight"></div>
+  <div id="website-tour-tooltip" class="website-tour-tooltip">
+    <div class="website-tour-pill">操作導覽</div>
+    <div id="website-tour-title" class="website-tour-title"></div>
+    <div id="website-tour-content" class="website-tour-content"></div>
+    <div class="website-tour-footer">
+      <div id="website-tour-counter" class="website-tour-counter"></div>
+      <div class="website-tour-actions">
+        <button type="button" id="website-tour-skip-btn" class="website-tour-btn">略過導覽</button>
+        <button type="button" id="website-tour-next-btn" class="website-tour-btn is-primary">下一步</button>
+      </div>
+    </div>
+  </div>
+  <div id="website-tour-arrow" class="website-tour-arrow"></div>
+</div>
+
+<script>
+  class WebsiteTourGuide {
+    constructor() {
+      this.steps = [];
+      this.currentIndex = 0;
+      this.isActive = false;
+      this.renderToken = 0;
+      this.profile = null;
+      this.dom = {
+        overlay: document.getElementById('website-tour-overlay'),
+        highlight: document.getElementById('website-tour-highlight'),
+        tooltip: document.getElementById('website-tour-tooltip'),
+        title: document.getElementById('website-tour-title'),
+        content: document.getElementById('website-tour-content'),
+        counter: document.getElementById('website-tour-counter'),
+        nextBtn: document.getElementById('website-tour-next-btn'),
+        skipBtn: document.getElementById('website-tour-skip-btn'),
+        arrow: document.getElementById('website-tour-arrow')
+      };
+      this.handleViewportChange = this.handleViewportChange.bind(this);
+      this.handleKeydown = this.handleKeydown.bind(this);
+      this.handleManualOpen = this.handleManualOpen.bind(this);
+    }
+
+    bind() {
+      this.dom.nextBtn.addEventListener('click', () => this.next());
+      this.dom.skipBtn.addEventListener('click', () => this.close());
+      document.getElementById('website-tour-open-btn').addEventListener('click', this.handleManualOpen);
+    }
+
+    handleManualOpen() {
+      window.startWebsiteTour(true);
+    }
+
+    start(profile) {
+      if (!profile || (!profile.isStationManager && !profile.isStationStaff)) return;
+      this.profile = profile;
+      this.steps = buildWebsiteTourSteps(profile);
+      this.currentIndex = 0;
+      this.isActive = true;
+      this.dom.overlay.classList.remove('hidden');
+      this.dom.overlay.setAttribute('aria-hidden', 'false');
+      this.dom.nextBtn.textContent = this.steps.length > 1 ? '下一步' : '完成';
+      window.addEventListener('resize', this.handleViewportChange);
+      window.addEventListener('scroll', this.handleViewportChange, true);
+      document.addEventListener('keydown', this.handleKeydown);
+      this.render();
+    }
+
+    close() {
+      this.isActive = false;
+      this.profile = null;
+      this.steps = [];
+      this.renderToken += 1;
+      this.dom.overlay.classList.add('hidden');
+      this.dom.overlay.setAttribute('aria-hidden', 'true');
+      window.removeEventListener('resize', this.handleViewportChange);
+      window.removeEventListener('scroll', this.handleViewportChange, true);
+      document.removeEventListener('keydown', this.handleKeydown);
+    }
+
+    async next() {
+      if (!this.isActive) return;
+      const step = this.steps[this.currentIndex];
+      if (step && typeof step.nextAction === 'function') {
+        await step.nextAction();
+      }
+      this.currentIndex += 1;
+      if (this.currentIndex >= this.steps.length) {
+        this.close();
+        return;
+      }
+      await this.render();
+    }
+
+    async render() {
+      if (!this.isActive) return;
+      const token = Date.now();
+      this.renderToken = token;
+      const step = this.steps[this.currentIndex];
+      if (!step) {
+        this.close();
+        return;
+      }
+
+      if (typeof step.skipIf === 'function' && step.skipIf()) {
+        this.currentIndex += 1;
+        if (this.currentIndex >= this.steps.length) {
+          this.close();
+          return;
+        }
+        await this.render();
+        return;
+      }
+
+      if (typeof step.beforeShow === 'function') {
+        await step.beforeShow();
+      }
+
+      const target = await this.resolveTarget(step);
+      if (!this.isActive || this.renderToken !== token) return;
+
+      if (!target) {
+        this.currentIndex += 1;
+        if (this.currentIndex >= this.steps.length) {
+          this.close();
+          return;
+        }
+        await this.render();
+        return;
+      }
+
+      this.dom.title.textContent = step.title;
+      this.dom.content.textContent = step.content;
+      this.dom.counter.textContent = `${this.currentIndex + 1} / ${this.steps.length}`;
+      this.dom.nextBtn.textContent = this.currentIndex === this.steps.length - 1 ? '完成' : '下一步';
+
+      target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      await sleepForWebsiteTour(220);
+      if (!this.isActive || this.renderToken !== token) return;
+      this.position(target, step.placement);
+    }
+
+    async resolveTarget(step) {
+      if (typeof step.selector === 'function') {
+        const resolved = step.selector();
+        if (resolved) return waitForTourVisibility(resolved, 1600);
+        return null;
+      }
+      if (!step.selector) return null;
+      return waitForTourVisibility(document.querySelector(step.selector), 1600, step.selector);
+    }
+
+    position(target, preferredPlacement) {
+      const padding = 10;
+      const rect = target.getBoundingClientRect();
+      const highlightRect = {
+        top: clamp(rect.top - padding, 8, window.innerHeight - 20),
+        left: clamp(rect.left - padding, 8, window.innerWidth - 20),
+        width: Math.max(24, rect.width + (padding * 2)),
+        height: Math.max(24, rect.height + (padding * 2))
+      };
+
+      this.dom.highlight.style.top = `${highlightRect.top}px`;
+      this.dom.highlight.style.left = `${highlightRect.left}px`;
+      this.dom.highlight.style.width = `${highlightRect.width}px`;
+      this.dom.highlight.style.height = `${highlightRect.height}px`;
+
+      const tooltipWidth = Math.min(340, window.innerWidth - 32);
+      const tooltipHeight = this.dom.tooltip.offsetHeight || 190;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const gap = 18;
+      const placements = buildPlacementPreference(preferredPlacement);
+      let selected = null;
+
+      placements.some((placement) => {
+        const candidate = calculateTooltipPlacement({
+          placement,
+          rect,
+          tooltipWidth,
+          tooltipHeight,
+          gap,
+          viewportWidth,
+          viewportHeight
+        });
+        if (candidate.fits) {
+          selected = candidate;
+          return true;
+        }
+        if (!selected) selected = candidate;
+        return false;
+      });
+
+      if (!selected) {
+        selected = calculateTooltipPlacement({
+          placement: 'bottom',
+          rect,
+          tooltipWidth,
+          tooltipHeight,
+          gap,
+          viewportWidth,
+          viewportHeight
+        });
+      }
+
+      this.dom.tooltip.style.top = `${selected.top}px`;
+      this.dom.tooltip.style.left = `${selected.left}px`;
+      this.positionArrow(selected, rect);
+    }
+
+    positionArrow(placement, rect) {
+      const arrowSize = 16;
+      if (placement.placement === 'top') {
+        this.dom.arrow.style.top = `${placement.top + this.dom.tooltip.offsetHeight - (arrowSize / 2)}px`;
+        this.dom.arrow.style.left = `${clamp(rect.left + (rect.width / 2) - (arrowSize / 2), placement.left + 20, placement.left + this.dom.tooltip.offsetWidth - 28)}px`;
+        this.dom.arrow.style.transform = 'rotate(225deg)';
+      } else if (placement.placement === 'left') {
+        this.dom.arrow.style.top = `${clamp(rect.top + (rect.height / 2) - (arrowSize / 2), placement.top + 20, placement.top + this.dom.tooltip.offsetHeight - 28)}px`;
+        this.dom.arrow.style.left = `${placement.left + this.dom.tooltip.offsetWidth - (arrowSize / 2)}px`;
+        this.dom.arrow.style.transform = 'rotate(135deg)';
+      } else if (placement.placement === 'right') {
+        this.dom.arrow.style.top = `${clamp(rect.top + (rect.height / 2) - (arrowSize / 2), placement.top + 20, placement.top + this.dom.tooltip.offsetHeight - 28)}px`;
+        this.dom.arrow.style.left = `${placement.left - (arrowSize / 2)}px`;
+        this.dom.arrow.style.transform = 'rotate(-45deg)';
+      } else {
+        this.dom.arrow.style.top = `${placement.top - (arrowSize / 2)}px`;
+        this.dom.arrow.style.left = `${clamp(rect.left + (rect.width / 2) - (arrowSize / 2), placement.left + 20, placement.left + this.dom.tooltip.offsetWidth - 28)}px`;
+        this.dom.arrow.style.transform = 'rotate(45deg)';
+      }
+    }
+
+    handleViewportChange() {
+      if (!this.isActive) return;
+      window.requestAnimationFrame(() => {
+        this.render();
+      });
+    }
+
+    handleKeydown(event) {
+      if (!this.isActive) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.close();
+      } else if (event.key === 'Enter' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        this.next();
+      }
+    }
+  }
+
+  function buildWebsiteTourSteps(profile) {
+    if (profile.isStationManager) return buildStationManagerTourSteps();
+    if (profile.isStationStaff) return buildStationStaffTourSteps();
+    return [];
+  }
+
+  function buildStationManagerTourSteps() {
+    return [
+      {
+        selector: '#display-user-assignments',
+        title: '先確認您的職務內容',
+        content: '這裡會列出您目前的職務與駐站。請先確認顯示內容是否正確，再開始後續操作。',
+        placement: 'bottom'
+      },
+      {
+        selector: '#station-overview-summary',
+        title: '這裡是您負責的駐站',
+        content: '每一張卡片代表一個您目前管理的駐站，先快速確認駐站名稱與數量是否符合預期。',
+        placement: 'bottom'
+      },
+      {
+        selector: '[data-station-overview-trigger]',
+        title: '點一個駐站查看收案人員',
+        content: '建議先點任一駐站，確認站內的收案人員組成是否正確，避免後續調整到錯的駐站。',
+        placement: 'bottom',
+        nextAction: async () => {
+          const trigger = document.querySelector('[data-station-overview-trigger]');
+          if (trigger) {
+            openStationOverview(trigger.getAttribute('data-station-overview-trigger'));
+            await sleepForWebsiteTour(180);
+          }
+        }
+      },
+      {
+        selector: '#station-overview-body',
+        title: '核對收案人員名單',
+        content: '這裡會列出該駐站的收案人員、職稱與 Email。請先確認站內成員是否完整。',
+        placement: 'right',
+        beforeShow: async () => {
+          if (document.getElementById('station-overview-modal').classList.contains('hidden')) {
+            const trigger = document.querySelector('[data-station-overview-trigger]');
+            if (trigger) {
+              openStationOverview(trigger.getAttribute('data-station-overview-trigger'));
+              await sleepForWebsiteTour(180);
+            }
+          }
+        },
+        nextAction: async () => {
+          closeStationOverview();
+          await sleepForWebsiteTour(120);
+        }
+      },
+      {
+        selector: '#station-editor-open-btn',
+        title: '從這裡進入駐站收案配置',
+        content: '確認完首頁資料後，請點這裡進入編輯區，就能調整駐站管理員與收案人員。',
+        placement: 'left',
+        beforeShow: async () => {
+          closeStationOverview();
+          await sleepForWebsiteTour(60);
+        },
+        nextAction: async () => {
+          await ensureStationEditorReadyForTour('managed');
+        }
+      },
+      {
+        selector: '#station-editor-subtitle',
+        title: '這裡是駐站配置編輯區',
+        content: '進入後會看到您可調整的駐站資料。接下來會依序說明最常用的功能。',
+        placement: 'bottom',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('managed');
+        }
+      },
+      {
+        selector: '[data-tour="station-manager-select"]',
+        title: '更換駐站管理員',
+        content: '若要更換某個駐站的管理員，請在這個下拉選單改選對象，最後再按「儲存變更」。',
+        placement: 'left',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('managed');
+        }
+      },
+      {
+        selector: '[data-tour="existing-staff-select"]',
+        title: '加入既有收案人員',
+        content: '如果此人已經存在於系統中，先在這裡選擇既有人員，再按右側新增，就能加入目前駐站。',
+        placement: 'top',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('managed');
+        }
+      },
+      {
+        selector: '[data-tour="delete-staff-btn"]',
+        title: '移除收案人員',
+        content: '如果站內人員需要移除，可在名單右側按「移除」。修改不會立即送出，要等最後儲存才會生效。',
+        placement: 'left',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('managed');
+        },
+        skipIf: () => !document.querySelector('[data-tour="delete-staff-btn"]')
+      },
+      {
+        selector: '#station-add-staff-btn',
+        title: '新增全新收案人員',
+        content: '若列表中沒有這位人員，可先用這個按鈕建立收案人員，再指定要加入的駐站。',
+        placement: 'bottom',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('managed');
+        }
+      },
+      {
+        selector: '#station-add-node-btn',
+        title: '新增駐站',
+        content: '如果目前列表中沒有該駐站，先按這裡新增駐站，再回來配置管理員與收案人員。',
+        placement: 'bottom',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('managed');
+        }
+      },
+      {
+        selector: '#station-editor-save-btn',
+        title: '最後記得儲存變更',
+        content: '完成調整後，請按這裡送出所有異動。未儲存前，駐站配置不會正式更新。',
+        placement: 'top',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('managed');
+        }
+      }
+    ];
+  }
+
+  function buildStationStaffTourSteps() {
+    return [
+      {
+        selector: '#display-user-assignments',
+        title: '先確認您的職務內容',
+        content: '這裡會列出您目前的職務與收案駐站。請先確認是否與您的實際工作內容一致。',
+        placement: 'bottom'
+      },
+      {
+        selector: '#station-editor-open-btn',
+        title: '從這裡開啟駐站配置',
+        content: '如果您需要確認或調整自己負責的駐站，可以從這裡進入編輯畫面。',
+        placement: 'left',
+        nextAction: async () => {
+          await ensureStationEditorReadyForTour('self');
+        }
+      },
+      {
+        selector: '#station-editor-subtitle',
+        title: '這裡可以查看您的駐站配置',
+        content: '系統會帶您進到可編輯的區域，您可以在這裡檢查自己目前的收案駐站。',
+        placement: 'bottom',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('self');
+        }
+      },
+      {
+        selector: '[data-tour="self-card"]',
+        title: '這裡列出您目前的駐站',
+        content: '每一列都是您現在負責的收案駐站，可在這裡逐一核對。',
+        placement: 'bottom',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('self');
+        }
+      },
+      {
+        selector: '[data-tour="self-add-row"]',
+        title: '新增我的駐站',
+        content: '如果需要增加新的收案駐站，可在這裡選擇駐站後新增，再統一儲存。',
+        placement: 'top',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('self');
+        }
+      },
+      {
+        selector: '[data-tour="self-move-assignment"]',
+        title: '更換既有駐站',
+        content: '若某一列需要改成其他駐站，可直接在下拉選單改選新的駐站。',
+        placement: 'left',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('self');
+        },
+        skipIf: () => !document.querySelector('[data-tour="self-move-assignment"]')
+      },
+      {
+        selector: '[data-tour="self-delete-assignment"]',
+        title: '移除不再負責的駐站',
+        content: '如果某個駐站已不再由您負責，可按這裡刪除，再按儲存完成更新。',
+        placement: 'left',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('self');
+        },
+        skipIf: () => !document.querySelector('[data-tour="self-delete-assignment"]')
+      },
+      {
+        selector: '#station-editor-save-btn',
+        title: '完成後記得儲存',
+        content: '所有調整完成後，請按這裡送出。未儲存前，系統不會更新您的駐站配置。',
+        placement: 'top',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('self');
+        }
+      }
+    ];
+  }
+
+  function buildPlacementPreference(preferredPlacement) {
+    const preferred = ['top', 'right', 'bottom', 'left'].includes(preferredPlacement) ? preferredPlacement : 'bottom';
+    const all = ['bottom', 'right', 'top', 'left'];
+    return [preferred].concat(all.filter((item) => item !== preferred));
+  }
+
+  function calculateTooltipPlacement(config) {
+    const {
+      placement,
+      rect,
+      tooltipWidth,
+      tooltipHeight,
+      gap,
+      viewportWidth,
+      viewportHeight
+    } = config;
+    let top = 0;
+    let left = 0;
+
+    if (placement === 'top') {
+      top = rect.top - tooltipHeight - gap;
+      left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+    } else if (placement === 'left') {
+      top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
+      left = rect.left - tooltipWidth - gap;
+    } else if (placement === 'right') {
+      top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
+      left = rect.right + gap;
+    } else {
+      top = rect.bottom + gap;
+      left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+    }
+
+    const clampedTop = clamp(top, 12, Math.max(12, viewportHeight - tooltipHeight - 12));
+    const clampedLeft = clamp(left, 12, Math.max(12, viewportWidth - tooltipWidth - 12));
+    const fits = top >= 12
+      && left >= 12
+      && (left + tooltipWidth) <= (viewportWidth - 12)
+      && (top + tooltipHeight) <= (viewportHeight - 12);
+
+    return {
+      placement,
+      top: clampedTop,
+      left: clampedLeft,
+      fits
+    };
+  }
+
+  async function ensureStationEditorReadyForTour(mode) {
+    const modal = document.getElementById('station-editor-modal');
+    if (modal.classList.contains('hidden') || !stationEditorState.isOpen) {
+      await openStationEditor();
+    }
+    await waitForTourCondition(() => stationEditorState.isOpen && !stationEditorState.isLoading, 4000);
+    if (!stationEditorState.draftData) return;
+
+    if (mode === 'self') {
+      stationEditorState.activeTab = 'self';
+    } else {
+      stationEditorState.activeTab = 'managed';
+      stationEditorState.managedViewMode = 'mine';
+    }
+    renderStationEditor();
+    await sleepForWebsiteTour(80);
+  }
+
+  function waitForTourVisibility(element, timeoutMs, selector) {
+    if (element && isVisibleForWebsiteTour(element)) return Promise.resolve(element);
+    return waitForTourCondition(() => {
+      const target = selector ? document.querySelector(selector) : element;
+      return isVisibleForWebsiteTour(target) ? target : null;
+    }, timeoutMs);
+  }
+
+  function waitForTourCondition(predicate, timeoutMs) {
+    const startedAt = Date.now();
+    return new Promise((resolve) => {
+      function poll() {
+        const result = predicate();
+        if (result) {
+          resolve(result);
+          return;
+        }
+        if ((Date.now() - startedAt) >= (timeoutMs || 1500)) {
+          resolve(null);
+          return;
+        }
+        window.setTimeout(poll, 80);
+      }
+      poll();
+    });
+  }
+
+  function isVisibleForWebsiteTour(element) {
+    if (!element) return false;
+    if (element.classList.contains('hidden')) return false;
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function sleepForWebsiteTour(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  function getWebsiteTourSeenKey(profile) {
+    const email = String(profile && profile.email || '').trim().toLowerCase();
+    return `gas_training_tour_seen_${email || 'guest'}_v1`;
+  }
+
+  function isWebsiteTourEligible(profile) {
+    return Boolean(profile && (profile.isStationManager || profile.isStationStaff));
+  }
+
+  window.startWebsiteTour = function startWebsiteTour(forceReplay) {
+    if (!window.websiteTourGuide || !isWebsiteTourEligible(currentUserProfile)) return;
+    if (!document.getElementById('step-welcome') || document.getElementById('step-welcome').classList.contains('hidden')) return;
+    window.websiteTourGuide.close();
+    window.websiteTourGuide.start(currentUserProfile);
+    if (forceReplay && currentUserProfile) {
+      localStorage.setItem(getWebsiteTourSeenKey(currentUserProfile), '1');
+    }
+  };
+
+  window.closeWebsiteTour = function closeWebsiteTour() {
+    if (!window.websiteTourGuide) return;
+    window.websiteTourGuide.close();
+  };
+
+  window.maybeStartWebsiteTour = function maybeStartWebsiteTour(profile) {
+    if (!window.websiteTourGuide || !isWebsiteTourEligible(profile)) return;
+    if (!document.getElementById('step-welcome') || document.getElementById('step-welcome').classList.contains('hidden')) return;
+    const seenKey = getWebsiteTourSeenKey(profile);
+    if (localStorage.getItem(seenKey)) return;
+    localStorage.setItem(seenKey, '1');
+    window.setTimeout(() => {
+      if (!currentUserProfile || !isWebsiteTourEligible(currentUserProfile)) return;
+      if (document.getElementById('step-welcome').classList.contains('hidden')) return;
+      window.startWebsiteTour(false);
+    }, 520);
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    window.websiteTourGuide = new WebsiteTourGuide();
+    window.websiteTourGuide.bind();
+  });
+</script>

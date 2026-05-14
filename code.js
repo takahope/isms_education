@@ -31,10 +31,15 @@ const SHEET_HEADERS = {
 
 // 1. 發佈為 Web App 時的進入點
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index')
+  return HtmlService.createTemplateFromFile('index')
+      .evaluate()
       .setTitle('臺灣人體生物資料庫資安暨個資教育訓練')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
 // 2. 獲取當前登入使用者的 Email (供前端顯示)
