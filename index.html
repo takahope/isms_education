@@ -1813,16 +1813,16 @@
       </div>
       <div class="editor-body">
         <div class="editor-form-grid">
-          <div class="editor-form-field">
-            <label for="station-staff-email-input">Email</label>
-            <input id="station-staff-email-input" class="inline-select" list="station-personnel-datalist" type="email" placeholder="name@example.com" />
-            <div class="editor-form-note" id="station-staff-email-note">可直接輸入新 Email，或從既有人員名單選擇。</div>
-          </div>
           <div class="editor-form-inline">
             <div class="editor-form-field">
               <label for="station-staff-name-input">姓名</label>
-              <input id="station-staff-name-input" class="inline-select" type="text" placeholder="請輸入姓名" />
+              <input id="station-staff-name-input" class="inline-select" list="station-personnel-datalist" type="text" placeholder="請輸入姓名或從既有人員名單選擇" />
+              <div class="editor-form-note" id="station-staff-name-note">可從既有人員名單選擇，選取後會自動帶入 Email。</div>
             </div>
+          </div>
+          <div class="editor-form-field">
+            <label for="station-staff-email-input">Email</label>
+            <input id="station-staff-email-input" class="inline-select" type="email" placeholder="name@example.com" />
           </div>
           <div class="editor-form-field">
             <label for="station-staff-station-select">駐站</label>
@@ -2316,6 +2316,8 @@
         staffForm: {
           email: '',
           name: '',
+          selectedPersonnelEmail: '',
+          emailLocked: false,
           stationCode: '',
           error: ''
         },
@@ -2365,9 +2367,10 @@
       document.getElementById('station-staff-modal').addEventListener('click', (event) => {
         if (event.target.id === 'station-staff-modal') closeStationStaffModal();
       });
-      document.getElementById('station-staff-email-input').addEventListener('input', handleStationStaffEmailInput);
-      document.getElementById('station-staff-name-input').addEventListener('input', () => {
-        stationEditorState.staffForm.name = document.getElementById('station-staff-name-input').value;
+      document.getElementById('station-staff-name-input').addEventListener('input', handleStationStaffNameInput);
+      document.getElementById('station-staff-email-input').addEventListener('input', () => {
+        if (stationEditorState.staffForm.emailLocked) return;
+        stationEditorState.staffForm.email = String(document.getElementById('station-staff-email-input').value || '').trim().toLowerCase();
       });
       document.getElementById('station-staff-station-select').addEventListener('change', () => {
         stationEditorState.staffForm.stationCode = document.getElementById('station-staff-station-select').value;
@@ -2625,6 +2628,14 @@
       const draft = stationEditorState.draftData;
       const options = draft && Array.isArray(draft.personnelOptions) ? draft.personnelOptions : [];
       return options.find((item) => item.email === String(email || '').trim().toLowerCase()) || null;
+    }
+
+    function getPersonnelOptionByNameSelection(value) {
+      const normalizedValue = String(value || '').trim();
+      if (!normalizedValue) return null;
+      const draft = stationEditorState.draftData;
+      const options = draft && Array.isArray(draft.personnelOptions) ? draft.personnelOptions : [];
+      return options.find((item) => `${item.name || item.email}｜${item.email}` === normalizedValue) || null;
     }
 
     function getStationCreationManagerOptions(source) {
@@ -3845,6 +3856,8 @@
       stationEditorState.staffForm = {
         email: '',
         name: '',
+        selectedPersonnelEmail: '',
+        emailLocked: false,
         stationCode: stationEditorState.managedSelectedStationCode || '',
         error: ''
       };
@@ -3867,7 +3880,7 @@
       const draft = stationEditorState.draftData || {};
       const personnelOptions = Array.isArray(draft.personnelOptions) ? draft.personnelOptions : [];
       dataList.innerHTML = personnelOptions.map((item) => (
-        `<option value="${escapeHtml(item.email)}">${escapeHtml(item.name || item.email)}</option>`
+        `<option value="${escapeHtml(`${item.name || item.email}｜${item.email}`)}"></option>`
       )).join('');
     }
 
@@ -3879,25 +3892,45 @@
         <option value="">選擇駐站</option>
         ${stations.map((station) => `<option value="${escapeHtml(station.code)}">${escapeHtml(station.name)} (${escapeHtml(station.code)})</option>`).join('')}
       `;
-      document.getElementById('station-staff-email-input').value = stationEditorState.staffForm.email || '';
-      document.getElementById('station-staff-name-input').value = stationEditorState.staffForm.name || '';
+      const emailInput = document.getElementById('station-staff-email-input');
+      const nameInput = document.getElementById('station-staff-name-input');
+      emailInput.value = stationEditorState.staffForm.email || '';
+      emailInput.readOnly = Boolean(stationEditorState.staffForm.emailLocked);
+      nameInput.value = stationEditorState.staffForm.selectedPersonnelEmail
+        ? `${stationEditorState.staffForm.name || stationEditorState.staffForm.email}｜${stationEditorState.staffForm.selectedPersonnelEmail}`
+        : (stationEditorState.staffForm.name || '');
       stationSelect.value = stationEditorState.staffForm.stationCode || '';
-      document.getElementById('station-staff-email-note').textContent = '可直接輸入新 Email，或從既有人員名單選擇。';
+      document.getElementById('station-staff-name-note').textContent = stationEditorState.staffForm.emailLocked
+        ? `此人已存在於人員主檔，已自動帶入 Email。`
+        : '可從既有人員名單選擇，選取後會自動帶入 Email。';
       renderStationStaffFormError();
     }
 
-    function handleStationStaffEmailInput() {
+    function handleStationStaffNameInput() {
+      const nameInput = document.getElementById('station-staff-name-input');
+      const rawValue = String(nameInput.value || '').trim();
+      const matched = getPersonnelOptionByNameSelection(rawValue);
+      const noteEl = document.getElementById('station-staff-name-note');
       const emailInput = document.getElementById('station-staff-email-input');
-      const normalizedEmail = String(emailInput.value || '').trim().toLowerCase();
-      stationEditorState.staffForm.email = normalizedEmail;
-      const matched = getPersonnelOptionByEmail(normalizedEmail);
-      const noteEl = document.getElementById('station-staff-email-note');
       if (matched) {
-        stationEditorState.staffForm.name = matched.name || stationEditorState.staffForm.name;
-        document.getElementById('station-staff-name-input').value = stationEditorState.staffForm.name;
+        stationEditorState.staffForm.selectedPersonnelEmail = matched.email;
+        stationEditorState.staffForm.name = matched.name || '';
+        stationEditorState.staffForm.email = matched.email || '';
+        stationEditorState.staffForm.emailLocked = true;
+        emailInput.value = stationEditorState.staffForm.email;
+        emailInput.readOnly = true;
         noteEl.textContent = `此人已存在於人員主檔，目前狀態：${matched.status || '未設定'}。`;
       } else {
-        noteEl.textContent = '此 Email 不在既有人員主檔中，送出後會建立新的人員資料。';
+        const hadSelectedPersonnel = Boolean(stationEditorState.staffForm.selectedPersonnelEmail);
+        stationEditorState.staffForm.selectedPersonnelEmail = '';
+        stationEditorState.staffForm.name = rawValue;
+        stationEditorState.staffForm.emailLocked = false;
+        if (hadSelectedPersonnel) {
+          stationEditorState.staffForm.email = '';
+          emailInput.value = '';
+        }
+        emailInput.readOnly = false;
+        noteEl.textContent = '若姓名不在既有人員名單中，請手動輸入 Email，送出後會建立新的人員資料。';
       }
     }
 
@@ -3913,7 +3946,9 @@
     async function submitStationStaffForm() {
       if (stationEditorState.isStaffModalSubmitting) return;
       stationEditorState.staffForm.email = String(document.getElementById('station-staff-email-input').value || '').trim().toLowerCase();
-      stationEditorState.staffForm.name = String(document.getElementById('station-staff-name-input').value || '').trim();
+      stationEditorState.staffForm.name = stationEditorState.staffForm.selectedPersonnelEmail
+        ? String(stationEditorState.staffForm.name || '').trim()
+        : String(document.getElementById('station-staff-name-input').value || '').trim();
       stationEditorState.staffForm.stationCode = String(document.getElementById('station-staff-station-select').value || '').trim();
 
       if (!stationEditorState.staffForm.email || !stationEditorState.staffForm.name || !stationEditorState.staffForm.stationCode) {
