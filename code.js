@@ -443,14 +443,19 @@ function buildStationEditorContext_(viewerEmail) {
     .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
 
   const uniqueStationManagerMap = new Map();
-  stationNodes.forEach((station) => {
-    const managerEmail = normalizeEmail_(station.managerEmail);
+  allAssignments.forEach((assignment) => {
+    const managerEmail = normalizeEmail_(assignment.email);
+    const orgCode = normalizeOrgCode_(assignment.orgCode);
+    const title = String(assignment.title || '').trim();
     if (!managerEmail || uniqueStationManagerMap.has(managerEmail)) return;
+    if (orgCode !== 'GRP-CO' || title !== '駐站管理員') return;
+
     const person = personnelByEmail.get(managerEmail) || {};
+    const managerName = String(assignment.name || person.name || '').trim();
     uniqueStationManagerMap.set(managerEmail, {
       email: managerEmail,
-      name: String(station.managerName || person.name || '').trim(),
-      label: [String(station.managerName || person.name || '').trim(), managerEmail].filter(Boolean).join('｜')
+      name: managerName,
+      label: [managerName, managerEmail].filter(Boolean).join('｜')
     });
   });
 
