@@ -765,6 +765,13 @@
         </div>
         <div class="notification-grid">
           <div class="field">
+            <label for="notify-template-type">範本類型</label>
+            <select id="notify-template-type">
+              <option value="personalized">個人化版</option>
+              <option value="announcement">公告版</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="notify-org-type">組織類型</label>
             <select id="notify-org-type"></select>
           </div>
@@ -1002,7 +1009,9 @@
       notification: {
         enabled: false,
         orgOptions: [],
-        placeholders: [],
+        templates: {},
+        defaultTemplateType: 'personalized',
+        placeholdersByTemplateType: {},
         lastPreviewPayloadJson: '',
         previewLoaded: false
       }
@@ -1022,6 +1031,10 @@
       document.getElementById('search-input').addEventListener('input', (event) => {
         state.filters.search = String(event.target.value || '').trim().toLowerCase();
         renderDashboard();
+      });
+      document.getElementById('notify-template-type').addEventListener('change', () => {
+        applySelectedNotificationTemplate();
+        resetNotificationPreview();
       });
       document.getElementById('status-filter').addEventListener('change', (event) => {
         state.filters.status = String(event.target.value || '').trim();
@@ -1080,13 +1093,14 @@
         throw new Error((response && response.message) || '無法載入通知設定。');
       }
       state.notification.orgOptions = Array.isArray(response.orgOptions) ? response.orgOptions : [];
-      state.notification.placeholders = Array.isArray(response.placeholderTokens) ? response.placeholderTokens : [];
+      state.notification.templates = response.templates || {};
+      state.notification.defaultTemplateType = response.defaultTemplateType || 'personalized';
+      state.notification.placeholdersByTemplateType = response.placeholderTokensByTemplateType || {};
       state.courseTitle = response.courseTitle || state.courseTitle;
       state.dashboardUrl = response.dashboardUrl || state.dashboardUrl;
-      document.getElementById('notify-subject').value = response.defaultTemplate && response.defaultTemplate.subject ? response.defaultTemplate.subject : '';
-      document.getElementById('notify-body').value = response.defaultTemplate && response.defaultTemplate.htmlBody ? response.defaultTemplate.htmlBody : '';
-      document.getElementById('placeholder-note').textContent = `可用變數：${state.notification.placeholders.join('、')}`;
+      document.getElementById('notify-template-type').value = state.notification.defaultTemplateType;
       populateNotificationTypeOptions();
+      applySelectedNotificationTemplate();
       resetNotificationPreview();
     }
 
@@ -1488,6 +1502,7 @@
 
     function buildNotificationPayload() {
       return {
+        templateType: String(document.getElementById('notify-template-type').value || 'personalized').trim(),
         target: {
           orgType: String(document.getElementById('notify-org-type').value || '').trim(),
           level: String(document.getElementById('notify-org-level').value || '').trim(),
@@ -1503,6 +1518,15 @@
       };
     }
 
+    function applySelectedNotificationTemplate() {
+      const templateType = String(document.getElementById('notify-template-type').value || 'personalized').trim();
+      const template = state.notification.templates[templateType] || { subject: '', htmlBody: '' };
+      const placeholders = state.notification.placeholdersByTemplateType[templateType] || [];
+      document.getElementById('notify-subject').value = template.subject || '';
+      document.getElementById('notify-body').value = template.htmlBody || '';
+      document.getElementById('placeholder-note').textContent = `可用變數：${placeholders.join('、') || '無'}`;
+    }
+
     async function handleNotificationPreview() {
       try {
         const payload = buildNotificationPayload();
@@ -1516,7 +1540,8 @@
         state.notification.lastPreviewPayloadJson = JSON.stringify(payload);
         renderNotificationPreview(response);
         document.getElementById('send-notification-btn').disabled = response.recipientCount <= 0;
-        setNotificationFeedback(`預覽完成，共 ${response.recipientCount} 位收件人。`);
+        const modeText = response.deliveryMode === 'single_bcc' ? '單封公告信（BCC 全部）' : '個人化逐封寄送';
+        setNotificationFeedback(`預覽完成，共 ${response.recipientCount} 位收件人；寄送方式：${modeText}。`);
       } catch (error) {
         setNotificationFeedback(error && error.message ? error.message : '通知預覽失敗。', true);
       }
@@ -1536,7 +1561,8 @@
         if (!response || !response.success) {
           throw new Error((response && response.message) || '通知寄送失敗。');
         }
-        const message = `寄送完成：成功 ${response.sentCount} 封，略過 ${response.skippedCount} 封，失敗 ${response.failureCount || 0} 封。`;
+        const modeText = response.deliveryMode === 'single_bcc' ? '公告版' : '個人化版';
+        const message = `寄送完成：${modeText} 成功 ${response.sentCount} 封，略過 ${response.skippedCount} 位，失敗 ${response.failureCount || 0} 封。`;
         setNotificationFeedback(message);
         await loadDashboardData();
       } catch (error) {
@@ -1553,7 +1579,7 @@
 
       const criteria = response.criteriaSummary || {};
       document.getElementById('preview-criteria').textContent =
-        `條件：${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.includeDescendants ? ' / 含下層' : ''} / 狀態 ${criteria.trainingStatus || ''}`;
+        `條件：${criteria.templateType === 'announcement' ? '公告版' : '個人化版'} / ${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.includeDescendants ? ' / 含下層' : ''} / 狀態 ${criteria.trainingStatus || ''}${response.deliveryMode === 'single_bcc' ? ' / 單封 BCC 全部' : ' / 個別寄送'}`;
 
       renderRecipientList('preview-recipient-list', response.recipients || [], false);
       renderRecipientList('preview-skipped-list', response.skipped || [], true);
@@ -1576,7 +1602,7 @@
         node.innerHTML = `
           <div class="recipient-title">
             <strong>${escapeHtml(item.name || item.email || '未命名')}</strong>
-            <span>${isSkipped ? escapeHtml(item.reason || '') : escapeHtml(item.statusLabel || '')}</span>
+            <span>${isSkipped ? escapeHtml(item.reason || '') : escapeHtml(item.statusLabel || (item.email ? '收件人' : ''))}</span>
           </div>
           <div class="recipient-meta">${escapeHtml([item.email, item.assignmentOrgName, item.assignmentTitle].filter(Boolean).join('｜'))}</div>
         `;

@@ -16,7 +16,7 @@ const DASHBOARD_CONFIG = {
 const TRAINING_SHEET_HEADERS = {
   訓練紀錄: ['時間戳記', '姓名', '使用者信箱', '課程名稱', '測驗分數', '測驗結果', '測驗批次ID', '題目數', '及格門檻'],
   觀看進度: ['使用者信箱', '課程名稱', '影片ID', '已觀看區間', '已觀看秒數', '最後播放位置', '最後更新時間', '最後同步來源版本'],
-  通知紀錄: ['時間戳記', '操作者信箱', '課程名稱', '組織類型', '層級', '組別代碼', '包含下層', '狀態篩選', '主旨', '收件人數', '成功數', '略過數']
+  通知紀錄: ['時間戳記', '操作者信箱', '課程名稱', '範本類型', '組織類型', '層級', '組別代碼', '包含下層', '狀態篩選', '主旨', '收件人數', '成功數', '略過數']
 };
 
 function doGet() {
@@ -113,18 +113,12 @@ function getTrainingNotificationBootstrap() {
     canSendNotifications: true,
     dashboardUrl: buildDashboardUrl_(),
     courseTitle: context.courseTitle,
-    placeholderTokens: [
-      '{{姓名}}',
-      '{{信箱}}',
-      '{{單位}}',
-      '{{職稱}}',
-      '{{課程名稱}}',
-      '{{訓練狀態}}',
-      '{{觀看進度}}',
-      '{{最佳分數}}',
-      '{{儀表板網址}}'
-    ],
-    defaultTemplate: buildDefaultNotificationTemplate_(context.courseTitle),
+    placeholderTokensByTemplateType: {
+      personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
+      announcement: ['{{課程名稱}}', '{{上課網址}}']
+    },
+    defaultTemplateType: 'personalized',
+    templates: buildNotificationTemplates_(context.courseTitle),
     orgOptions
   };
 }
@@ -736,15 +730,36 @@ function buildNotificationOrgOptions_(orgNodes) {
     }));
 }
 
-function buildDefaultNotificationTemplate_(courseTitle) {
+function buildNotificationTemplates_(courseTitle) {
   return {
-    subject: `【教育訓練通知】${courseTitle} 尚待完成`,
+    personalized: buildPersonalizedNotificationTemplate_(courseTitle),
+    announcement: buildAnnouncementNotificationTemplate_(courseTitle)
+  };
+}
+
+function buildPersonalizedNotificationTemplate_(courseTitle) {
+  return {
+    subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
     htmlBody: [
-      '<p>{{姓名}} 您好：</p>',
-      `<p>提醒您，<strong>${escapeHtml_(courseTitle)}</strong> 尚待完成。</p>`,
-      '<p>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}<br>觀看進度：{{觀看進度}}<br>最佳分數：{{最佳分數}}</p>',
-      '<p>請盡速至教育訓練系統完成課程與測驗。</p>',
-      '<p><a href="{{儀表板網址}}">前往儀表板</a></p>'
+      '<p>長官、主管、組長和同仁們好：</p>',
+      '<p>因應外稽單位要求，我們需對內部人員進行臺灣人體生物資料庫客製化的資訊安全暨個資保護教育訓練。課程內容已製作為線上課程與評量，敬請長官、主管、組長和同仁們完成本次教育訓練時數與評量。</p>',
+      '<p>本次課程可同時折抵資安三小時時數與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格。請於 8 月 30 日以前完成課程，感謝大家的協助。</p>',
+      `<p>{{姓名}} 您好：<br>課程名稱：${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}<br>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}</p>`,
+      '<p>請至資訊安全暨個資保護教育訓練完成課程與測驗。</p>',
+      '<p><a href="{{上課網址}}">前往上課</a></p>'
+    ].join('')
+  };
+}
+
+function buildAnnouncementNotificationTemplate_(courseTitle) {
+  return {
+    subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
+    htmlBody: [
+      '<p>長官、主管、組長和同仁們好：</p>',
+      `<p>因應外稽單位要求，我們需對內部人員進行<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>。課程內容已製作為線上課程與評量，敬請大家完成本次教育訓練時數與評量。</p>`,
+      '<p>本次課程可同時折抵資安三小時時數與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格。請於 8 月 30 日以前完成課程，感謝大家的協助。</p>',
+      '<p>請至資訊安全暨個資保護教育訓練完成課程與測驗。</p>',
+      '<p><a href="{{上課網址}}">前往上課</a></p>'
     ].join('')
   };
 }
@@ -762,14 +777,17 @@ function executeTrainingNotification_(payload, options) {
   try {
     const normalizedPayload = normalizeNotificationPayload_(payload);
     const context = buildDashboardContext_();
+    const trainingCourseUrl = getTrainingCourseUrl_();
     const selection = selectNotificationRecipients_(context, normalizedPayload);
-    const previewRecipient = selection.recipients[0] || null;
+    const previewRecipient = normalizedPayload.templateType === 'personalized'
+      ? (selection.recipients[0] || null)
+      : null;
     const sampleSubject = previewRecipient
-      ? applyNotificationTemplate_(normalizedPayload.template.subject, previewRecipient, context.courseTitle, buildDashboardUrl_())
-      : normalizedPayload.template.subject;
+      ? applyNotificationTemplate_(normalizedPayload.template.subject, previewRecipient, context.courseTitle, trainingCourseUrl)
+      : applyGenericNotificationTemplate_(normalizedPayload.template.subject, context.courseTitle, trainingCourseUrl);
     const sampleHtmlBody = previewRecipient
-      ? applyNotificationTemplate_(normalizedPayload.template.htmlBody, previewRecipient, context.courseTitle, buildDashboardUrl_())
-      : normalizedPayload.template.htmlBody;
+      ? applyNotificationTemplate_(normalizedPayload.template.htmlBody, previewRecipient, context.courseTitle, trainingCourseUrl)
+      : applyGenericNotificationTemplate_(normalizedPayload.template.htmlBody, context.courseTitle, trainingCourseUrl);
 
     if (dryRun) {
       return {
@@ -779,6 +797,8 @@ function executeTrainingNotification_(payload, options) {
         mode: 'preview',
         courseTitle: context.courseTitle,
         criteriaSummary: buildNotificationCriteriaSummary_(normalizedPayload),
+        templateType: normalizedPayload.templateType,
+        deliveryMode: normalizedPayload.templateType === 'announcement' ? 'single_bcc' : 'individual',
         recipientCount: selection.recipients.length,
         skippedCount: selection.skipped.length,
         recipients: selection.recipients.slice(0, 200),
@@ -790,24 +810,46 @@ function executeTrainingNotification_(payload, options) {
 
     const failures = [];
     let sentCount = 0;
-    selection.recipients.forEach((recipient) => {
-      const subject = applyNotificationTemplate_(normalizedPayload.template.subject, recipient, context.courseTitle, buildDashboardUrl_());
-      const htmlBody = applyNotificationTemplate_(normalizedPayload.template.htmlBody, recipient, context.courseTitle, buildDashboardUrl_());
+    if (normalizedPayload.templateType === 'announcement') {
+      const bccRecipients = selection.recipients.map((recipient) => recipient.email).filter(Boolean);
+      if (bccRecipients.length === 0) {
+        throw new Error('目前沒有可寄送的公告收件人。');
+      }
       try {
         MailApp.sendEmail({
-          to: recipient.email,
-          subject,
-          htmlBody
+          to: viewerEmail,
+          bcc: bccRecipients.join(','),
+          subject: applyGenericNotificationTemplate_(normalizedPayload.template.subject, context.courseTitle, trainingCourseUrl),
+          htmlBody: applyGenericNotificationTemplate_(normalizedPayload.template.htmlBody, context.courseTitle, trainingCourseUrl)
         });
-        sentCount += 1;
+        sentCount = 1;
       } catch (error) {
         failures.push({
-          email: recipient.email,
-          name: recipient.name,
+          email: viewerEmail,
+          name: '公告寄送',
           message: error && error.message ? error.message : String(error)
         });
       }
-    });
+    } else {
+      selection.recipients.forEach((recipient) => {
+        const subject = applyNotificationTemplate_(normalizedPayload.template.subject, recipient, context.courseTitle, trainingCourseUrl);
+        const htmlBody = applyNotificationTemplate_(normalizedPayload.template.htmlBody, recipient, context.courseTitle, trainingCourseUrl);
+        try {
+          MailApp.sendEmail({
+            to: recipient.email,
+            subject,
+            htmlBody
+          });
+          sentCount += 1;
+        } catch (error) {
+          failures.push({
+            email: recipient.email,
+            name: recipient.name,
+            message: error && error.message ? error.message : String(error)
+          });
+        }
+      });
+    }
 
     appendNotificationLog_({
       operatorEmail: viewerEmail,
@@ -825,6 +867,8 @@ function executeTrainingNotification_(payload, options) {
       mode: 'send',
       courseTitle: context.courseTitle,
       criteriaSummary: buildNotificationCriteriaSummary_(normalizedPayload),
+      templateType: normalizedPayload.templateType,
+      deliveryMode: normalizedPayload.templateType === 'announcement' ? 'single_bcc' : 'individual',
       recipientCount: selection.recipients.length,
       sentCount,
       skippedCount: selection.skipped.length,
@@ -845,6 +889,7 @@ function executeTrainingNotification_(payload, options) {
 function normalizeNotificationPayload_(payload) {
   const target = payload && payload.target ? payload.target : {};
   const template = payload && payload.template ? payload.template : {};
+  const templateType = String(payload && payload.templateType || 'personalized').trim() || 'personalized';
   const trainingStatus = String(payload && payload.trainingStatus || 'incomplete').trim() || 'incomplete';
   const includeDescendants = Boolean(target.includeDescendants);
   const orgType = String(target.orgType || '').trim();
@@ -857,11 +902,13 @@ function normalizeNotificationPayload_(payload) {
 
   if (!subject) throw new Error('通知主旨不得為空。');
   if (!htmlBody) throw new Error('通知內文不得為空。');
+  if (!['personalized', 'announcement'].includes(templateType)) throw new Error('通知範本類型不正確。');
   if (!orgType) throw new Error('請選擇組織類型。');
   if (assignmentMatch !== 'primary_only') throw new Error('目前僅支援依主職寄送。');
   if (levelValue !== '' && (!Number.isFinite(orgLevel) || orgLevel <= 0)) throw new Error('組織層級格式不正確。');
 
   return {
+    templateType,
     target: {
       orgType,
       level: levelValue === '' ? '' : orgLevel,
@@ -970,7 +1017,7 @@ function matchesNotificationStatusFilter_(learnerStatus, filterValue) {
   return learnerStatus === filterValue;
 }
 
-function applyNotificationTemplate_(template, recipient, courseTitle, dashboardUrl) {
+function applyNotificationTemplate_(template, recipient, courseTitle, trainingCourseUrl) {
   const replacements = {
     '{{姓名}}': recipient.name || '',
     '{{信箱}}': recipient.email || '',
@@ -978,9 +1025,7 @@ function applyNotificationTemplate_(template, recipient, courseTitle, dashboardU
     '{{職稱}}': recipient.assignmentTitle || '',
     '{{課程名稱}}': courseTitle || DASHBOARD_CONFIG.defaultCourseTitle,
     '{{訓練狀態}}': recipient.statusLabel || '',
-    '{{觀看進度}}': `${Math.max(0, Number(recipient.watchedPercent || 0))}%`,
-    '{{最佳分數}}': recipient.bestScore || recipient.bestScore === 0 ? `${Number(recipient.bestScore || 0)} 分` : '未作答',
-    '{{儀表板網址}}': dashboardUrl || ''
+    '{{上課網址}}': trainingCourseUrl || ''
   };
 
   let output = String(template || '');
@@ -990,8 +1035,21 @@ function applyNotificationTemplate_(template, recipient, courseTitle, dashboardU
   return output;
 }
 
+function applyGenericNotificationTemplate_(template, courseTitle, trainingCourseUrl) {
+  let output = String(template || '');
+  const replacements = {
+    '{{課程名稱}}': courseTitle || DASHBOARD_CONFIG.defaultCourseTitle,
+    '{{上課網址}}': trainingCourseUrl || ''
+  };
+  Object.keys(replacements).forEach((token) => {
+    output = output.split(token).join(String(replacements[token]));
+  });
+  return output;
+}
+
 function buildNotificationCriteriaSummary_(payload) {
   return {
+    templateType: payload.templateType,
     orgType: payload.target.orgType,
     level: payload.target.level,
     orgCode: payload.target.orgCode,
@@ -1001,6 +1059,13 @@ function buildNotificationCriteriaSummary_(payload) {
   };
 }
 
+function getTrainingCourseUrl_() {
+  if (typeof ENV === 'undefined' || !ENV.TRAINING_COURSE_URL || String(ENV.TRAINING_COURSE_URL).includes('請填入')) {
+    throw new Error('未設定教育訓練上課網址 ENV.TRAINING_COURSE_URL');
+  }
+  return String(ENV.TRAINING_COURSE_URL || '').trim();
+}
+
 function appendNotificationLog_(entry) {
   const ss = getTrainingSpreadsheet_();
   const sheet = getOrCreateSheetWithHeaders_(ss, DASHBOARD_CONFIG.notificationLogSheetName, TRAINING_SHEET_HEADERS[DASHBOARD_CONFIG.notificationLogSheetName]);
@@ -1008,6 +1073,7 @@ function appendNotificationLog_(entry) {
     Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss'),
     entry.operatorEmail || '',
     entry.courseTitle || '',
+    entry.payload.templateType === 'announcement' ? '公告版' : '個人化版',
     entry.payload.target.orgType || '',
     entry.payload.target.level === '' ? '' : Number(entry.payload.target.level || 0),
     entry.payload.target.orgCode || '',
