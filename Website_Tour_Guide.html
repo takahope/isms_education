@@ -5,9 +5,18 @@
     z-index: 2400;
   }
 
+  .website-tour-overlay:not(.is-ready) .website-tour-backdrop,
+  .website-tour-overlay:not(.is-ready) .website-tour-highlight,
+  .website-tour-overlay:not(.is-ready) .website-tour-tooltip,
+  .website-tour-overlay:not(.is-ready) .website-tour-arrow {
+    opacity: 0;
+    visibility: hidden;
+  }
+
   .website-tour-backdrop {
     position: absolute;
     background: rgba(15, 23, 42, 0.6);
+    transition: opacity 0.18s ease;
   }
 
   .website-tour-backdrop.is-top,
@@ -28,7 +37,7 @@
     border: 2px solid rgba(255, 255, 255, 0.92);
     background: transparent;
     pointer-events: none;
-    transition: top 0.26s ease, left 0.26s ease, width 0.26s ease, height 0.26s ease;
+    transition: top 0.26s ease, left 0.26s ease, width 0.26s ease, height 0.26s ease, opacity 0.18s ease;
   }
 
   .website-tour-tooltip {
@@ -39,7 +48,7 @@
     background: #ffffff;
     border: 1px solid rgba(148, 163, 184, 0.2);
     box-shadow: 0 28px 60px rgba(15, 23, 42, 0.24);
-    transition: top 0.26s ease, left 0.26s ease;
+    transition: top 0.26s ease, left 0.26s ease, opacity 0.18s ease;
   }
 
   .website-tour-pill {
@@ -130,7 +139,7 @@
     border-left: 1px solid rgba(148, 163, 184, 0.2);
     border-top: 1px solid rgba(148, 163, 184, 0.2);
     transform: rotate(45deg);
-    transition: top 0.26s ease, left 0.26s ease;
+    transition: top 0.26s ease, left 0.26s ease, opacity 0.18s ease;
   }
 
   @media (max-width: 720px) {
@@ -215,6 +224,8 @@
       this.steps = buildWebsiteTourSteps(profile);
       this.currentIndex = 0;
       this.isActive = true;
+      this.setPresentationVisible(false);
+      this.resetPresentationStyles();
       this.dom.overlay.classList.remove('hidden');
       this.dom.overlay.setAttribute('aria-hidden', 'false');
       this.dom.nextBtn.textContent = this.steps.length > 1 ? '下一步' : '完成';
@@ -229,6 +240,8 @@
       this.profile = null;
       this.steps = [];
       this.renderToken += 1;
+      this.setPresentationVisible(false);
+      this.resetPresentationStyles();
       this.dom.overlay.classList.add('hidden');
       this.dom.overlay.setAttribute('aria-hidden', 'true');
       window.removeEventListener('resize', this.handleViewportChange);
@@ -239,6 +252,7 @@
     async next() {
       if (!this.isActive) return;
       const step = this.steps[this.currentIndex];
+      this.setPresentationVisible(false);
       if (step && typeof step.nextAction === 'function') {
         await step.nextAction();
       }
@@ -254,6 +268,7 @@
       if (!this.isActive) return;
       const token = Date.now();
       this.renderToken = token;
+      this.setPresentationVisible(false);
       const step = this.steps[this.currentIndex];
       if (!step) {
         this.close();
@@ -296,6 +311,7 @@
       await sleepForWebsiteTour(220);
       if (!this.isActive || this.renderToken !== token) return;
       this.position(target, step.placement);
+      this.setPresentationVisible(true);
     }
 
     async resolveTarget(step) {
@@ -411,6 +427,33 @@
       this.dom.backdropRight.style.width = `${Math.max(0, viewportWidth - holeRight)}px`;
       this.dom.backdropRight.style.top = `${holeTop}px`;
       this.dom.backdropRight.style.height = `${Math.max(0, holeBottom - holeTop)}px`;
+    }
+
+    setPresentationVisible(isVisible) {
+      this.dom.overlay.classList.toggle('is-ready', Boolean(isVisible));
+    }
+
+    resetPresentationStyles() {
+      this.dom.highlight.style.top = '0px';
+      this.dom.highlight.style.left = '0px';
+      this.dom.highlight.style.width = '0px';
+      this.dom.highlight.style.height = '0px';
+      this.dom.tooltip.style.top = '0px';
+      this.dom.tooltip.style.left = '0px';
+      this.dom.arrow.style.top = '0px';
+      this.dom.arrow.style.left = '0px';
+      this.dom.backdropTop.style.top = '0px';
+      this.dom.backdropTop.style.height = '0px';
+      this.dom.backdropBottom.style.top = '0px';
+      this.dom.backdropBottom.style.height = '0px';
+      this.dom.backdropLeft.style.left = '0px';
+      this.dom.backdropLeft.style.top = '0px';
+      this.dom.backdropLeft.style.width = '0px';
+      this.dom.backdropLeft.style.height = '0px';
+      this.dom.backdropRight.style.left = '0px';
+      this.dom.backdropRight.style.top = '0px';
+      this.dom.backdropRight.style.width = '0px';
+      this.dom.backdropRight.style.height = '0px';
     }
 
     handleViewportChange() {
