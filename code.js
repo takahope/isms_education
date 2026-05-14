@@ -59,10 +59,11 @@ function getCurrentUserProfile() {
     const masterSS = getMasterSpreadsheet_();
     const assignmentSheet = getRequiredSheet_(masterSS, '人員職務配置');
     const context = buildStationEditorContext_(email);
-    const assignments = buildUserAssignments_(assignmentSheet, email);
+    const assignments = buildUserAssignments_(assignmentSheet, email, context.stationByCode);
     const managedStations = context.managedStations.map((station) => ({
       code: station.code,
       name: station.name,
+      isIsoCertified: Boolean(station.isIsoCertified),
       memberCount: Number(station.memberCount || 0),
       warnings: Array.isArray(station.warnings) ? station.warnings.slice() : [],
       members: Array.isArray(station.members)
@@ -245,7 +246,7 @@ function createStationNode(payload) {
       throw new Error(`駐站代碼 ${normalized.code} 已存在。`);
     }
 
-    context.orgSheet.getRange(context.orgSheet.getLastRow() + 1, 1, 1, 8).setValues([[
+    context.orgSheet.getRange(context.orgSheet.getLastRow() + 1, 1, 1, 9).setValues([[
       '行政',
       5,
       normalized.code,
@@ -253,7 +254,8 @@ function createStationNode(payload) {
       normalized.alias,
       'GRP-CO',
       normalized.managerEmail,
-      String(personnel.name || '').trim()
+      String(personnel.name || '').trim(),
+      normalized.isIsoCertified ? 'V' : ''
     ]]);
 
     const isExistingStationManager = context.stationManagerCandidates.some((item) => normalizeEmail_(item.email) === normalized.managerEmail);
@@ -357,17 +359,23 @@ function getAssignmentsByEmail_(sheet, email) {
   return assignments;
 }
 
-function buildUserAssignments_(sheet, email) {
+function buildUserAssignments_(sheet, email, stationByCode) {
   const assignments = getAssignmentsByEmail_(sheet, email);
   if (assignments.length === 0) return [];
 
   const assignmentTypeMap = buildAssignmentTypeMap_(assignments);
   return assignments
-    .map((assignment) => ({
-      type: assignmentTypeMap.get(getAssignmentIdentityKey_(assignment)) || '兼任',
-      orgName: String(assignment.orgName || '').trim(),
-      title: String(assignment.title || '').trim()
-    }))
+    .map((assignment) => {
+      const station = stationByCode && typeof stationByCode.get === 'function'
+        ? stationByCode.get(normalizeOrgCode_(assignment.orgCode))
+        : null;
+      return {
+        type: assignmentTypeMap.get(getAssignmentIdentityKey_(assignment)) || '兼任',
+        orgName: String(assignment.orgName || '').trim(),
+        title: String(assignment.title || '').trim(),
+        isIsoCertified: Boolean(station && station.isIsoCertified)
+      };
+    })
     .sort((a, b) => getAssignmentSortOrder_(a.type) - getAssignmentSortOrder_(b.type));
 }
 
@@ -462,6 +470,7 @@ function buildStationEditorContext_(viewerEmail) {
     .map((station) => ({
       code: station.code,
       name: station.name,
+      isIsoCertified: Boolean(station.isIsoCertified),
       managerEmail: station.managerEmail,
       managerName: station.managerName
     }))
@@ -570,7 +579,8 @@ function readStationNodesFromSheet_(sheet) {
       alias: String(rows[i][4] || '').trim(),
       parentCode: String(rows[i][5] || '').trim(),
       managerEmail: normalizeEmail_(rows[i][6]),
-      managerName: String(rows[i][7] || '').trim()
+      managerName: String(rows[i][7] || '').trim(),
+      isIsoCertified: String(rows[i][8] || '').trim() === 'V'
     });
   }
 
@@ -594,6 +604,7 @@ function buildManagedStationCard_(station, stationAssignments, personnelByEmail)
   return {
     code: station.code,
     name: station.name,
+    isIsoCertified: Boolean(station.isIsoCertified),
     managerEmail: station.managerEmail,
     managerName: station.managerName,
     memberCount: members.length,
@@ -610,6 +621,7 @@ function toStationAssignmentItem_(assignment, station) {
     orgCode: String(assignment.orgCode || '').trim(),
     stationCode: String(assignment.orgCode || '').trim(),
     stationName: String(assignment.orgName || (station && station.name) || '').trim(),
+    isIsoCertified: Boolean(station && station.isIsoCertified),
     title: String(assignment.title || '').trim(),
     managerEmail: normalizeEmail_(assignment.managerEmail || (station && station.managerEmail)),
     managerName: String(assignment.managerName || (station && station.managerName) || '').trim()
@@ -880,6 +892,7 @@ function normalizeCreateStationNodePayload_(payload) {
   const name = String(payload && payload.name || '').trim();
   const alias = String(payload && payload.alias || '').trim();
   const managerEmail = normalizeEmail_(payload && payload.managerEmail);
+  const isIsoCertified = Boolean(payload && payload.isIsoCertified);
 
   if (!suffix || !/^[A-Z]+$/.test(suffix)) {
     throw new Error('駐站代碼尾碼只能輸入英文字母。');
@@ -897,6 +910,7 @@ function normalizeCreateStationNodePayload_(payload) {
     name,
     alias,
     managerEmail,
+    isIsoCertified,
     code: buildStationCode_(stationType, suffix)
   };
 }

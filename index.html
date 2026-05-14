@@ -271,6 +271,51 @@
       white-space: nowrap;
     }
 
+    .iso-cert-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(217, 119, 6, 0.18);
+      background: linear-gradient(180deg, rgba(255, 251, 235, 0.98) 0%, rgba(255, 247, 237, 0.96) 100%);
+      color: #b45309;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      box-shadow: 0 8px 18px rgba(217, 119, 6, 0.08);
+    }
+
+    .iso-cert-badge::before {
+      content: 'ISO';
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 32px;
+      min-height: 20px;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: rgba(217, 119, 6, 0.14);
+      color: #92400e;
+      font-size: 0.67rem;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+    }
+
+    .iso-cert-badge.is-compact {
+      min-height: 26px;
+      padding: 0 10px;
+      font-size: 0.72rem;
+    }
+
+    .iso-cert-badge.is-compact::before {
+      min-width: 28px;
+      min-height: 18px;
+      font-size: 0.63rem;
+    }
+
     .station-overview-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -329,6 +374,15 @@
       letter-spacing: 0.03em;
     }
 
+    .station-overview-card-tagline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
     .station-overview-member-pill {
       display: inline-flex;
       align-items: center;
@@ -351,7 +405,7 @@
     }
 
     .station-overview-card-hint {
-      margin-top: 10px;
+      margin-top: 0;
       font-size: 0.8rem;
       color: #0f766e;
       font-weight: 700;
@@ -377,10 +431,15 @@
     }
 
     .assignment-text {
+      flex: 1 1 auto;
       font-size: 0.9375rem;
       font-weight: 600;
       color: var(--color-text-main);
       word-break: break-word;
+    }
+
+    .assignment-item .iso-cert-badge {
+      margin-left: auto;
     }
 
     .account-tools {
@@ -709,6 +768,36 @@
       letter-spacing: 0.03em;
     }
 
+    .editor-checkbox-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(217, 119, 6, 0.16);
+      background: linear-gradient(180deg, #fffdf8 0%, #ffffff 100%);
+    }
+
+    .editor-checkbox-card input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin-top: 2px;
+      accent-color: #d97706;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
+    .editor-checkbox-copy {
+      display: grid;
+      gap: 4px;
+    }
+
+    .editor-checkbox-title {
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
     .editor-option-toggle {
       display: flex;
       gap: 8px;
@@ -814,6 +903,14 @@
     .self-card-title {
       font-size: 1rem;
       font-weight: 700;
+    }
+
+    .station-card-title-row,
+    .self-row-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     .station-card-badge {
@@ -1769,6 +1866,16 @@
             </div>
             <select id="station-node-manager-select" class="inline-select"></select>
           </div>
+          <div class="editor-form-field">
+            <label>ISO 驗證範圍</label>
+            <label class="editor-checkbox-card" for="station-node-iso-checkbox">
+              <input id="station-node-iso-checkbox" type="checkbox" />
+              <span class="editor-checkbox-copy">
+                <span class="editor-checkbox-title">納入 ISO 驗證範圍</span>
+                <span class="editor-form-note">勾選後，這個駐站會在首頁與收案配置卡片上顯示 ISO 驗證範圍標籤。</span>
+              </span>
+            </label>
+          </div>
           <div id="station-node-form-error" class="editor-form-error"></div>
         </div>
       </div>
@@ -1878,7 +1985,8 @@
             .map((item) => ({
               type: String(item.type || '').trim(),
               orgName: String(item.orgName || '').trim(),
-              title: String(item.title || '').trim()
+              title: String(item.title || '').trim(),
+              isIsoCertified: Boolean(item && item.isIsoCertified)
             }))
         : [];
 
@@ -1898,6 +2006,7 @@
         .map((station) => ({
           code: String(station && station.code || '').trim(),
           name: String(station && station.name || '').trim(),
+          isIsoCertified: Boolean(station && station.isIsoCertified),
           memberCount: Number(station && station.memberCount || 0),
           warnings: Array.isArray(station && station.warnings)
             ? station.warnings.map((item) => String(item || '').trim()).filter(Boolean)
@@ -1912,6 +2021,11 @@
         }))
         .filter((station) => station.code || station.name)
         .sort((a, b) => String(a.name || a.code).localeCompare(String(b.name || b.code), 'zh-Hant'));
+    }
+
+    function buildIsoBadgeHtml(options = {}) {
+      const className = options.compact ? 'iso-cert-badge is-compact' : 'iso-cert-badge';
+      return `<span class="${className}">驗證範圍</span>`;
     }
 
     function renderUserProfile(profile) {
@@ -1957,6 +2071,9 @@
           ].filter(Boolean).join('｜');
 
           item.appendChild(text);
+          if (assignment.isIsoCertified) {
+            item.insertAdjacentHTML('beforeend', buildIsoBadgeHtml({ compact: true }));
+          }
           fragment.appendChild(item);
         });
 
@@ -2028,17 +2145,20 @@
         head.appendChild(memberPill);
         button.appendChild(head);
 
+        const tagline = document.createElement('div');
+        tagline.className = 'station-overview-card-tagline';
+        if (station.isIsoCertified) {
+          tagline.insertAdjacentHTML('beforeend', buildIsoBadgeHtml());
+        }
+        tagline.insertAdjacentHTML('beforeend', '<div class="station-overview-card-hint">查看收案人員名單</div>');
+        button.appendChild(tagline);
+
         if (station.warnings.length) {
           const warning = document.createElement('div');
           warning.className = 'station-overview-warning';
           warning.textContent = station.warnings.join('｜');
           button.appendChild(warning);
         }
-
-        const hint = document.createElement('div');
-        hint.className = 'station-overview-card-hint';
-        hint.textContent = '查看收案人員名單';
-        button.appendChild(hint);
 
         grid.appendChild(button);
       });
@@ -2079,6 +2199,7 @@
       document.getElementById('station-overview-title').textContent = station.name || station.code;
       document.getElementById('station-overview-meta').textContent = [
         station.code,
+        station.isIsoCertified ? 'ISO 驗證範圍' : '',
         `收案人員 ${station.memberCount} 位`
       ].filter(Boolean).join('｜');
 
@@ -2181,6 +2302,7 @@
           alias: '',
           managerSource: 'station',
           managerEmail: '',
+          isIsoCertified: false,
           error: ''
         },
         message: ''
@@ -2262,6 +2384,9 @@
       });
       document.getElementById('station-node-manager-select').addEventListener('change', () => {
         stationEditorState.nodeForm.managerEmail = document.getElementById('station-node-manager-select').value;
+      });
+      document.getElementById('station-node-iso-checkbox').addEventListener('change', () => {
+        stationEditorState.nodeForm.isIsoCertified = Boolean(document.getElementById('station-node-iso-checkbox').checked);
       });
     }
 
@@ -2567,6 +2692,7 @@
         allStations: allStations.map((station) => ({
           code: String(station.code || '').trim(),
           name: String(station.name || '').trim(),
+          isIsoCertified: Boolean(station.isIsoCertified),
           managerEmail: String(station.managerEmail || '').trim(),
           managerName: String(station.managerName || '').trim(),
           memberCount: Number(station.memberCount || 0),
@@ -2576,6 +2702,7 @@
         managedStations: managedStations.map((station) => ({
           code: String(station.code || '').trim(),
           name: String(station.name || '').trim(),
+          isIsoCertified: Boolean(station.isIsoCertified),
           managerEmail: String(station.managerEmail || '').trim(),
           managerName: String(station.managerName || '').trim(),
           warnings: Array.isArray(station.warnings) ? station.warnings.map((item) => String(item || '').trim()).filter(Boolean) : [],
@@ -2586,6 +2713,7 @@
         stationOptions: stationOptions.map((station) => ({
           code: String(station.code || '').trim(),
           name: String(station.name || '').trim(),
+          isIsoCertified: Boolean(station.isIsoCertified),
           managerEmail: String(station.managerEmail || '').trim(),
           managerName: String(station.managerName || '').trim()
         })),
@@ -2617,6 +2745,7 @@
         name: String(item && item.name || '').trim(),
         stationCode: String(item && (item.stationCode || item.orgCode) || '').trim(),
         stationName: String(item && (item.stationName || item.orgName) || '').trim(),
+        isIsoCertified: Boolean(item && item.isIsoCertified),
         title: String(item && item.title || '').trim(),
         managerEmail: String(item && item.managerEmail || '').trim(),
         managerName: String(item && item.managerName || '').trim()
@@ -2868,6 +2997,7 @@
       return {
         ...row,
         stationName: station ? station.name : row.stationName,
+        isIsoCertified: Boolean(station ? station.isIsoCertified : row.isIsoCertified),
         managerEmail: station ? station.managerEmail : row.managerEmail,
         managerName: station ? station.managerName : row.managerName
       };
@@ -3111,6 +3241,7 @@
         name: candidate.name,
         stationCode: stationInfo.code,
         stationName: stationInfo.name,
+        isIsoCertified: Boolean(stationInfo.isIsoCertified),
         title: '收案人員',
         managerEmail: stationInfo.managerEmail,
         managerName: stationInfo.managerName
@@ -3149,6 +3280,7 @@
         name: currentUserProfile && currentUserProfile.name ? currentUserProfile.name : '',
         stationCode: stationInfo.code,
         stationName: stationInfo.name,
+        isIsoCertified: Boolean(stationInfo.isIsoCertified),
         title: '收案人員',
         managerEmail: stationInfo.managerEmail,
         managerName: stationInfo.managerName
@@ -3175,6 +3307,7 @@
       const previousStationCode = target.stationCode;
       target.stationCode = stationInfo.code;
       target.stationName = stationInfo.name;
+      target.isIsoCertified = Boolean(stationInfo.isIsoCertified);
       target.managerEmail = stationInfo.managerEmail;
       target.managerName = stationInfo.managerName;
       syncStationMemberRowInCollections(draft, target, previousStationCode);
@@ -3493,6 +3626,7 @@
         const warningHtml = Array.isArray(station.warnings) && station.warnings.length
           ? `<div class="warning-text">${escapeHtml(station.warnings.join('｜'))}</div>`
           : '';
+        const isoBadgeHtml = station.isIsoCertified ? buildIsoBadgeHtml({ compact: true }) : '';
 
         const memberRows = station.members.map((member) => {
           const rowKey = buildEditorRowKey(member);
@@ -3519,7 +3653,11 @@
           <div class="station-card-header">
             <div>
               <div class="station-card-summary">
-              <div class="station-card-title">${escapeHtml(station.name)} <span class="station-card-meta">(${escapeHtml(station.code)})</span>${isDirty ? '<span class="station-card-badge">待儲存異動</span>' : ''}</div>
+              <div class="station-card-title-row">
+                <div class="station-card-title">${escapeHtml(station.name)} <span class="station-card-meta">(${escapeHtml(station.code)})</span></div>
+                ${isoBadgeHtml}
+                ${isDirty ? '<span class="station-card-badge">待儲存異動</span>' : ''}
+              </div>
               <div class="station-card-meta">駐站管理員：${escapeHtml(station.managerName || station.managerEmail || '未設定')}｜現有收案人員 ${station.members.length} 位</div>
               </div>
               ${warningHtml}
@@ -3583,12 +3721,16 @@
         const optionsHtml = draft.stationOptions.map((station) => `
           <option value="${escapeHtml(station.code)}" ${station.code === item.stationCode ? 'selected' : ''}>${escapeHtml(station.name)} (${escapeHtml(station.code)})</option>
         `).join('');
+        const isoBadgeHtml = item.isIsoCertified ? buildIsoBadgeHtml({ compact: true }) : '';
 
         return `
           <div class="self-row">
             <div class="self-row-top">
               <div class="member-main">
-                <div class="member-name">${escapeHtml(item.stationName || item.stationCode)}</div>
+                <div class="self-row-title">
+                  <div class="member-name">${escapeHtml(item.stationName || item.stationCode)}</div>
+                  ${isoBadgeHtml}
+                </div>
                 <div class="member-meta">${escapeHtml(['駐站管理員', item.managerName || item.managerEmail].filter(Boolean).join('｜'))}</div>
             </div>
               <button type="button" class="mini-btn mini-btn-danger" data-delete-row="${escapeHtml(rowKey)}" data-tour="self-delete-assignment">刪除</button>
@@ -3766,6 +3908,7 @@
         alias: '',
         managerSource: 'station',
         managerEmail: '',
+        isIsoCertified: false,
         error: ''
       };
       renderStationNodeTypeButtons();
@@ -3775,6 +3918,7 @@
       document.getElementById('station-node-suffix-input').value = '';
       document.getElementById('station-node-name-input').value = '';
       document.getElementById('station-node-alias-input').value = '';
+      document.getElementById('station-node-iso-checkbox').checked = false;
       renderStationNodeFormError();
       const modal = document.getElementById('station-node-modal');
       modal.classList.remove('hidden');
@@ -3835,6 +3979,7 @@
       stationEditorState.nodeForm.name = String(document.getElementById('station-node-name-input').value || '').trim();
       stationEditorState.nodeForm.alias = String(document.getElementById('station-node-alias-input').value || '').trim();
       stationEditorState.nodeForm.managerEmail = String(document.getElementById('station-node-manager-select').value || '').trim().toLowerCase();
+      stationEditorState.nodeForm.isIsoCertified = Boolean(document.getElementById('station-node-iso-checkbox').checked);
 
       if (!stationEditorState.nodeForm.suffix || !stationEditorState.nodeForm.name || !stationEditorState.nodeForm.managerEmail) {
         renderStationNodeFormError('請完整填寫駐站類型、英文尾碼、名稱與管理員。');
@@ -3849,7 +3994,8 @@
           suffix: stationEditorState.nodeForm.suffix,
           name: stationEditorState.nodeForm.name,
           alias: stationEditorState.nodeForm.alias,
-          managerEmail: stationEditorState.nodeForm.managerEmail
+          managerEmail: stationEditorState.nodeForm.managerEmail,
+          isIsoCertified: stationEditorState.nodeForm.isIsoCertified
         });
         if (!response || !response.success) {
           throw new Error(response && response.message ? response.message : '無法新增駐站。');
