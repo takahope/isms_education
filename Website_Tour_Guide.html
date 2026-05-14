@@ -701,6 +701,16 @@
         beforeShow: async () => {
           await ensureStationEditorReadyForTour('self');
         }
+      },
+      {
+        selector: '#start-training-btn',
+        title: '隨時可以開始訓練',
+        content: '完成首頁確認後，您可以隨時按這裡開始進行教育訓練。',
+        placement: 'top',
+        beforeShow: async () => {
+          closeStationEditorForTour();
+          await sleepForWebsiteTour(120);
+        }
       }
     ];
   }
