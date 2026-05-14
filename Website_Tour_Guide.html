@@ -478,7 +478,7 @@
   function buildWebsiteTourSteps(profile) {
     if (profile.isStationManager) return buildStationManagerTourSteps();
     if (profile.isStationStaff) return buildStationStaffTourSteps();
-    return [];
+    return buildGeneralUserTourSteps();
   }
 
   function buildStationManagerTourSteps() {
@@ -693,6 +693,33 @@
     ];
   }
 
+  function buildGeneralUserTourSteps() {
+    return [
+      {
+        selector: '#account-identity-block',
+        title: '先確認姓名與帳號',
+        content: '請先確認目前顯示的姓名與登入帳號是否正確，避免後續訓練紀錄歸到錯誤的人員資料。',
+        placement: 'bottom'
+      },
+      {
+        selector: () => {
+          const assignments = document.getElementById('display-user-assignments');
+          if (assignments && isVisibleForWebsiteTour(assignments)) return assignments;
+          return document.getElementById('account-card');
+        },
+        title: '再確認職務內容',
+        content: '請確認職務內容是否正確；如果職務內容有需要調整的地方，請洽專案規劃組。',
+        placement: 'bottom'
+      },
+      {
+        selector: '#start-training-btn',
+        title: '接著就可以開始看影片',
+        content: '確認完成後，您可以隨時按這裡開始觀看影片並進行本次教育訓練。',
+        placement: 'top'
+      }
+    ];
+  }
+
   function buildPlacementPreference(preferredPlacement) {
     const preferred = ['top', 'right', 'bottom', 'left'].includes(preferredPlacement) ? preferredPlacement : 'bottom';
     const all = ['bottom', 'right', 'top', 'left'];
@@ -813,7 +840,7 @@
   }
 
   function isWebsiteTourEligible(profile) {
-    return Boolean(profile && (profile.isStationManager || profile.isStationStaff));
+    return Boolean(profile && profile.email);
   }
 
   window.startWebsiteTour = function startWebsiteTour(forceReplay) {

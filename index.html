@@ -1544,7 +1544,7 @@
             </button>
           </div>
           <div class="account-chip">目前登入帳號</div>
-          <div class="account-primary-line">
+          <div class="account-primary-line" id="account-identity-block" data-tour="account-identity">
             <div class="account-email" id="display-user-email">載入中...</div>
             <div class="account-name hidden" id="display-user-name"></div>
           </div>
@@ -1934,11 +1934,10 @@
 
       if (profile.canEditStationAssignments) {
         editBtn.classList.remove('hidden');
-        tourBtn.classList.remove('hidden');
       } else {
         editBtn.classList.add('hidden');
-        tourBtn.classList.add('hidden');
       }
+      tourBtn.classList.remove('hidden');
 
       assignmentsEl.textContent = '';
       if (profile.assignments.length === 0) {
