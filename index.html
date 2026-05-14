@@ -1823,10 +1823,6 @@
               <label for="station-staff-name-input">姓名</label>
               <input id="station-staff-name-input" class="inline-select" type="text" placeholder="請輸入姓名" />
             </div>
-            <div class="editor-form-field">
-              <label for="station-staff-title-input">職稱</label>
-              <input id="station-staff-title-input" class="inline-select" type="text" placeholder="例如：收案人員" />
-            </div>
           </div>
           <div class="editor-form-field">
             <label for="station-staff-station-select">駐站</label>
@@ -1869,7 +1865,7 @@
             <div class="editor-form-field">
               <label for="station-node-suffix-input">英文尾碼</label>
               <input id="station-node-suffix-input" class="inline-select" type="text" maxlength="12" placeholder="例如：ABC" />
-              <div class="editor-form-note">只接受英文字母，系統會自動轉成大寫。</div>
+              <div class="editor-form-note">可輸入英文字母與數字，系統會自動轉成大寫。</div>
             </div>
             <div class="editor-form-field">
               <label>完整代碼預覽</label>
@@ -2320,7 +2316,6 @@
         staffForm: {
           email: '',
           name: '',
-          title: '',
           stationCode: '',
           error: ''
         },
@@ -2374,9 +2369,6 @@
       document.getElementById('station-staff-name-input').addEventListener('input', () => {
         stationEditorState.staffForm.name = document.getElementById('station-staff-name-input').value;
       });
-      document.getElementById('station-staff-title-input').addEventListener('input', () => {
-        stationEditorState.staffForm.title = document.getElementById('station-staff-title-input').value;
-      });
       document.getElementById('station-staff-station-select').addEventListener('change', () => {
         stationEditorState.staffForm.stationCode = document.getElementById('station-staff-station-select').value;
       });
@@ -2396,7 +2388,7 @@
       });
       document.getElementById('station-node-suffix-input').addEventListener('input', () => {
         const input = document.getElementById('station-node-suffix-input');
-        input.value = input.value.replace(/[^a-z]/gi, '').toUpperCase();
+        input.value = input.value.replace(/[^a-z0-9]/gi, '').toUpperCase();
         stationEditorState.nodeForm.suffix = input.value;
         updateStationNodeCodePreview();
       });
@@ -3853,7 +3845,6 @@
       stationEditorState.staffForm = {
         email: '',
         name: '',
-        title: '',
         stationCode: stationEditorState.managedSelectedStationCode || '',
         error: ''
       };
@@ -3890,7 +3881,6 @@
       `;
       document.getElementById('station-staff-email-input').value = stationEditorState.staffForm.email || '';
       document.getElementById('station-staff-name-input').value = stationEditorState.staffForm.name || '';
-      document.getElementById('station-staff-title-input').value = stationEditorState.staffForm.title || '';
       stationSelect.value = stationEditorState.staffForm.stationCode || '';
       document.getElementById('station-staff-email-note').textContent = '可直接輸入新 Email，或從既有人員名單選擇。';
       renderStationStaffFormError();
@@ -3924,11 +3914,10 @@
       if (stationEditorState.isStaffModalSubmitting) return;
       stationEditorState.staffForm.email = String(document.getElementById('station-staff-email-input').value || '').trim().toLowerCase();
       stationEditorState.staffForm.name = String(document.getElementById('station-staff-name-input').value || '').trim();
-      stationEditorState.staffForm.title = String(document.getElementById('station-staff-title-input').value || '').trim();
       stationEditorState.staffForm.stationCode = String(document.getElementById('station-staff-station-select').value || '').trim();
 
-      if (!stationEditorState.staffForm.email || !stationEditorState.staffForm.name || !stationEditorState.staffForm.title || !stationEditorState.staffForm.stationCode) {
-        renderStationStaffFormError('請完整填寫 Email、姓名、職稱與駐站。');
+      if (!stationEditorState.staffForm.email || !stationEditorState.staffForm.name || !stationEditorState.staffForm.stationCode) {
+        renderStationStaffFormError('請完整填寫 Email、姓名與駐站。');
         return;
       }
 
@@ -3938,7 +3927,6 @@
         const response = await callServer('createStationStaff', {
           email: stationEditorState.staffForm.email,
           name: stationEditorState.staffForm.name,
-          title: stationEditorState.staffForm.title,
           stationCode: stationEditorState.staffForm.stationCode
         });
         if (!response || !response.success) {

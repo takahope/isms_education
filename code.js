@@ -920,7 +920,6 @@ function dedupeUpdatesByRowIndex_(updates) {
 function normalizeCreateStationStaffPayload_(payload) {
   const email = normalizeEmail_(payload && payload.email);
   const stationCode = normalizeOrgCode_(payload && payload.stationCode);
-  const title = String(payload && payload.title || '').trim();
   const name = String(payload && payload.name || '').trim();
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -932,11 +931,8 @@ function normalizeCreateStationStaffPayload_(payload) {
   if (!stationCode) {
     throw new Error('請選擇駐站。');
   }
-  if (!title) {
-    throw new Error('請輸入職稱。');
-  }
 
-  return { email, name, stationCode, title };
+  return { email, name, stationCode, title: '收案人員' };
 }
 
 function normalizeCreateStationNodePayload_(payload) {
@@ -947,8 +943,8 @@ function normalizeCreateStationNodePayload_(payload) {
   const managerEmail = normalizeEmail_(payload && payload.managerEmail);
   const isIsoCertified = Boolean(payload && payload.isIsoCertified);
 
-  if (!suffix || !/^[A-Z]+$/.test(suffix)) {
-    throw new Error('駐站代碼尾碼只能輸入英文字母。');
+  if (!suffix || !/^[A-Z0-9]+$/.test(suffix)) {
+    throw new Error('駐站代碼尾碼只能輸入英文字母與數字。');
   }
   if (!name) {
     throw new Error('請輸入駐站中文名稱。');
