@@ -1551,7 +1551,7 @@
           <div class="assignment-list hidden" id="display-user-assignments" data-tour="assignments"></div>
           <div class="station-overview-summary hidden" id="station-overview-summary"></div>
         </div>
-        <p class="result-desc">請確認您的帳號無誤。本次訓練包含一段核心觀念影片，以及課後評量測驗。</p>
+        <p class="result-desc">請確認您的帳號職、務無誤後再開始本次訓練，包含一段核心觀念影片，以及課後評量測驗。</p>
         <button id="start-training-btn" type="button" onclick="startTraining()" class="btn btn-primary">開始觀看影片</button>
       </div>
 
@@ -2646,6 +2646,26 @@
       return candidates.find((item) => item.email === email) || null;
     }
 
+    function matchesManagedStationKeyword(station, keyword) {
+      const normalizedKeyword = String(keyword || '').trim().toLowerCase();
+      if (!normalizedKeyword) return true;
+
+      const stationHaystacks = [
+        station && station.name,
+        station && station.code,
+        station && station.managerName,
+        station && station.managerEmail
+      ].map((value) => String(value || '').toLowerCase());
+
+      const memberHaystacks = (Array.isArray(station && station.members) ? station.members : []).flatMap((member) => ([
+        member && member.name,
+        member && member.email,
+        member && member.title
+      ].map((value) => String(value || '').toLowerCase())));
+
+      return stationHaystacks.concat(memberHaystacks).some((value) => value.includes(normalizedKeyword));
+    }
+
     function syncManagedStationsFromAllStations(draft) {
       if (!draft || !draft.viewer) return;
       const viewerEmail = String(draft.viewer.email || '').trim();
@@ -3337,16 +3357,7 @@
         if (!managerFilterEmail) return true;
         return station.managerEmail === managerFilterEmail;
       });
-      const stations = managerFilteredStations.filter((station) => {
-        if (!searchKeyword) return true;
-        const haystacks = [
-          station.name,
-          station.code,
-          station.managerName,
-          station.managerEmail
-        ].map((value) => String(value || '').toLowerCase());
-        return haystacks.some((value) => value.includes(searchKeyword));
-      });
+      const stations = managerFilteredStations.filter((station) => matchesManagedStationKeyword(station, searchKeyword));
 
       if (draft.viewer && draft.viewer.isStationManager) {
         const toggle = document.createElement('div');
@@ -3379,7 +3390,7 @@
             type="text"
             class="inline-select"
             data-managed-search
-            placeholder="搜尋駐站名稱、代碼或管理員"
+            placeholder="搜尋駐站、管理員或收案人員"
             value="${escapeHtml(stationEditorState.managedSearchKeyword || '')}"
           />
           <select class="inline-select" data-managed-manager-filter>
@@ -3407,15 +3418,10 @@
             stationEditorState.managedSearchKeyword = searchInput.value;
             const selectionStart = searchInput.selectionStart;
             const selectionEnd = searchInput.selectionEnd;
-            const availableStation = managerFilteredStations.some((station) => station.code === stationEditorState.managedSelectedStationCode && (
-              !String(stationEditorState.managedSearchKeyword || '').trim()
-              || [
-                station.name,
-                station.code,
-                station.managerName,
-                station.managerEmail
-              ].map((value) => String(value || '').toLowerCase()).some((value) => value.includes(String(stationEditorState.managedSearchKeyword || '').trim().toLowerCase()))
-            ));
+            const availableStation = managerFilteredStations.some((station) =>
+              station.code === stationEditorState.managedSelectedStationCode
+              && matchesManagedStationKeyword(station, stationEditorState.managedSearchKeyword)
+            );
             if (!availableStation) stationEditorState.managedSelectedStationCode = '';
             renderManagedViewWithFocusRestore(selectionStart, selectionEnd);
           });
@@ -3424,15 +3430,10 @@
             stationEditorState.managedSearchKeyword = searchInput.value;
             const selectionStart = searchInput.selectionStart;
             const selectionEnd = searchInput.selectionEnd;
-            const availableStation = managerFilteredStations.some((station) => station.code === stationEditorState.managedSelectedStationCode && (
-              !String(stationEditorState.managedSearchKeyword || '').trim()
-              || [
-                station.name,
-                station.code,
-                station.managerName,
-                station.managerEmail
-              ].map((value) => String(value || '').toLowerCase()).some((value) => value.includes(String(stationEditorState.managedSearchKeyword || '').trim().toLowerCase()))
-            ));
+            const availableStation = managerFilteredStations.some((station) =>
+              station.code === stationEditorState.managedSelectedStationCode
+              && matchesManagedStationKeyword(station, stationEditorState.managedSearchKeyword)
+            );
             if (!availableStation) stationEditorState.managedSelectedStationCode = '';
             renderManagedViewWithFocusRestore(selectionStart, selectionEnd);
           });
