@@ -533,6 +533,14 @@
       z-index: 2001 !important;
     }
 
+    .station-editor-confirm-container {
+      z-index: 2200 !important;
+    }
+
+    .station-editor-confirm-popup {
+      z-index: 2201 !important;
+    }
+
     .editor-dialog {
       width: min(960px, 100%);
       max-height: min(88vh, 900px);
@@ -3671,7 +3679,7 @@
         const deleteDisabledAttr = (!canDeleteStation || isDeletingStation || stationEditorState.isSaving || hasPendingChanges) ? 'disabled' : '';
         const deleteHintText = hasPendingChanges
           ? '請先儲存或取消目前異動。'
-          : (canDeleteStation ? '未使用的駐站可直接移除。' : '仍有收案人員時不可刪除。');
+          : (canDeleteStation ? '未使用駐站可移除。' : '仍有收案人員時不可刪除。');
 
         const memberRows = station.members.map((member) => {
           const rowKey = buildEditorRowKey(member);
@@ -4098,7 +4106,11 @@
           confirmButtonText: '確認刪除',
           cancelButtonText: '取消',
           confirmButtonColor: '#dc2626',
-          reverseButtons: true
+          reverseButtons: true,
+          customClass: {
+            container: 'station-editor-confirm-container',
+            popup: 'station-editor-confirm-popup'
+          }
         });
         confirmed = result.isConfirmed;
       } else {
