@@ -598,6 +598,16 @@
         }
       },
       {
+        selector: '[data-tour="delete-station-btn"]',
+        title: '刪除未使用駐站',
+        content: '若某個駐站已不再使用，可在這裡刪除。這個刪除功能會立即獨立送出，不會和其他駐站變更一起等到「儲存變更」才處理。',
+        placement: 'left',
+        beforeShow: async () => {
+          await ensureStationEditorReadyForTour('managed');
+        },
+        skipIf: () => !document.querySelector('[data-tour="delete-station-btn"]')
+      },
+      {
         selector: '#station-editor-save-btn',
         title: '最後記得儲存變更',
         content: '完成調整後，請按這裡送出所有異動。未儲存前，駐站配置不會正式更新。',

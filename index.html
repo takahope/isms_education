@@ -3870,7 +3870,7 @@
               ${warningHtml}
             </div>
             <div class="station-card-actions">
-              <button type="button" class="mini-btn mini-btn-danger" data-delete-station="${escapeHtml(station.code)}" ${deleteDisabledAttr}>${deleteButtonLabel}</button>
+              <button type="button" class="mini-btn mini-btn-danger" data-delete-station="${escapeHtml(station.code)}" data-tour="delete-station-btn" ${deleteDisabledAttr}>${deleteButtonLabel}</button>
               <div class="station-delete-note">${escapeHtml(deleteHintText)}</div>
             </div>
           </div>
