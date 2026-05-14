@@ -1834,6 +1834,12 @@
       <div class="editor-footer">
         <div class="editor-status-wrap">
           <div class="editor-status">若 Email 已存在人員主檔，系統會略過主檔新增。</div>
+          <div id="station-staff-progress" class="editor-progress hidden">
+            <div class="editor-progress-track">
+              <div id="station-staff-progress-fill" class="editor-progress-fill" style="width: 0%;"></div>
+            </div>
+            <div id="station-staff-progress-label" class="editor-progress-label">正在新增收案人員</div>
+          </div>
         </div>
         <div class="editor-footer-actions">
           <button type="button" id="station-staff-cancel-btn" class="mini-btn">取消</button>
@@ -1906,6 +1912,12 @@
       <div class="editor-footer">
         <div class="editor-status-wrap">
           <div class="editor-status">若指定的人尚未是駐站管理員，系統會同步補一筆駐站管理員職務。</div>
+          <div id="station-node-progress" class="editor-progress hidden">
+            <div class="editor-progress-track">
+              <div id="station-node-progress-fill" class="editor-progress-fill" style="width: 0%;"></div>
+            </div>
+            <div id="station-node-progress-label" class="editor-progress-label">正在新增駐站</div>
+          </div>
         </div>
         <div class="editor-footer-actions">
           <button type="button" id="station-node-cancel-btn" class="mini-btn">取消</button>
@@ -1933,6 +1945,8 @@
     const CLOUD_SYNC_UNIQUE_WATCH_THRESHOLD_SEC = 30 * 60;
     const FOCUS_LOSS_GRACE_MS = 80;
     const FOCUS_ALERT_COOLDOWN_MS = 1000;
+    const STATION_EDITOR_PROGRESS_TO_90_MS = 5000;
+    const STATION_EDITOR_PROGRESS_TICK_MS = 200;
 
     let player;
     let replayPlayer;
@@ -2305,6 +2319,11 @@
         saveProgressValue: 0,
         saveProgressVisible: false,
         saveProgressPhase: 'idle',
+        saveProgressScope: '',
+        saveProgressSavingLabel: '',
+        saveProgressSuccessLabel: '',
+        saveProgressErrorLabel: '',
+        saveProgressStartedAt: 0,
         saveProgressTimerId: null,
         statusResetTimerId: null,
         baseData: null,
@@ -2436,9 +2455,15 @@
       stationEditorState.saveProgressValue = 0;
       stationEditorState.saveProgressVisible = false;
       stationEditorState.saveProgressPhase = 'idle';
+      stationEditorState.saveProgressScope = '';
+      stationEditorState.saveProgressSavingLabel = '';
+      stationEditorState.saveProgressSuccessLabel = '';
+      stationEditorState.saveProgressErrorLabel = '';
+      stationEditorState.saveProgressStartedAt = 0;
       if (!options.preserveMessage) {
         stationEditorState.message = '';
       }
+      renderStationEditorProgressViews();
     }
 
     function showStationEditorToast(config) {
@@ -2458,31 +2483,97 @@
       });
     }
 
-    function startStationEditorSaveProgress(changeCount) {
+    function getStationEditorProgressPresentation(scope) {
+      const activeScope = String(stationEditorState.saveProgressScope || '').trim();
+      const isActive = Boolean(
+        stationEditorState.saveProgressVisible
+        && activeScope
+        && activeScope === scope
+      );
+      const progressPhaseClass = stationEditorState.saveProgressPhase === 'success'
+        ? ' is-success'
+        : stationEditorState.saveProgressPhase === 'error'
+          ? ' is-error'
+          : '';
+      const progressLabel = stationEditorState.saveProgressPhase === 'success'
+        ? (stationEditorState.saveProgressSuccessLabel || '處理完成')
+        : stationEditorState.saveProgressPhase === 'error'
+          ? (stationEditorState.saveProgressErrorLabel || '處理失敗')
+          : (stationEditorState.saveProgressSavingLabel || '處理中');
+      return {
+        isActive,
+        progressPhaseClass,
+        progressLabel
+      };
+    }
+
+    function renderStationStaffModalProgress() {
+      const progressEl = document.getElementById('station-staff-progress');
+      if (!progressEl) return;
+      const fillEl = document.getElementById('station-staff-progress-fill');
+      const labelEl = document.getElementById('station-staff-progress-label');
+      const presentation = getStationEditorProgressPresentation('staff-modal');
+      progressEl.className = `editor-progress${presentation.progressPhaseClass}${presentation.isActive ? '' : ' hidden'}`;
+      if (fillEl) {
+        fillEl.style.width = `${Math.max(0, Math.min(100, Number(stationEditorState.saveProgressValue || 0)))}%`;
+      }
+      if (labelEl) {
+        labelEl.textContent = presentation.progressLabel;
+      }
+    }
+
+    function renderStationNodeModalProgress() {
+      const progressEl = document.getElementById('station-node-progress');
+      if (!progressEl) return;
+      const fillEl = document.getElementById('station-node-progress-fill');
+      const labelEl = document.getElementById('station-node-progress-label');
+      const presentation = getStationEditorProgressPresentation('node-modal');
+      progressEl.className = `editor-progress${presentation.progressPhaseClass}${presentation.isActive ? '' : ' hidden'}`;
+      if (fillEl) {
+        fillEl.style.width = `${Math.max(0, Math.min(100, Number(stationEditorState.saveProgressValue || 0)))}%`;
+      }
+      if (labelEl) {
+        labelEl.textContent = presentation.progressLabel;
+      }
+    }
+
+    function renderStationEditorProgressViews() {
+      if (stationEditorState.isOpen) {
+        renderStationEditor();
+      }
+      renderStationStaffModalProgress();
+      renderStationNodeModalProgress();
+    }
+
+    function startStationEditorSaveProgress(changeCount, options = {}) {
       clearStationEditorProgressTimer();
       clearStationEditorStatusResetTimer();
       stationEditorState.saveProgressPhase = 'saving';
+      stationEditorState.saveProgressScope = String(options.scope || 'editor').trim() || 'editor';
+      stationEditorState.saveProgressSavingLabel = String(options.savingLabel || '正在同步駐站收案配置').trim();
+      stationEditorState.saveProgressSuccessLabel = String(options.successLabel || '儲存完成').trim();
+      stationEditorState.saveProgressErrorLabel = String(options.errorLabel || '儲存失敗').trim();
       stationEditorState.saveProgressVisible = true;
       stationEditorState.saveProgressValue = Math.max(6, Math.min(18, Number(changeCount || 0) * 4));
+      stationEditorState.saveProgressStartedAt = Date.now();
       stationEditorState.message = '';
+      const startingValue = stationEditorState.saveProgressValue;
 
       stationEditorState.saveProgressTimerId = setInterval(() => {
         if (stationEditorState.saveProgressPhase !== 'saving') {
           clearStationEditorProgressTimer();
           return;
         }
-        const current = Number(stationEditorState.saveProgressValue || 0);
-        if (current >= 90) {
-          stationEditorState.saveProgressValue = 90;
-          return;
-        }
-        const remaining = 90 - current;
-        const nextValue = current + Math.max(1.4, remaining * 0.12);
+        const elapsed = Date.now() - Number(stationEditorState.saveProgressStartedAt || Date.now());
+        const progressRatio = Math.min(1, elapsed / STATION_EDITOR_PROGRESS_TO_90_MS);
+        const nextValue = startingValue + ((90 - startingValue) * progressRatio);
         stationEditorState.saveProgressValue = Math.min(90, Number(nextValue.toFixed(1)));
-        if (stationEditorState.isOpen) {
-          renderStationEditor();
+        if (stationEditorState.saveProgressValue >= 90) {
+          stationEditorState.saveProgressValue = 90;
         }
-      }, 180);
+        renderStationEditorProgressViews();
+      }, STATION_EDITOR_PROGRESS_TICK_MS);
+      renderStationEditorProgressViews();
     }
 
     function completeStationEditorSaveProgress(message) {
@@ -2491,14 +2582,14 @@
       stationEditorState.saveProgressPhase = 'success';
       stationEditorState.saveProgressVisible = true;
       stationEditorState.saveProgressValue = 100;
-      stationEditorState.message = message || '駐站收案配置已更新。';
-      renderStationEditor();
+      stationEditorState.message = message || stationEditorState.saveProgressSuccessLabel || '駐站收案配置已更新。';
+      renderStationEditorProgressViews();
       showStationEditorToast({ icon: 'success', title: stationEditorState.message, timer: 2600 });
 
       window.setTimeout(() => {
         if (stationEditorState.saveProgressPhase !== 'success') return;
         stationEditorState.saveProgressVisible = false;
-        renderStationEditor();
+        renderStationEditorProgressViews();
       }, 320);
 
       stationEditorState.statusResetTimerId = window.setTimeout(() => {
@@ -2508,9 +2599,12 @@
         stationEditorState.message = '';
         stationEditorState.saveProgressValue = 0;
         stationEditorState.saveProgressVisible = false;
-        if (stationEditorState.isOpen) {
-          renderStationEditor();
-        }
+        stationEditorState.saveProgressScope = '';
+        stationEditorState.saveProgressSavingLabel = '';
+        stationEditorState.saveProgressSuccessLabel = '';
+        stationEditorState.saveProgressErrorLabel = '';
+        stationEditorState.saveProgressStartedAt = 0;
+        renderStationEditorProgressViews();
       }, 3000);
     }
 
@@ -2520,8 +2614,8 @@
       stationEditorState.saveProgressPhase = 'error';
       stationEditorState.saveProgressVisible = false;
       stationEditorState.saveProgressValue = 0;
-      stationEditorState.message = message || '儲存失敗。';
-      renderStationEditor();
+      stationEditorState.message = message || stationEditorState.saveProgressErrorLabel || '儲存失敗。';
+      renderStationEditorProgressViews();
       showStationEditorToast({ icon: 'error', title: stationEditorState.message, timer: 3200 });
     }
 
@@ -3378,7 +3472,12 @@
       }
 
       stationEditorState.isSaving = true;
-      startStationEditorSaveProgress(changes.length);
+      startStationEditorSaveProgress(changes.length, {
+        scope: 'editor',
+        savingLabel: '正在同步駐站收案配置',
+        successLabel: '儲存完成',
+        errorLabel: '儲存失敗'
+      });
       renderStationEditor();
 
       try {
@@ -3475,17 +3574,7 @@
       if (hasChanges) statusParts.push(`待儲存異動 ${changes.length} 筆`);
       if (stationEditorState.isSaving) statusParts.push('儲存中...');
       if (stationEditorState.message) statusParts.push(stationEditorState.message);
-      const showProgress = stationEditorState.saveProgressVisible;
-      const progressPhaseClass = stationEditorState.saveProgressPhase === 'success'
-        ? ' is-success'
-        : stationEditorState.saveProgressPhase === 'error'
-          ? ' is-error'
-          : '';
-      const progressLabel = stationEditorState.saveProgressPhase === 'success'
-        ? '儲存完成'
-        : stationEditorState.saveProgressPhase === 'error'
-          ? '儲存失敗'
-          : '正在同步駐站收案配置';
+      const progressPresentation = getStationEditorProgressPresentation('editor');
       if (hasChanges) {
         statusEl.innerHTML = `
           <div class="editor-status-summary">
@@ -3494,11 +3583,11 @@
               ${stationEditorState.changeListExpanded ? '收合明細' : '展開明細'}
             </button>
           </div>
-          <div class="editor-progress${progressPhaseClass}${showProgress ? '' : ' hidden'}">
+          <div class="editor-progress${progressPresentation.progressPhaseClass}${progressPresentation.isActive ? '' : ' hidden'}">
             <div class="editor-progress-track">
               <div class="editor-progress-fill" style="width: ${Math.max(0, Math.min(100, Number(stationEditorState.saveProgressValue || 0)))}%;"></div>
             </div>
-            <div class="editor-progress-label">${escapeHtml(progressLabel)}</div>
+            <div class="editor-progress-label">${escapeHtml(progressPresentation.progressLabel)}</div>
           </div>
         `;
         const toggleButton = statusEl.querySelector('[data-change-toggle]');
@@ -3513,11 +3602,11 @@
           <div class="editor-status-summary">
             <span class="editor-status-text">${escapeHtml(statusParts.join('｜') || '尚未修改。')}</span>
           </div>
-          <div class="editor-progress${progressPhaseClass}${showProgress ? '' : ' hidden'}">
+          <div class="editor-progress${progressPresentation.progressPhaseClass}${progressPresentation.isActive ? '' : ' hidden'}">
             <div class="editor-progress-track">
               <div class="editor-progress-fill" style="width: ${Math.max(0, Math.min(100, Number(stationEditorState.saveProgressValue || 0)))}%;"></div>
             </div>
-            <div class="editor-progress-label">${escapeHtml(progressLabel)}</div>
+            <div class="editor-progress-label">${escapeHtml(progressPresentation.progressLabel)}</div>
           </div>
         `;
       }
@@ -3904,6 +3993,7 @@
         ? `此人已存在於人員主檔，已自動帶入 Email。`
         : '可從既有人員名單選擇，選取後會自動帶入 Email。';
       renderStationStaffFormError();
+      renderStationStaffModalProgress();
     }
 
     function handleStationStaffNameInput() {
@@ -3941,6 +4031,7 @@
       const submitBtn = document.getElementById('station-staff-submit-btn');
       submitBtn.disabled = stationEditorState.isStaffModalSubmitting;
       submitBtn.textContent = stationEditorState.isStaffModalSubmitting ? '新增中...' : '新增收案人員';
+      renderStationStaffModalProgress();
     }
 
     async function submitStationStaffForm() {
@@ -3958,6 +4049,12 @@
 
       stationEditorState.isStaffModalSubmitting = true;
       renderStationStaffFormError('');
+      startStationEditorSaveProgress(1, {
+        scope: 'staff-modal',
+        savingLabel: '正在新增收案人員',
+        successLabel: '新增完成',
+        errorLabel: '新增失敗'
+      });
       try {
         const response = await callServer('createStationStaff', {
           email: stationEditorState.staffForm.email,
@@ -3970,11 +4067,18 @@
         applyStationEditorPayload(response, { resetView: false });
         await refreshUserProfileCard();
         stationEditorState.isStaffModalSubmitting = false;
-        closeStationStaffModal();
-        showStationEditorToast({ icon: 'success', title: response.message || '收案人員已新增。', timer: 2600 });
+        completeStationEditorSaveProgress(response.message || '收案人員已新增。');
+        window.setTimeout(() => {
+          if (stationEditorState.isStaffModalOpen) {
+            closeStationStaffModal();
+            renderStationEditor();
+          }
+        }, 360);
         renderStationEditor();
       } catch (error) {
-        renderStationStaffFormError(error && error.message ? error.message : '無法新增收案人員。');
+        const errorMessage = error && error.message ? error.message : '無法新增收案人員。';
+        failStationEditorSaveProgress(errorMessage);
+        renderStationStaffFormError(errorMessage);
       } finally {
         stationEditorState.isStaffModalSubmitting = false;
         renderStationStaffFormError(stationEditorState.staffForm.error || '');
@@ -4003,6 +4107,7 @@
       document.getElementById('station-node-alias-input').value = '';
       document.getElementById('station-node-iso-checkbox').checked = false;
       renderStationNodeFormError();
+      renderStationNodeModalProgress();
       const modal = document.getElementById('station-node-modal');
       modal.classList.remove('hidden');
       modal.setAttribute('aria-hidden', 'false');
@@ -4054,6 +4159,7 @@
       const submitBtn = document.getElementById('station-node-submit-btn');
       submitBtn.disabled = stationEditorState.isNodeModalSubmitting;
       submitBtn.textContent = stationEditorState.isNodeModalSubmitting ? '新增中...' : '新增駐站';
+      renderStationNodeModalProgress();
     }
 
     async function submitStationNodeForm() {
@@ -4071,6 +4177,12 @@
 
       stationEditorState.isNodeModalSubmitting = true;
       renderStationNodeFormError('');
+      startStationEditorSaveProgress(1, {
+        scope: 'node-modal',
+        savingLabel: '正在新增駐站',
+        successLabel: '新增完成',
+        errorLabel: '新增失敗'
+      });
       try {
         const response = await callServer('createStationNode', {
           stationType: stationEditorState.nodeForm.stationType,
@@ -4086,11 +4198,18 @@
         applyStationEditorPayload(response, { resetView: false });
         await refreshUserProfileCard();
         stationEditorState.isNodeModalSubmitting = false;
-        closeStationNodeModal();
-        showStationEditorToast({ icon: 'success', title: response.message || '駐站已新增。', timer: 2600 });
+        completeStationEditorSaveProgress(response.message || '駐站已新增。');
+        window.setTimeout(() => {
+          if (stationEditorState.isNodeModalOpen) {
+            closeStationNodeModal();
+            renderStationEditor();
+          }
+        }, 360);
         renderStationEditor();
       } catch (error) {
-        renderStationNodeFormError(error && error.message ? error.message : '無法新增駐站。');
+        const errorMessage = error && error.message ? error.message : '無法新增駐站。';
+        failStationEditorSaveProgress(errorMessage);
+        renderStationNodeFormError(errorMessage);
       } finally {
         stationEditorState.isNodeModalSubmitting = false;
         renderStationNodeFormError(stationEditorState.nodeForm.error || '');
@@ -4142,6 +4261,12 @@
       if (!confirmed) return;
 
       stationEditorState.deletingStationCode = stationCode;
+      startStationEditorSaveProgress(1, {
+        scope: 'editor',
+        savingLabel: '正在刪除駐站',
+        successLabel: '刪除完成',
+        errorLabel: '刪除失敗'
+      });
       renderStationEditor();
       try {
         const response = await callServer('deleteStationNode', { stationCode });
@@ -4150,11 +4275,11 @@
         }
         applyStationEditorPayload(response, { resetView: false });
         await refreshUserProfileCard();
-        showStationEditorToast({ icon: 'success', title: response.message || '駐站已刪除。', timer: 2600 });
+        completeStationEditorSaveProgress(response.message || '駐站已刪除。');
         renderStationEditor();
       } catch (error) {
         stationEditorState.deletingStationCode = '';
-        showStationEditorToast({ icon: 'error', title: error && error.message ? error.message : '無法刪除駐站。', timer: 3200 });
+        failStationEditorSaveProgress(error && error.message ? error.message : '無法刪除駐站。');
         renderStationEditor();
       }
     }
