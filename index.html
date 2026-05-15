@@ -1397,7 +1397,7 @@
 
     .progress-text {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) 320px minmax(0, 1fr);
       align-items: center;
       gap: 12px;
       font-size: 0.875rem;
@@ -1421,7 +1421,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      max-width: min(100%, 360px);
+      width: 100%;
       min-width: 0;
       padding: 4px 10px;
       border-radius: 999px;
@@ -1433,6 +1433,14 @@
       white-space: nowrap;
       pointer-events: none;
       text-align: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+
+    .progress-hint.is-visible {
+      opacity: 1;
+      visibility: visible;
     }
 
     .progress-hint-short {
@@ -1629,13 +1637,12 @@
       }
 
       .progress-text {
-        grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) 160px minmax(0, 1fr);
         gap: 8px;
         font-size: 0.8125rem;
       }
 
       .progress-hint {
-        max-width: 160px;
         border-radius: 12px;
         font-size: 0.75rem;
         white-space: normal;
@@ -1741,7 +1748,7 @@
         <div class="progress-container" id="progress-container">
           <div class="progress-text" id="progress-text">
             <span>進度：<span id="time-current">00:00:00</span></span>
-            <div id="reviewed-segment-hint" class="progress-hint hidden" aria-live="polite">
+            <div id="reviewed-segment-hint" class="progress-hint" aria-live="polite">
               <span class="progress-hint-full">目前位於已看過的片段，學習時數不會重複累計。</span>
               <span class="progress-hint-short">已看過片段，不重複累計。</span>
             </div>
@@ -4675,7 +4682,7 @@
     function setReviewedSegmentHint(visible) {
       if (isInReviewedSegment === visible) return;
       isInReviewedSegment = visible;
-      document.getElementById('reviewed-segment-hint').classList.toggle('hidden', !visible);
+      document.getElementById('reviewed-segment-hint').classList.toggle('is-visible', visible);
     }
 
     function isSecondReviewed(second) {
