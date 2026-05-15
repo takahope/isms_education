@@ -4487,6 +4487,18 @@
       setReviewedSegmentHint(false);
     }
 
+    function createEmptyProgressState(updatedAt = getNowIsoString()) {
+      return {
+        schemaVersion: PROGRESS_SCHEMA_VERSION,
+        watchedSecondMarks: [],
+        lastPlaybackPosition: 0,
+        updatedAt: normalizeTimestampValue(updatedAt),
+        lastSyncedAt: '',
+        unsyncedUniqueWatchSeconds: 0,
+        hasTriggeredThresholdSync: false
+      };
+    }
+
     function normalizeLocalProgress(parsed) {
       return {
         schemaVersion: PROGRESS_SCHEMA_VERSION,
@@ -4661,22 +4673,34 @@
       const cloudTimestamp = normalizeTimestampValue(cloudProgress && cloudProgress.updatedAt);
       const comparison = compareProgressTimestamps(localTimestamp, cloudTimestamp);
 
-      if (localProgress && (!cloudProgress || comparison >= 0)) {
+      if (!localProgress && !cloudProgress) {
+        const emptyProgress = createEmptyProgressState();
+        applyProgressState(emptyProgress, { markDirty: false });
+        scheduleProgressSync('initialize_empty_progress', { force: true, silent: true });
+        return 'initialized';
+      }
+
+      if (localProgress && !cloudProgress) {
         applyProgressState(localProgress, { markDirty: false });
-        if (!cloudProgress || comparison > 0) {
+        scheduleProgressSync('local_missing_cloud', { force: true, silent: true });
+        return 'local';
+      }
+
+      if (!localProgress && cloudProgress) {
+        applyProgressState(cloudProgress, { markDirty: false });
+        return 'cloud';
+      }
+
+      if (comparison >= 0) {
+        applyProgressState(localProgress, { markDirty: false });
+        if (comparison > 0) {
           scheduleProgressSync('local_newer', { force: true, silent: true });
         }
         return 'local';
       }
 
-      if (cloudProgress) {
-        applyProgressState(cloudProgress, { markDirty: false });
-        return 'cloud';
-      }
-
-      resetProgressState();
-      saveStoredProgress();
-      return 'empty';
+      applyProgressState(cloudProgress, { markDirty: false });
+      return 'cloud';
     }
 
     function setReviewedSegmentHint(visible) {
@@ -4752,7 +4776,7 @@
       showSection('step-loading');
 
       const progressSource = await loadLatestProgressState();
-      if (progressSource !== 'empty') {
+      if (progressSource === 'local' || progressSource === 'cloud') {
         Swal.fire({
           toast: true,
           position: 'top-end',
