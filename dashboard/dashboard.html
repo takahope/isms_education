@@ -797,10 +797,13 @@
           </div>
           <div class="field">
             <label>寄送範圍</label>
-            <div class="checkbox-field">
-              <input id="notify-include-descendants" type="checkbox">
-              <span>包含下層組織</span>
-            </div>
+            <select id="notify-descendant-mode">
+              <option value="self">只寄本組</option>
+              <option value="depth_1">包含下一層</option>
+              <option value="depth_2">包含下兩層</option>
+              <option value="depth_3">包含下三層</option>
+              <option value="all_descendants">包含全部下層</option>
+            </select>
           </div>
           <div class="field">
             <label>職務比對</label>
@@ -1051,15 +1054,20 @@
       });
       document.getElementById('notify-org-type').addEventListener('change', () => {
         populateNotificationLevelOptions();
+        syncNotificationDescendantModeState();
         resetNotificationPreview();
       });
       document.getElementById('notify-org-level').addEventListener('change', () => {
         populateNotificationGroupOptions();
+        syncNotificationDescendantModeState();
         resetNotificationPreview();
       });
-      document.getElementById('notify-org-code').addEventListener('change', resetNotificationPreview);
+      document.getElementById('notify-org-code').addEventListener('change', () => {
+        syncNotificationDescendantModeState();
+        resetNotificationPreview();
+      });
       document.getElementById('notify-status').addEventListener('change', resetNotificationPreview);
-      document.getElementById('notify-include-descendants').addEventListener('change', resetNotificationPreview);
+      document.getElementById('notify-descendant-mode').addEventListener('change', resetNotificationPreview);
       document.getElementById('notify-subject').addEventListener('input', resetNotificationPreview);
       document.getElementById('notify-body').addEventListener('input', resetNotificationPreview);
     }
@@ -1101,6 +1109,7 @@
       state.dashboardUrl = response.dashboardUrl || state.dashboardUrl;
       document.getElementById('notify-template-type').value = state.notification.defaultTemplateType;
       populateNotificationTypeOptions();
+      syncNotificationDescendantModeState();
       applySelectedNotificationTemplate();
       resetNotificationPreview();
     }
@@ -1502,13 +1511,16 @@
     }
 
     function buildNotificationPayload() {
+      const orgCode = String(document.getElementById('notify-org-code').value || '').trim();
       return {
         templateType: String(document.getElementById('notify-template-type').value || 'personalized').trim(),
         target: {
           orgType: String(document.getElementById('notify-org-type').value || '').trim(),
           level: String(document.getElementById('notify-org-level').value || '').trim(),
-          orgCode: String(document.getElementById('notify-org-code').value || '').trim(),
-          includeDescendants: Boolean(document.getElementById('notify-include-descendants').checked),
+          orgCode,
+          descendantMode: orgCode
+            ? String(document.getElementById('notify-descendant-mode').value || 'self').trim()
+            : 'self',
           assignmentMatch: 'primary_only'
         },
         trainingStatus: String(document.getElementById('notify-status').value || 'incomplete').trim(),
@@ -1526,6 +1538,17 @@
       document.getElementById('notify-subject').value = template.subject || '';
       document.getElementById('notify-body').value = template.htmlBody || '';
       document.getElementById('placeholder-note').textContent = `可用變數：${placeholders.join('、') || '無'}`;
+    }
+
+    function syncNotificationDescendantModeState() {
+      const orgCode = String(document.getElementById('notify-org-code').value || '').trim();
+      const select = document.getElementById('notify-descendant-mode');
+      if (!orgCode) {
+        select.value = 'self';
+        select.disabled = true;
+        return;
+      }
+      select.disabled = false;
     }
 
     async function handleNotificationPreview() {
@@ -1580,7 +1603,7 @@
 
       const criteria = response.criteriaSummary || {};
       document.getElementById('preview-criteria').textContent =
-        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.includeDescendants ? ' / 含下層' : ''} / 狀態 ${criteria.trainingStatus || ''}${response.deliveryMode === 'single_bcc' ? ' / 單封 BCC 全部' : ' / 個別寄送'}`;
+        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.orgCode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 狀態 ${criteria.trainingStatus || ''}${response.deliveryMode === 'single_bcc' ? ' / 單封 BCC 全部' : ' / 個別寄送'}`;
 
       renderRecipientList('preview-recipient-list', response.recipients || [], false);
       renderRecipientList('preview-skipped-list', response.skipped || [], true);
@@ -1593,6 +1616,17 @@
         group_announcement: '組別版'
       };
       return labelMap[String(templateType || '').trim()] || '個人化版';
+    }
+
+    function getNotificationDescendantModeLabel(descendantMode) {
+      const labelMap = {
+        self: '本組',
+        depth_1: '下1層',
+        depth_2: '下2層',
+        depth_3: '下3層',
+        all_descendants: '全部下層'
+      };
+      return labelMap[String(descendantMode || 'self').trim()] || '本組';
     }
 
     function renderRecipientList(containerId, items, isSkipped) {

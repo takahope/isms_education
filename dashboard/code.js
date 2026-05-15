@@ -947,7 +947,7 @@ function normalizeNotificationPayload_(payload) {
   const template = payload && payload.template ? payload.template : {};
   const templateType = String(payload && payload.templateType || 'personalized').trim() || 'personalized';
   const trainingStatus = String(payload && payload.trainingStatus || 'incomplete').trim() || 'incomplete';
-  const includeDescendants = Boolean(target.includeDescendants);
+  const descendantMode = String(target.descendantMode || 'self').trim() || 'self';
   const orgType = String(target.orgType || '').trim();
   const levelValue = String(typeof target.level === 'undefined' || target.level === null ? '' : target.level).trim();
   const orgLevel = levelValue === '' ? '' : Number(levelValue);
@@ -962,6 +962,9 @@ function normalizeNotificationPayload_(payload) {
   if (!orgType) throw new Error('請選擇組織類型。');
   if (assignmentMatch !== 'primary_only') throw new Error('目前僅支援依主職寄送。');
   if (levelValue !== '' && (!Number.isFinite(orgLevel) || orgLevel <= 0)) throw new Error('組織層級格式不正確。');
+  if (!['self', 'depth_1', 'depth_2', 'depth_3', 'all_descendants'].includes(descendantMode)) {
+    throw new Error('寄送範圍設定不正確。');
+  }
 
   return {
     templateType,
@@ -969,7 +972,7 @@ function normalizeNotificationPayload_(payload) {
       orgType,
       level: levelValue === '' ? '' : orgLevel,
       orgCode,
-      includeDescendants,
+      descendantMode,
       assignmentMatch
     },
     trainingStatus,
@@ -1035,10 +1038,8 @@ function resolveNotificationTargetOrgCodes_(orgNodes, target) {
   }
 
   const baseCode = normalizeOrgCode_(target.orgCode);
-  if (!target.includeDescendants) return [baseCode];
-
   const childMap = buildOrgChildrenMap_(orgNodes);
-  return Array.from(collectDescendantOrgCodes_(baseCode, childMap));
+  return Array.from(collectDescendantOrgCodes_(baseCode, childMap, getDescendantDepthLimit_(target.descendantMode)));
 }
 
 function buildOrgChildrenMap_(orgNodes) {
@@ -1052,19 +1053,32 @@ function buildOrgChildrenMap_(orgNodes) {
   return childMap;
 }
 
-function collectDescendantOrgCodes_(startCode, childMap) {
+function collectDescendantOrgCodes_(startCode, childMap, maxDepth) {
   const collected = new Set();
-  const queue = [normalizeOrgCode_(startCode)];
+  const queue = [{ code: normalizeOrgCode_(startCode), depth: 0 }];
+  const depthLimit = Number.isFinite(maxDepth) ? Number(maxDepth) : Infinity;
   while (queue.length > 0) {
-    const current = queue.shift();
+    const currentItem = queue.shift();
+    const current = currentItem && currentItem.code ? currentItem.code : '';
+    const currentDepth = currentItem && Number.isFinite(currentItem.depth) ? Number(currentItem.depth) : 0;
     if (!current || collected.has(current)) continue;
     collected.add(current);
+    if (currentDepth >= depthLimit) continue;
     const children = childMap.get(current) || [];
     children.forEach((child) => {
-      if (!collected.has(child)) queue.push(child);
+      if (!collected.has(child)) queue.push({ code: child, depth: currentDepth + 1 });
     });
   }
   return collected;
+}
+
+function getDescendantDepthLimit_(descendantMode) {
+  const mode = String(descendantMode || 'self').trim();
+  if (mode === 'depth_1') return 1;
+  if (mode === 'depth_2') return 2;
+  if (mode === 'depth_3') return 3;
+  if (mode === 'all_descendants') return Infinity;
+  return 0;
 }
 
 function matchesNotificationStatusFilter_(learnerStatus, filterValue) {
@@ -1133,7 +1147,7 @@ function buildNotificationCriteriaSummary_(payload) {
     orgType: payload.target.orgType,
     level: payload.target.level,
     orgCode: payload.target.orgCode,
-    includeDescendants: payload.target.includeDescendants,
+    descendantMode: payload.target.descendantMode,
     trainingStatus: payload.trainingStatus,
     assignmentMatch: payload.target.assignmentMatch
   };
@@ -1157,7 +1171,7 @@ function appendNotificationLog_(entry) {
     entry.payload.target.orgType || '',
     entry.payload.target.level === '' ? '' : Number(entry.payload.target.level || 0),
     entry.payload.target.orgCode || '',
-    entry.payload.target.includeDescendants ? '是' : '否',
+    getNotificationDescendantModeLabel_(entry.payload.target.descendantMode),
     entry.payload.trainingStatus || '',
     entry.payload.template.subject || '',
     Number(entry.recipientCount || 0),
@@ -1174,6 +1188,17 @@ function getNotificationTemplateLabel_(templateType) {
     group_announcement: '組別版'
   };
   return labels[String(templateType || '').trim()] || '個人化版';
+}
+
+function getNotificationDescendantModeLabel_(descendantMode) {
+  const labels = {
+    self: '本組',
+    depth_1: '下1層',
+    depth_2: '下2層',
+    depth_3: '下3層',
+    all_descendants: '全部下層'
+  };
+  return labels[String(descendantMode || 'self').trim()] || '本組';
 }
 
 function getMasterSpreadsheet_() {
