@@ -156,6 +156,7 @@ function getTrainingNotificationBootstrap() {
       personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
       announcement: ['{{課程名稱}}', '{{上課網址}}'],
       group_announcement: ['{{組別稱呼}}', '{{課程名稱}}', '{{上課網址}}'],
+      station_manager_announcement: ['{{駐站管理稱呼}}', '{{課程名稱}}', '{{上課網址}}'],
       leadership_announcement_summary: ['{{課程名稱}}', '{{上課網址}}'],
       leadership_announcement: ['{{課程名稱}}', '{{上課網址}}']
     },
@@ -777,6 +778,7 @@ function buildNotificationTemplates_(courseTitle) {
     personalized: buildPersonalizedNotificationTemplate_(courseTitle),
     announcement: buildAnnouncementNotificationTemplate_(courseTitle),
     group_announcement: buildGroupAnnouncementNotificationTemplate_(courseTitle),
+    station_manager_announcement: buildStationManagerAnnouncementTemplate_(courseTitle),
     leadership_announcement_summary: buildLeadershipAnnouncementSummaryTemplate_(courseTitle),
     leadership_announcement: buildLeadershipAnnouncementNotificationTemplate_(courseTitle)
   };
@@ -820,6 +822,21 @@ function buildGroupAnnouncementNotificationTemplate_(courseTitle) {
       '<p>{{組別稱呼}}</p>',
       `<p>因應外稽單位要求，我們需對內部人員進行<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>教育訓練。課程內容已製作為線上課程與評量，敬請大家完成本次教育訓練時數與評量。</p>`,
       '<p>本次課程可同時折抵資安三小時時數與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格。請於 8 月 30 日以前完成課程，感謝大家的協助。</p>',
+      buildNotificationWatchReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>'
+    ].join('')
+  };
+}
+
+function buildStationManagerAnnouncementTemplate_(courseTitle) {
+  return {
+    subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
+    htmlBody: [
+      '<p>{{駐站管理稱呼}}</p>',
+      `<p>因應本次<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>作業安排，教育訓練管理工具將自動追蹤收案人員上課情形，並依系統資料自動通知發信。</p>`,
+      '<p>為避免後續追蹤或通知對象錯誤，請務必於上課前先協助確認您所管理的駐站與收案人員資訊是否正確；如有資料不一致、成員歸屬錯誤或管理關係需調整，請先完成更正。</p>',
+      '<p>如需更正資料，請點擊下方上課連結，並依照頁面中的導覽說明逐步確認與修正相關資訊，再進行後續課程與測驗。</p>',
+      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。</p>',
       buildNotificationWatchReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>'
     ].join('')
@@ -995,7 +1012,7 @@ function normalizeNotificationPayload_(payload) {
 
   if (!subject) throw new Error('通知主旨不得為空。');
   if (!htmlBody) throw new Error('通知內文不得為空。');
-  if (!['personalized', 'announcement', 'group_announcement', 'leadership_announcement_summary', 'leadership_announcement'].includes(templateType)) throw new Error('通知範本類型不正確。');
+  if (!['personalized', 'announcement', 'group_announcement', 'station_manager_announcement', 'leadership_announcement_summary', 'leadership_announcement'].includes(templateType)) throw new Error('通知範本類型不正確。');
   if (!orgType) throw new Error('請選擇組織類型。');
   if (assignmentMatch !== 'primary_only') throw new Error('目前僅支援依主職寄送。');
   if (levelValue !== '' && (!Number.isFinite(orgLevel) || orgLevel <= 0)) throw new Error('組織層級格式不正確。');
@@ -1133,7 +1150,8 @@ function applyNotificationTemplate_(template, recipient, courseTitle, trainingCo
     '{{課程名稱}}': courseTitle || DASHBOARD_CONFIG.defaultCourseTitle,
     '{{訓練狀態}}': recipient.statusLabel || '',
     '{{上課網址}}': trainingCourseUrl || '',
-    '{{組別稱呼}}': templateContext && templateContext.groupGreeting || ''
+    '{{組別稱呼}}': templateContext && templateContext.groupGreeting || '',
+    '{{駐站管理稱呼}}': templateContext && templateContext.stationManagerGreeting || ''
   };
 
   let output = String(template || '');
@@ -1148,7 +1166,8 @@ function applyGenericNotificationTemplate_(template, courseTitle, trainingCourse
   const replacements = {
     '{{課程名稱}}': courseTitle || DASHBOARD_CONFIG.defaultCourseTitle,
     '{{上課網址}}': trainingCourseUrl || '',
-    '{{組別稱呼}}': templateContext && templateContext.groupGreeting || ''
+    '{{組別稱呼}}': templateContext && templateContext.groupGreeting || '',
+    '{{駐站管理稱呼}}': templateContext && templateContext.stationManagerGreeting || ''
   };
   Object.keys(replacements).forEach((token) => {
     output = output.split(token).join(String(replacements[token]));
@@ -1158,7 +1177,8 @@ function applyGenericNotificationTemplate_(template, courseTitle, trainingCourse
 
 function buildNotificationTemplateContext_(context, payload) {
   return {
-    groupGreeting: resolveNotificationGroupGreeting_(context, payload)
+    groupGreeting: resolveNotificationGroupGreeting_(context, payload),
+    stationManagerGreeting: resolveNotificationStationManagerGreeting_(context, payload)
   };
 }
 
@@ -1174,8 +1194,25 @@ function resolveNotificationGroupGreeting_(context, payload) {
   return `${displayName}的同仁們好：`;
 }
 
+function resolveNotificationStationManagerGreeting_(context, payload) {
+  const fallback = '駐站管理員您好：';
+  const target = payload && payload.target ? payload.target : {};
+  const orgCode = normalizeOrgCode_(target.orgCode);
+  if (!orgCode) return fallback;
+  const orgNode = context && context.orgNodeMap ? context.orgNodeMap.get(orgCode) : null;
+  if (!orgNode) return fallback;
+  const displayName = String(orgNode.name || orgNode.alias || orgNode.code || '').trim();
+  if (!displayName) return fallback;
+  if (isStationOrgCode_(orgCode)) return `${displayName}駐站管理員您好：`;
+  return `${displayName}的同仁們好：`;
+}
+
+function isStationOrgCode_(orgCode) {
+  return String(orgCode || '').trim().toUpperCase().startsWith('GRP-CO-');
+}
+
 function isSingleBccNotificationTemplate_(templateType) {
-  return ['announcement', 'group_announcement', 'leadership_announcement_summary', 'leadership_announcement'].includes(String(templateType || '').trim());
+  return ['announcement', 'group_announcement', 'station_manager_announcement', 'leadership_announcement_summary', 'leadership_announcement'].includes(String(templateType || '').trim());
 }
 
 function buildNotificationCriteriaSummary_(payload) {
@@ -1223,6 +1260,7 @@ function getNotificationTemplateLabel_(templateType) {
     personalized: '個人化版',
     announcement: '公告版',
     group_announcement: '組別版',
+    station_manager_announcement: '駐站管理員版',
     leadership_announcement_summary: '長官主管摘要版',
     leadership_announcement: '長官主管完整版'
   };
