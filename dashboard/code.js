@@ -1230,8 +1230,8 @@ function buildAssignmentTypeMap_(assignments) {
   });
 
   groupedAssignments.forEach((personAssignments) => {
-    const duplicateOrgCodeTypeMap = buildDuplicateOrgCodeTypeMap_(personAssignments);
     const primaryMode = getPrimaryAssignmentMode_(personAssignments);
+    const duplicateOrgCodeTypeMap = buildDuplicateOrgCodeTypeMap_(personAssignments, primaryMode);
     const primaryAssignments = isExplicitPrimaryKind_(primaryMode)
       ? personAssignments.filter((item) => classifyAssignmentKind_(item.orgCode) === primaryMode)
       : [];
@@ -1288,11 +1288,14 @@ function buildAssignmentTypeMap_(assignments) {
   return typeMap;
 }
 
-function buildDuplicateOrgCodeTypeMap_(personAssignments) {
+function buildDuplicateOrgCodeTypeMap_(personAssignments, primaryMode) {
+  if (!isExplicitPrimaryKind_(primaryMode)) return new Map();
+
   const assignmentsByOrgCode = new Map();
   const duplicateTypeMap = new Map();
 
   personAssignments.forEach((item) => {
+    if (classifyAssignmentKind_(item.orgCode) !== primaryMode) return;
     const orgCodeKey = String(item.orgCode || '').trim().toUpperCase();
     if (!orgCodeKey) return;
     if (!assignmentsByOrgCode.has(orgCodeKey)) assignmentsByOrgCode.set(orgCodeKey, []);
