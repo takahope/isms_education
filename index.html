@@ -1370,7 +1370,7 @@
       background: var(--color-bg);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-md);
-      padding: var(--space-sm) var(--space-md) 18px;
+      padding: var(--space-sm) var(--space-md);
       margin-bottom: var(--space-md);
       position: relative;
       overflow: hidden;
@@ -1380,7 +1380,7 @@
       height: 6px;
       background: var(--color-border);
       border-radius: 3px;
-      margin-top: 8px;
+      margin-top: 36px;
       overflow: hidden;
     }
 
@@ -1409,8 +1409,8 @@
 
     .progress-hint {
       position: absolute;
-      right: var(--space-md);
-      bottom: 8px;
+      left: 50%;
+      top: 34px;
       max-width: min(100% - 32px, 360px);
       padding: 4px 10px;
       border-radius: 999px;
@@ -1422,16 +1422,18 @@
       box-shadow: 0 8px 18px rgba(180, 83, 9, 0.08);
       opacity: 0;
       visibility: hidden;
-      transform: translateY(4px);
+      transform: translateX(-50%) translateY(4px);
       transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
       pointer-events: none;
       z-index: 1;
+      text-align: center;
+      white-space: nowrap;
     }
 
     .progress-hint.is-visible {
       opacity: 1;
       visibility: visible;
-      transform: translateY(0);
+      transform: translateX(-50%) translateY(0);
     }
 
     /* Quiz Cards */
@@ -1624,7 +1626,7 @@
       }
 
       .progress-container {
-        padding-bottom: 46px;
+        padding-top: 10px;
       }
 
       .progress-text {
@@ -1632,13 +1634,17 @@
         gap: 4px;
       }
 
+      .progress-bar-track {
+        margin-top: 48px;
+      }
+
       .progress-hint {
-        left: var(--space-md);
-        right: var(--space-md);
-        bottom: 10px;
+        left: 50%;
+        top: 56px;
         max-width: none;
         border-radius: 12px;
         font-size: 0.75rem;
+        white-space: normal;
       }
 
       .quiz-toolbar {
