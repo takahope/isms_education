@@ -155,7 +155,8 @@ function getTrainingNotificationBootstrap() {
     placeholderTokensByTemplateType: {
       personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
       announcement: ['{{課程名稱}}', '{{上課網址}}'],
-      group_announcement: ['{{組別稱呼}}', '{{課程名稱}}', '{{上課網址}}']
+      group_announcement: ['{{組別稱呼}}', '{{課程名稱}}', '{{上課網址}}'],
+      leadership_announcement: ['{{課程名稱}}', '{{上課網址}}']
     },
     defaultTemplateType: 'personalized',
     templates: buildNotificationTemplates_(context.courseTitle),
@@ -774,7 +775,8 @@ function buildNotificationTemplates_(courseTitle) {
   return {
     personalized: buildPersonalizedNotificationTemplate_(courseTitle),
     announcement: buildAnnouncementNotificationTemplate_(courseTitle),
-    group_announcement: buildGroupAnnouncementNotificationTemplate_(courseTitle)
+    group_announcement: buildGroupAnnouncementNotificationTemplate_(courseTitle),
+    leadership_announcement: buildLeadershipAnnouncementNotificationTemplate_(courseTitle)
   };
 }
 
@@ -816,6 +818,20 @@ function buildGroupAnnouncementNotificationTemplate_(courseTitle) {
       '<p>{{組別稱呼}}</p>',
       `<p>因應外稽單位要求，我們需對內部人員進行<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>教育訓練。課程內容已製作為線上課程與評量，敬請大家完成本次教育訓練時數與評量。</p>`,
       '<p>本次課程可同時折抵資安三小時時數與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格。請於 8 月 30 日以前完成課程，感謝大家的協助。</p>',
+      buildNotificationWatchReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>'
+    ].join('')
+  };
+}
+
+function buildLeadershipAnnouncementNotificationTemplate_(courseTitle) {
+  return {
+    subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
+    htmlBody: [
+      '<p>長官、主管您好：</p>',
+      `<p>因應稽核與制度遵循要求，本次已安排辦理<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>教育訓練。課程內容包含線上課程與評量，敬請撥冗完成，以符合本次教育訓練與評量要求。</p>`,
+      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格。請於 8 月 30 日以前完成相關課程與測驗。</p>',
+      '<p>如已完成相關要求，請忽略此信；如尚未完成，敬請儘速辦理，以利後續訓練紀錄統整與查核作業。</p>',
       buildNotificationWatchReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>'
     ].join('')
@@ -962,7 +978,7 @@ function normalizeNotificationPayload_(payload) {
 
   if (!subject) throw new Error('通知主旨不得為空。');
   if (!htmlBody) throw new Error('通知內文不得為空。');
-  if (!['personalized', 'announcement', 'group_announcement'].includes(templateType)) throw new Error('通知範本類型不正確。');
+  if (!['personalized', 'announcement', 'group_announcement', 'leadership_announcement'].includes(templateType)) throw new Error('通知範本類型不正確。');
   if (!orgType) throw new Error('請選擇組織類型。');
   if (assignmentMatch !== 'primary_only') throw new Error('目前僅支援依主職寄送。');
   if (levelValue !== '' && (!Number.isFinite(orgLevel) || orgLevel <= 0)) throw new Error('組織層級格式不正確。');
@@ -1142,7 +1158,7 @@ function resolveNotificationGroupGreeting_(context, payload) {
 }
 
 function isSingleBccNotificationTemplate_(templateType) {
-  return ['announcement', 'group_announcement'].includes(String(templateType || '').trim());
+  return ['announcement', 'group_announcement', 'leadership_announcement'].includes(String(templateType || '').trim());
 }
 
 function buildNotificationCriteriaSummary_(payload) {
@@ -1189,7 +1205,8 @@ function getNotificationTemplateLabel_(templateType) {
   const labels = {
     personalized: '個人化版',
     announcement: '公告版',
-    group_announcement: '組別版'
+    group_announcement: '組別版',
+    leadership_announcement: '長官主管版'
   };
   return labels[String(templateType || '').trim()] || '個人化版';
 }
