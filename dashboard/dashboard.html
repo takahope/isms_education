@@ -769,6 +769,7 @@
             <select id="notify-template-type">
               <option value="personalized">個人化版</option>
               <option value="announcement">公告版</option>
+              <option value="group_announcement">組別版</option>
             </select>
           </div>
           <div class="field">
@@ -840,7 +841,7 @@
             <div class="recipient-list" id="preview-skipped-list" style="margin-top:14px;"></div>
           </section>
           <section class="preview-card">
-            <h3>首封實際內容預覽</h3>
+            <h3>郵件內容預覽</h3>
             <div class="template-note"><strong id="preview-subject"></strong></div>
             <div id="preview-html" class="preview-html"></div>
           </section>
@@ -1561,7 +1562,7 @@
         if (!response || !response.success) {
           throw new Error((response && response.message) || '通知寄送失敗。');
         }
-        const modeText = response.deliveryMode === 'single_bcc' ? '公告版' : '個人化版';
+        const modeText = getNotificationTemplateLabel(response.templateType);
         const message = `寄送完成：${modeText} 成功 ${response.sentCount} 封，略過 ${response.skippedCount} 位，失敗 ${response.failureCount || 0} 封。`;
         setNotificationFeedback(message);
         await loadDashboardData();
@@ -1579,10 +1580,19 @@
 
       const criteria = response.criteriaSummary || {};
       document.getElementById('preview-criteria').textContent =
-        `條件：${criteria.templateType === 'announcement' ? '公告版' : '個人化版'} / ${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.includeDescendants ? ' / 含下層' : ''} / 狀態 ${criteria.trainingStatus || ''}${response.deliveryMode === 'single_bcc' ? ' / 單封 BCC 全部' : ' / 個別寄送'}`;
+        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.includeDescendants ? ' / 含下層' : ''} / 狀態 ${criteria.trainingStatus || ''}${response.deliveryMode === 'single_bcc' ? ' / 單封 BCC 全部' : ' / 個別寄送'}`;
 
       renderRecipientList('preview-recipient-list', response.recipients || [], false);
       renderRecipientList('preview-skipped-list', response.skipped || [], true);
+    }
+
+    function getNotificationTemplateLabel(templateType) {
+      const labelMap = {
+        personalized: '個人化版',
+        announcement: '公告版',
+        group_announcement: '組別版'
+      };
+      return labelMap[String(templateType || '').trim()] || '個人化版';
     }
 
     function renderRecipientList(containerId, items, isSkipped) {
