@@ -770,7 +770,8 @@
               <option value="personalized">個人化版</option>
               <option value="announcement">公告版</option>
               <option value="group_announcement">組別版</option>
-              <option value="leadership_announcement">長官主管版</option>
+              <option value="leadership_announcement_summary">長官主管摘要版</option>
+              <option value="leadership_announcement">長官主管完整版</option>
             </select>
           </div>
           <div class="field">
@@ -1615,7 +1616,8 @@
         personalized: '個人化版',
         announcement: '公告版',
         group_announcement: '組別版',
-        leadership_announcement: '長官主管版'
+        leadership_announcement_summary: '長官主管摘要版',
+        leadership_announcement: '長官主管完整版'
       };
       return labelMap[String(templateType || '').trim()] || '個人化版';
     }

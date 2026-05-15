@@ -156,6 +156,7 @@ function getTrainingNotificationBootstrap() {
       personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
       announcement: ['{{課程名稱}}', '{{上課網址}}'],
       group_announcement: ['{{組別稱呼}}', '{{課程名稱}}', '{{上課網址}}'],
+      leadership_announcement_summary: ['{{課程名稱}}', '{{上課網址}}'],
       leadership_announcement: ['{{課程名稱}}', '{{上課網址}}']
     },
     defaultTemplateType: 'personalized',
@@ -776,6 +777,7 @@ function buildNotificationTemplates_(courseTitle) {
     personalized: buildPersonalizedNotificationTemplate_(courseTitle),
     announcement: buildAnnouncementNotificationTemplate_(courseTitle),
     group_announcement: buildGroupAnnouncementNotificationTemplate_(courseTitle),
+    leadership_announcement_summary: buildLeadershipAnnouncementSummaryTemplate_(courseTitle),
     leadership_announcement: buildLeadershipAnnouncementNotificationTemplate_(courseTitle)
   };
 }
@@ -832,6 +834,20 @@ function buildLeadershipAnnouncementNotificationTemplate_(courseTitle) {
       `<p>依據《資通安全責任等級分級辦法》，公務機關及特定非公務機關人員（含約聘僱）每年須完成至少 3 小時之資通安全通識教育訓練。為配合前述規範，本次已安排辦理<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>，敬請撥冗完成。</p>`,
       '<p>另因臺灣人體生物資料庫每年需通過 ISO27001 與 ISO27701 第三方國際標準驗證，須持續就資訊安全暨個人資料保護管理系統範圍內之政策、制度與作業規範進行宣導，並確保相關內容符合組織實際運作情形。</p>',
       '<p>鑑於長官與主管同時肩負資訊安全暨個人資料保護委員會召集人或委員之職責，需參與政策審議、資源協調、管理審查、稽核督導及制度推動等事項，故有必要充分了解臺灣人體生物資料庫之資訊安全與個人資料保護相關政策、管理要求及執行重點。</p>',
+      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。如已完成相關要求，請忽略此信。</p>',
+      buildNotificationWatchReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>'
+    ].join('')
+  };
+}
+
+function buildLeadershipAnnouncementSummaryTemplate_(courseTitle) {
+  return {
+    subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
+    htmlBody: [
+      '<p>長官、主管您好：</p>',
+      `<p>依據《資通安全責任等級分級辦法》，公務機關及特定非公務機關人員（含約聘僱）每年須完成至少 3 小時之資通安全通識教育訓練。另因臺灣人體生物資料庫每年需通過 ISO27001 與 ISO27701 第三方國際標準驗證，故已安排辦理<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>，敬請撥冗完成。</p>`,
+      '<p>鑑於長官與主管身為資訊安全暨個人資料保護委員會召集人或委員，需了解本庫資訊安全與個人資料保護相關政策、管理要求及制度推動重點，以利後續政策審議、管理審查與督導作業。</p>',
       '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。如已完成相關要求，請忽略此信。</p>',
       buildNotificationWatchReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>'
@@ -979,7 +995,7 @@ function normalizeNotificationPayload_(payload) {
 
   if (!subject) throw new Error('通知主旨不得為空。');
   if (!htmlBody) throw new Error('通知內文不得為空。');
-  if (!['personalized', 'announcement', 'group_announcement', 'leadership_announcement'].includes(templateType)) throw new Error('通知範本類型不正確。');
+  if (!['personalized', 'announcement', 'group_announcement', 'leadership_announcement_summary', 'leadership_announcement'].includes(templateType)) throw new Error('通知範本類型不正確。');
   if (!orgType) throw new Error('請選擇組織類型。');
   if (assignmentMatch !== 'primary_only') throw new Error('目前僅支援依主職寄送。');
   if (levelValue !== '' && (!Number.isFinite(orgLevel) || orgLevel <= 0)) throw new Error('組織層級格式不正確。');
@@ -1159,7 +1175,7 @@ function resolveNotificationGroupGreeting_(context, payload) {
 }
 
 function isSingleBccNotificationTemplate_(templateType) {
-  return ['announcement', 'group_announcement', 'leadership_announcement'].includes(String(templateType || '').trim());
+  return ['announcement', 'group_announcement', 'leadership_announcement_summary', 'leadership_announcement'].includes(String(templateType || '').trim());
 }
 
 function buildNotificationCriteriaSummary_(payload) {
@@ -1207,7 +1223,8 @@ function getNotificationTemplateLabel_(templateType) {
     personalized: '個人化版',
     announcement: '公告版',
     group_announcement: '組別版',
-    leadership_announcement: '長官主管版'
+    leadership_announcement_summary: '長官主管摘要版',
+    leadership_announcement: '長官主管完整版'
   };
   return labels[String(templateType || '').trim()] || '個人化版';
 }
