@@ -778,6 +778,10 @@ function buildNotificationTemplates_(courseTitle) {
   };
 }
 
+function buildNotificationWatchReminderHtml_() {
+  return '<p>提醒您，觀看課程時請直接從系統提供的上課頁面開啟影片並完成觀看。如果從其他頁面、別人轉傳的連結，或另外開啟的視窗觀看，系統可能無法正確計算您的觀看時數。</p>';
+}
+
 function buildPersonalizedNotificationTemplate_(courseTitle) {
   return {
     subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
@@ -787,6 +791,7 @@ function buildPersonalizedNotificationTemplate_(courseTitle) {
       `<p>您目前的訓練資訊如下：<br>課程名稱：${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}教育訓練<br>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}</p>`,
       '<p>請於 8 月 30 日前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
       '<p>請至資訊安全暨個資保護教育訓練完成課程與測驗。</p>',
+      buildNotificationWatchReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>'
     ].join('')
   };
@@ -800,6 +805,7 @@ function buildAnnouncementNotificationTemplate_(courseTitle) {
       `<p>因應外稽單位要求，我們需對內部人員進行<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>教育訓練。課程內容已製作為線上課程與評量，敬請大家完成本次教育訓練時數與評量。</p>`,
       '<p>本次課程可同時折抵資安三小時時數與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格。請於 8 月 30 日以前完成課程，感謝大家的協助。</p>',
       '<p>請至資訊安全暨個資保護教育訓練完成課程與測驗。</p>',
+      buildNotificationWatchReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>'
     ].join('')
   };
@@ -813,6 +819,7 @@ function buildGroupAnnouncementNotificationTemplate_(courseTitle) {
       `<p>因應外稽單位要求，我們需對內部人員進行<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>教育訓練。課程內容已製作為線上課程與評量，敬請大家完成本次教育訓練時數與評量。</p>`,
       '<p>本次課程可同時折抵資安三小時時數與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格。請於 8 月 30 日以前完成課程，感謝大家的協助。</p>',
       '<p>請至資訊安全暨個資保護教育訓練完成課程與測驗。</p>',
+      buildNotificationWatchReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>'
     ].join('')
   };
