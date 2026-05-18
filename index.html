@@ -2127,6 +2127,7 @@
     const VIDEO_DURATION_FALLBACK_SEC = (2 * 60 * 60) + (31 * 60) + 21;
     const PROGRESS_SCHEMA_VERSION = 2;
     const NATURAL_PLAYBACK_DELTA_SEC = 2.5;
+    const VIDEO_END_RESUME_GUARD_SEC = 3;
     const CLOUD_SYNC_UNIQUE_WATCH_THRESHOLD_SEC = 30 * 60;
     const FOCUS_LOSS_GRACE_MS = 80;
     const FOCUS_ALERT_COOLDOWN_MS = 1000;
@@ -5004,7 +5005,11 @@
       }
       updateProgressUI(getWatchedSeconds());
       updateReviewedSegmentState(lastPlaybackPosition);
-      event.target.playVideo();
+      const playbackStartPosition = Math.max(0, Number(lastPlaybackPosition) || 0);
+      const shouldAutoPlay = playbackStartPosition < Math.max(videoDurationSec - VIDEO_END_RESUME_GUARD_SEC, 0);
+      if (shouldAutoPlay) {
+        event.target.playVideo();
+      }
     }
 
     function onPlayerStateChange(event) {
@@ -5027,11 +5032,7 @@
 
       if (event.data === YT.PlayerState.ENDED) {
         scheduleProgressSync('ended', { force: true, silent: true });
-        if (getWatchedSeconds() >= REQUIRED_WATCH_TIME_SEC) {
-          Swal.fire('觀看完成', '太棒了！您已達到要求的觀看時數，接下來請進行測驗。', 'success').then(() => {
-            proceedToQuiz();
-          });
-        } else {
+        if (getWatchedSeconds() < REQUIRED_WATCH_TIME_SEC) {
           Swal.fire('提醒', '您的總觀看進度尚未達標。請確認是否有遺漏片段。', 'warning');
         }
       }
