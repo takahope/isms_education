@@ -1462,6 +1462,12 @@
         option.textContent = item.type;
         select.appendChild(option);
       });
+      const hasAdminOption = state.notification.orgOptions.some((item) => String(item.type || '').trim() === '行政');
+      if (hasAdminOption) {
+        select.value = '行政';
+      } else if (select.options.length > 0) {
+        select.selectedIndex = 0;
+      }
       populateNotificationLevelOptions();
     }
 
