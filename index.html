@@ -2762,6 +2762,29 @@
 
     function applyStationEditorPayload(response, options = {}) {
       const normalized = normalizeStationEditorData(response);
+      const canEdit = Boolean(normalized.viewer && normalized.viewer.canEditStationAssignments);
+      if (!canEdit) {
+        stationEditorState.baseData = null;
+        stationEditorState.draftData = null;
+        stationEditorState.managerSelections = {};
+        stationEditorState.selfNewStationCode = '';
+        stationEditorState.deletingStationCode = '';
+        stationEditorState.activeTab = 'managed';
+        stationEditorState.managedViewMode = 'all';
+        stationEditorState.managedSearchKeyword = '';
+        stationEditorState.managedSelectedStationCode = '';
+        stationEditorState.managedManagerFilterEmail = '';
+        stationEditorState.managedSearchComposing = false;
+        stationEditorState.changeListExpanded = false;
+        stationEditorState.message = String(response && response.message || '目前沒有可編輯的駐站收案配置。').trim();
+        stationEditorPrefetchState.prefetchedData = null;
+        stationEditorPrefetchState.prefetchedAt = '';
+        stationEditorPrefetchState.prefetchError = stationEditorState.message;
+        stationEditorPrefetchState.isPrefetching = false;
+        stationEditorPrefetchState.prefetchPromise = null;
+        return;
+      }
+
       stationEditorState.baseData = normalized;
       stationEditorState.draftData = cloneStationEditorData(normalized);
       stationEditorState.managerSelections = {};
@@ -3657,6 +3680,18 @@
       }
 
       const draft = stationEditorState.draftData;
+      if (!draft.viewer || !draft.viewer.canEditStationAssignments) {
+        subtitleEl.textContent = '目前沒有可編輯的資料。';
+        headerActionsEl.classList.add('hidden');
+        tabsEl.classList.add('hidden');
+        tabsEl.innerHTML = '';
+        bodyEl.innerHTML = `<div class="editor-empty">${escapeHtml(stationEditorState.message || '目前沒有可編輯的駐站收案配置。')}</div>`;
+        statusEl.textContent = stationEditorState.message || '沒有可編輯資料。';
+        renderStationEditorChangeList(changeListEl, []);
+        saveBtn.disabled = true;
+        return;
+      }
+
       subtitleEl.textContent = '可調整駐站管理員名下的收案人員，或修改自己負責的駐站。';
       if (draft.viewer && draft.viewer.isStationManager) {
         headerActionsEl.classList.remove('hidden');
@@ -3743,6 +3778,14 @@
     }
 
     function renderManagedStationsView(container, draft) {
+      if (!draft || !draft.viewer || !draft.viewer.isStationManager) {
+        const empty = document.createElement('div');
+        empty.className = 'editor-empty';
+        empty.textContent = '目前沒有可管理的駐站。';
+        container.appendChild(empty);
+        return;
+      }
+
       const viewMode = stationEditorState.managedViewMode === 'all' ? 'all' : 'mine';
       const baseStations = viewMode === 'all' ? draft.allStations : draft.managedStations;
       const managerFilterEmail = String(stationEditorState.managedManagerFilterEmail || '').trim();

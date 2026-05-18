@@ -98,20 +98,10 @@ function getStationAssignmentEditorData() {
     };
   } catch (error) {
     console.error('讀取駐站收案配置資料失敗:', error);
-    return {
-      success: false,
-      viewer: {
-        email: viewerEmail,
-        canEditStationAssignments: false
-      },
-      managedStations: [],
-      selfAssignments: [],
-      stationOptions: [],
-      stationStaffCandidates: [],
-      stationManagerCandidates: [],
-      personnelOptions: [],
-      message: error && error.message ? error.message : '無法讀取駐站收案配置。'
-    };
+    return buildStationEditorAccessDeniedResponse_(
+      viewerEmail,
+      error && error.message ? error.message : '無法讀取駐站收案配置。'
+    );
   }
 }
 
@@ -133,6 +123,10 @@ function saveStationAssignmentChanges(payload) {
     applyStationEditorChanges_(context, changes);
 
     const refreshedContext = buildStationEditorContext_(viewerEmail);
+    if (!refreshedContext.viewer.canEditStationAssignments) {
+      return buildStationEditorAccessDeniedResponse_(viewerEmail, '駐站收案配置已更新。', true);
+    }
+
     return {
       success: true,
       message: '駐站收案配置已更新。',
@@ -613,6 +607,27 @@ function toStationEditorPayload_(context) {
     stationStaffCandidates: context.stationStaffCandidates,
     stationManagerCandidates: context.stationManagerCandidates,
     personnelOptions: context.personnelOptions
+  };
+}
+
+function buildStationEditorAccessDeniedResponse_(viewerEmail, message, success) {
+  return {
+    success: Boolean(success),
+    viewer: {
+      email: normalizeEmail_(viewerEmail),
+      name: '',
+      isStationManager: false,
+      isStationStaff: false,
+      canEditStationAssignments: false
+    },
+    allStations: [],
+    managedStations: [],
+    selfAssignments: [],
+    stationOptions: [],
+    stationStaffCandidates: [],
+    stationManagerCandidates: [],
+    personnelOptions: [],
+    message: String(message || '您沒有可修改的駐站收案配置。').trim()
   };
 }
 
