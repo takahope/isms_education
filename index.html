@@ -1701,7 +1701,7 @@
       <!-- Step 0: Loading -->
       <div id="step-loading" class="text-center">
         <div class="spinner"></div>
-        <p>系統正在驗證您的身分，請稍候...</p>
+        <p id="loading-message">系統正在驗證您的身分，請稍候...</p>
       </div>
 
       <!-- Step 1: Welcome -->
@@ -2038,13 +2038,22 @@
     let stationEditorState = createInitialStationEditorState();
     let stationEditorPrefetchState = createInitialStationEditorPrefetchState();
     let activeStationOverview = null;
+    const IDENTITY_LOADING_MESSAGE = '正在驗證您的身分，請稍候...';
+    const VIDEO_LOADING_MESSAGE = '正在載入教育訓練影片中，請稍候...';
 
     document.addEventListener('DOMContentLoaded', () => {
+      setLoadingMessage(IDENTITY_LOADING_MESSAGE);
       bindReplayWindowEvents();
       bindStationEditorEvents();
       bindStationOverviewEvents();
       fetchUserProfile();
     });
+
+    function setLoadingMessage(message) {
+      const loadingMessageEl = document.getElementById('loading-message');
+      if (!loadingMessageEl) return;
+      loadingMessageEl.textContent = message || IDENTITY_LOADING_MESSAGE;
+    }
 
     function createProfileLoadFallbackProfile(message, fallbackEmail = '') {
       return {
@@ -4773,6 +4782,7 @@
 
     async function startTraining() {
       resetProgressState();
+      setLoadingMessage(VIDEO_LOADING_MESSAGE);
       showSection('step-loading');
 
       const progressSource = await loadLatestProgressState();
