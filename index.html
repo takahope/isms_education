@@ -1452,8 +1452,8 @@
       right: 24px;
       bottom: 108px;
       z-index: 980;
-      width: 120px;
-      height: 148px;
+      width: 88px;
+      height: 88px;
       border: none;
       padding: 0;
       background: transparent;
@@ -1476,47 +1476,23 @@
       position: relative;
       width: 100%;
       height: 100%;
-      border-radius: 56% 56% 50% 50% / 64% 64% 42% 42%;
+      border-radius: 50%;
       background:
-        radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.95), transparent 18%),
-        radial-gradient(circle at 66% 74%, rgba(255, 255, 255, 0.16), transparent 36%),
-        linear-gradient(180deg, #fef3c7 0%, #fde68a 34%, #fbbf24 68%, #f59e0b 100%);
+        radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.94), transparent 20%),
+        radial-gradient(circle at 68% 72%, rgba(255, 255, 255, 0.14), transparent 38%),
+        linear-gradient(180deg, #fef3c7 0%, #fcd34d 40%, #f59e0b 100%);
       border: 1px solid rgba(217, 119, 6, 0.28);
       box-shadow:
         0 20px 40px rgba(120, 53, 15, 0.22),
         inset 0 1px 0 rgba(255, 255, 255, 0.72),
         inset 0 -10px 18px rgba(180, 83, 9, 0.18);
       overflow: hidden;
-      transform: rotate(-8deg);
       transition: transform 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease;
-    }
-
-    .easter-egg-shell::before,
-    .easter-egg-shell::after {
-      content: '';
-      position: absolute;
-      left: 14px;
-      right: 14px;
-      height: 16px;
-      border-radius: 999px;
-      background: linear-gradient(90deg, rgba(251, 191, 36, 0.08), rgba(191, 219, 254, 0.92), rgba(244, 114, 182, 0.88), rgba(251, 191, 36, 0.16));
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
-      opacity: 0.95;
-    }
-
-    .easter-egg-shell::before {
-      top: 42px;
-      transform: rotate(-10deg);
-    }
-
-    .easter-egg-shell::after {
-      top: 78px;
-      transform: rotate(8deg);
     }
 
     .easter-egg-fab:hover .easter-egg-shell,
     .easter-egg-fab:focus-visible .easter-egg-shell {
-      transform: rotate(-4deg) translateY(-3px);
+      transform: translateY(-3px) scale(1.02);
       box-shadow:
         0 24px 50px rgba(120, 53, 15, 0.28),
         inset 0 1px 0 rgba(255, 255, 255, 0.82),
@@ -1543,46 +1519,23 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
-      padding: 26px 18px 18px;
+      gap: 2px;
+      padding: 10px;
       text-align: center;
       color: #7c2d12;
     }
 
-    .easter-egg-kicker {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 10px;
-      border-radius: 999px;
-      background: rgba(255, 251, 235, 0.82);
-      border: 1px solid rgba(251, 191, 36, 0.32);
-      font-size: 0.72rem;
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #9a3412;
-      box-shadow: 0 6px 14px rgba(180, 83, 9, 0.08);
-    }
-
     .easter-egg-title {
-      font-size: 1rem;
+      font-size: 0.92rem;
       font-weight: 800;
       letter-spacing: 0.02em;
       color: #7c2d12;
     }
 
     .easter-egg-time {
-      font-size: 0.82rem;
+      font-size: 0.76rem;
       font-weight: 700;
       color: rgba(124, 45, 18, 0.84);
-    }
-
-    .easter-egg-note {
-      font-size: 0.74rem;
-      line-height: 1.35;
-      color: rgba(120, 53, 15, 0.8);
-      max-width: 86px;
     }
 
     /* Quiz Cards */
@@ -1796,37 +1749,23 @@
       }
 
       .easter-egg-fab {
-        width: 98px;
-        height: 122px;
+        width: 72px;
+        height: 72px;
         right: 12px;
         bottom: 96px;
       }
 
-      .easter-egg-shell::before {
-        top: 34px;
-      }
-
-      .easter-egg-shell::after {
-        top: 64px;
-      }
-
       .easter-egg-content {
-        padding: 20px 12px 14px;
-        gap: 3px;
-      }
-
-      .easter-egg-kicker {
-        padding: 4px 8px;
-        font-size: 0.64rem;
+        padding: 8px;
+        gap: 1px;
       }
 
       .easter-egg-title {
-        font-size: 0.9rem;
+        font-size: 0.78rem;
       }
 
-      .easter-egg-time,
-      .easter-egg-note {
-        font-size: 0.7rem;
+      .easter-egg-time {
+        font-size: 0.62rem;
       }
 
       .quiz-toolbar {
@@ -1939,15 +1878,13 @@
           id="easter-egg-btn"
           type="button"
           class="easter-egg-fab hidden"
-          aria-label="彩蛋捷徑，跳到影片 2 點 29 分 20 秒"
-          title="彩蛋捷徑：跳到 02:29:20"
+          aria-label="彩蛋捷徑，跳到影片 2 點 29 分 22 秒"
+          title="彩蛋捷徑：跳到 02:29:22"
         >
           <span class="easter-egg-shell">
             <span class="easter-egg-content">
-              <span class="easter-egg-kicker">Egg</span>
-              <span class="easter-egg-title">彩蛋捷徑</span>
-              <span class="easter-egg-time">02:29:20</span>
-              <span class="easter-egg-note">拖曳移動後可快速跳轉</span>
+              <span class="easter-egg-title">彩蛋</span>
+              <span class="easter-egg-time">02:29:22</span>
             </span>
           </span>
         </button>
@@ -2186,7 +2123,7 @@
     const POINTS_PER_QUESTION = 10;
     const IDLE_TIME_MS = 15 * 60 * 1000;
     const REQUIRED_WATCH_TIME_SEC = 1 * 60;
-    const EASTER_EGG_TARGET_SEC = (2 * 60 * 60) + (29 * 60) + 20;
+    const EASTER_EGG_TARGET_SEC = (2 * 60 * 60) + (29 * 60) + 22;
     const VIDEO_DURATION_FALLBACK_SEC = (2 * 60 * 60) + (31 * 60) + 21;
     const PROGRESS_SCHEMA_VERSION = 2;
     const NATURAL_PLAYBACK_DELTA_SEC = 2.5;
