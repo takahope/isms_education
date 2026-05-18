@@ -16,7 +16,7 @@ const DASHBOARD_CONFIG = {
 const TRAINING_SHEET_HEADERS = {
   訓練紀錄: ['時間戳記', '姓名', '使用者信箱', '課程名稱', '測驗分數', '測驗結果', '測驗批次ID', '題目數', '及格門檻'],
   觀看進度: ['使用者信箱', '課程名稱', '影片ID', '已觀看區間', '已觀看秒數', '最後播放位置', '最後更新時間', '最後同步來源版本'],
-  通知紀錄: ['時間戳記', '操作者信箱', '課程名稱', '範本類型', '組織類型', '層級', '組別代碼', '包含下層', '狀態篩選', '主旨', '收件人數', '成功數', '略過數']
+  通知紀錄: ['時間戳記', '操作者信箱', '課程名稱', '範本類型', '組織類型', '層級', '組別代碼', '包含下層', '狀態篩選', '人員狀態篩選', '主旨', '收件人數', '成功數', '略過數']
 };
 
 function doGet() {
@@ -162,7 +162,8 @@ function getTrainingNotificationBootstrap() {
     },
     defaultTemplateType: 'personalized',
     templates: buildNotificationTemplates_(context.courseTitle),
-    orgOptions
+    orgOptions,
+    personnelStatusOptions: context.personnelStatusOptions
   };
 }
 
@@ -339,11 +340,13 @@ function buildDashboardContext_() {
   const quizByEmail = buildQuizSummaryByEmail_(trainingRecords);
   const progressByEmail = buildProgressSummaryByEmail_(progressRecords);
   const learners = [];
+  const personnelStatusOptions = collectPersonnelStatusOptions_(personnelRows);
 
   for (let i = 1; i < personnelRows.length; i += 1) {
     const email = normalizeEmail_(personnelRows[i][0]);
     if (!email) continue;
     const name = String(personnelRows[i][1] || '').trim();
+    const personnelStatus = String(personnelRows[i][2] || '').trim();
     const assignment = assignmentSummaries.get(email) || createEmptyAssignmentSummary_();
     const quiz = quizByEmail.get(email) || createEmptyQuizSummary_();
     const progress = progressByEmail.get(email) || createEmptyProgressSummary_();
@@ -357,6 +360,7 @@ function buildDashboardContext_() {
     learners.push({
       email,
       name,
+      personnelStatus,
       assignmentLabel: assignment.assignmentLabel,
       assignmentType: assignment.assignmentType,
       assignmentOrgCode: assignment.assignmentOrgCode,
@@ -397,8 +401,21 @@ function buildDashboardContext_() {
     assignments,
     orgNodes,
     orgNodeMap,
-    courseTitle: resolveDashboardCourseTitle_(learners)
+    courseTitle: resolveDashboardCourseTitle_(learners),
+    personnelStatusOptions
   };
+}
+
+function collectPersonnelStatusOptions_(personnelRows) {
+  const seen = new Set();
+  const options = [];
+  for (let i = 1; i < personnelRows.length; i += 1) {
+    const status = String(personnelRows[i][2] || '').trim();
+    if (!status || seen.has(status)) continue;
+    seen.add(status);
+    options.push(status);
+  }
+  return options;
 }
 
 function readAllAssignments_(sheet) {
@@ -1002,6 +1019,7 @@ function normalizeNotificationPayload_(payload) {
   const template = payload && payload.template ? payload.template : {};
   const templateType = String(payload && payload.templateType || 'personalized').trim() || 'personalized';
   const trainingStatus = String(payload && payload.trainingStatus || 'incomplete').trim() || 'incomplete';
+  const personnelStatus = String(payload && payload.personnelStatus || '').trim();
   const descendantMode = String(target.descendantMode || 'self').trim() || 'self';
   const orgType = String(target.orgType || '').trim();
   const levelValue = String(typeof target.level === 'undefined' || target.level === null ? '' : target.level).trim();
@@ -1031,6 +1049,7 @@ function normalizeNotificationPayload_(payload) {
       assignmentMatch
     },
     trainingStatus,
+    personnelStatus,
     template: {
       subject,
       htmlBody
@@ -1053,6 +1072,7 @@ function selectNotificationRecipients_(context, payload) {
     if (payload.target.level !== '' && Number(learner.assignmentOrgLevel || 0) !== Number(payload.target.level)) reasons.push('層級不符');
     if (orgCodeSet.size > 0 && !orgCodeSet.has(normalizeOrgCode_(learner.assignmentOrgCode))) reasons.push('不在目標組織');
     if (!matchesNotificationStatusFilter_(learner.status, payload.trainingStatus)) reasons.push('訓練狀態不符');
+    if (payload.personnelStatus && String(learner.personnelStatus || '').trim() !== payload.personnelStatus) reasons.push('人員狀態不符');
     if (!isValidEmail_(learner.email)) reasons.push('信箱格式不正確');
     if (dedupe.has(learner.email)) reasons.push('重複信箱');
 
@@ -1071,6 +1091,7 @@ function selectNotificationRecipients_(context, payload) {
     recipients.push({
       email: learner.email,
       name: learner.name,
+      personnelStatus: learner.personnelStatus,
       assignmentOrgName: learner.assignmentOrgName,
       assignmentTitle: learner.assignmentTitle,
       watchedPercent: learner.watchedPercent,
@@ -1224,6 +1245,7 @@ function buildNotificationCriteriaSummary_(payload) {
     orgCode: payload.target.orgCode,
     descendantMode: payload.target.descendantMode,
     trainingStatus: payload.trainingStatus,
+    personnelStatus: payload.personnelStatus,
     assignmentMatch: payload.target.assignmentMatch
   };
 }
@@ -1248,6 +1270,7 @@ function appendNotificationLog_(entry) {
     entry.payload.target.orgCode || '',
     getNotificationDescendantModeLabel_(entry.payload.target.descendantMode),
     entry.payload.trainingStatus || '',
+    entry.payload.personnelStatus || '',
     entry.payload.template.subject || '',
     Number(entry.recipientCount || 0),
     Number(entry.sentCount || 0),

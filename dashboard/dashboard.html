@@ -799,6 +799,12 @@
             </select>
           </div>
           <div class="field">
+            <label for="notify-personnel-status">人員狀態</label>
+            <select id="notify-personnel-status">
+              <option value="">全部狀態</option>
+            </select>
+          </div>
+          <div class="field">
             <label>寄送範圍</label>
             <select id="notify-descendant-mode">
               <option value="self">只寄本組</option>
@@ -1016,6 +1022,7 @@
       notification: {
         enabled: false,
         orgOptions: [],
+        personnelStatusOptions: [],
         templates: {},
         defaultTemplateType: 'personalized',
         placeholdersByTemplateType: {},
@@ -1070,6 +1077,7 @@
         resetNotificationPreview();
       });
       document.getElementById('notify-status').addEventListener('change', resetNotificationPreview);
+      document.getElementById('notify-personnel-status').addEventListener('change', resetNotificationPreview);
       document.getElementById('notify-descendant-mode').addEventListener('change', resetNotificationPreview);
       document.getElementById('notify-subject').addEventListener('input', resetNotificationPreview);
       document.getElementById('notify-body').addEventListener('input', resetNotificationPreview);
@@ -1105,6 +1113,7 @@
         throw new Error((response && response.message) || '無法載入通知設定。');
       }
       state.notification.orgOptions = Array.isArray(response.orgOptions) ? response.orgOptions : [];
+      state.notification.personnelStatusOptions = Array.isArray(response.personnelStatusOptions) ? response.personnelStatusOptions : [];
       state.notification.templates = response.templates || {};
       state.notification.defaultTemplateType = response.defaultTemplateType || 'personalized';
       state.notification.placeholdersByTemplateType = response.placeholderTokensByTemplateType || {};
@@ -1112,6 +1121,7 @@
       state.dashboardUrl = response.dashboardUrl || state.dashboardUrl;
       document.getElementById('notify-template-type').value = state.notification.defaultTemplateType;
       populateNotificationTypeOptions();
+      populateNotificationPersonnelStatusOptions();
       syncNotificationDescendantModeState();
       applySelectedNotificationTemplate();
       resetNotificationPreview();
@@ -1519,6 +1529,23 @@
       panel.classList.toggle('open');
     }
 
+    function populateNotificationPersonnelStatusOptions() {
+      const select = document.getElementById('notify-personnel-status');
+      const currentValue = String(select.value || '').trim();
+      select.innerHTML = '<option value="">全部狀態</option>';
+      state.notification.personnelStatusOptions.forEach((status) => {
+        const value = String(status || '').trim();
+        if (!value) return;
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      });
+      if ([...select.options].some((option) => option.value === currentValue)) {
+        select.value = currentValue;
+      }
+    }
+
     function buildNotificationPayload() {
       const orgCode = String(document.getElementById('notify-org-code').value || '').trim();
       return {
@@ -1533,6 +1560,7 @@
           assignmentMatch: 'primary_only'
         },
         trainingStatus: String(document.getElementById('notify-status').value || 'incomplete').trim(),
+        personnelStatus: String(document.getElementById('notify-personnel-status').value || '').trim(),
         template: {
           subject: String(document.getElementById('notify-subject').value || '').trim(),
           htmlBody: String(document.getElementById('notify-body').value || '').trim()
@@ -1611,8 +1639,9 @@
       document.getElementById('preview-html').innerHTML = response.sampleHtmlBody || '';
 
       const criteria = response.criteriaSummary || {};
+      const personnelStatusLabel = criteria.personnelStatus || '全部狀態';
       document.getElementById('preview-criteria').textContent =
-        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.orgCode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 狀態 ${criteria.trainingStatus || ''}${response.deliveryMode === 'single_bcc' ? ' / 單封 BCC 全部' : ' / 個別寄送'}`;
+        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.orgCode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 訓練狀態 ${criteria.trainingStatus || ''} / 人員狀態 ${personnelStatusLabel}${response.deliveryMode === 'single_bcc' ? ' / 單封 BCC 全部' : ' / 個別寄送'}`;
 
       renderRecipientList('preview-recipient-list', response.recipients || [], false);
       renderRecipientList('preview-skipped-list', response.skipped || [], true);
