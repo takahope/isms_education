@@ -2438,7 +2438,7 @@
         isLoading: false,
         isSaving: false,
         activeTab: 'managed',
-        managedViewMode: 'all',
+        managedViewMode: 'mine',
         managedSearchKeyword: '',
         managedSelectedStationCode: '',
         managedManagerFilterEmail: '',
@@ -2770,7 +2770,7 @@
         stationEditorState.selfNewStationCode = '';
         stationEditorState.deletingStationCode = '';
         stationEditorState.activeTab = 'managed';
-        stationEditorState.managedViewMode = 'all';
+        stationEditorState.managedViewMode = 'mine';
         stationEditorState.managedSearchKeyword = '';
         stationEditorState.managedSelectedStationCode = '';
         stationEditorState.managedManagerFilterEmail = '';
@@ -2799,7 +2799,7 @@
       }
       if (options.resetView) {
         stationEditorState.activeTab = normalized.viewer.isStationManager ? 'managed' : 'self';
-        stationEditorState.managedViewMode = 'all';
+        stationEditorState.managedViewMode = 'mine';
         stationEditorState.managedSearchKeyword = '';
         stationEditorState.managedSelectedStationCode = '';
         stationEditorState.managedManagerFilterEmail = '';
@@ -2906,7 +2906,7 @@
         stationEditorState.managerSelections = {};
         stationEditorState.selfNewStationCode = '';
         stationEditorState.activeTab = prefetched.viewer.isStationManager ? 'managed' : 'self';
-        stationEditorState.managedViewMode = 'all';
+        stationEditorState.managedViewMode = 'mine';
         stationEditorState.managedSearchKeyword = '';
         stationEditorState.managedSelectedStationCode = '';
         stationEditorState.managedManagerFilterEmail = '';
@@ -2933,7 +2933,7 @@
           stationEditorState.managerSelections = {};
           stationEditorState.selfNewStationCode = '';
           stationEditorState.activeTab = prefetched.viewer.isStationManager ? 'managed' : 'self';
-          stationEditorState.managedViewMode = 'all';
+          stationEditorState.managedViewMode = 'mine';
           stationEditorState.managedSearchKeyword = '';
           stationEditorState.managedSelectedStationCode = '';
           stationEditorState.managedManagerFilterEmail = '';
@@ -3806,13 +3806,13 @@
         toggle.className = 'manager-scope-toggle';
         toggle.setAttribute('data-tour', 'manager-scope-toggle');
         toggle.innerHTML = `
-          <button type="button" class="manager-scope-card ${viewMode === 'all' ? 'is-active' : ''}" data-managed-view="all">
-            <span class="manager-scope-title">看全部駐站</span>
-            <span class="manager-scope-desc">檢視全部駐站的人員配置，直接調整任一駐站的收案人員。</span>
-          </button>
           <button type="button" class="manager-scope-card ${viewMode === 'mine' ? 'is-active' : ''}" data-managed-view="mine">
             <span class="manager-scope-title">只看我的駐站</span>
             <span class="manager-scope-desc">聚焦自己目前管理的駐站，快速調整站內收案人員。</span>
+          </button>
+          <button type="button" class="manager-scope-card ${viewMode === 'all' ? 'is-active' : ''}" data-managed-view="all">
+            <span class="manager-scope-title">看全部駐站</span>
+            <span class="manager-scope-desc">檢視全部駐站的人員配置，直接調整任一駐站的收案人員。</span>
           </button>
         `;
         container.appendChild(toggle);
