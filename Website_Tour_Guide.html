@@ -188,6 +188,8 @@
       this.isActive = false;
       this.renderToken = 0;
       this.profile = null;
+      this.activeTarget = null;
+      this.activeStep = null;
       this.dom = {
         overlay: document.getElementById('website-tour-overlay'),
         backdropTop: document.getElementById('website-tour-backdrop-top'),
@@ -241,6 +243,8 @@
       this.isActive = false;
       this.profile = null;
       this.steps = [];
+      this.activeTarget = null;
+      this.activeStep = null;
       this.renderToken += 1;
       this.setPresentationVisible(false);
       this.resetPresentationStyles();
@@ -309,10 +313,12 @@
       this.dom.counter.textContent = `${this.currentIndex + 1} / ${this.steps.length}`;
       this.dom.nextBtn.textContent = this.currentIndex === this.steps.length - 1 ? '完成' : '下一步';
 
-      target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-      await sleepForWebsiteTour(220);
+      this.activeTarget = target;
+      this.activeStep = step;
+      const didScroll = scrollTargetIntoSafeView(target, step && step.scrollOptions);
+      await sleepForWebsiteTour(didScroll ? 220 : 40);
       if (!this.isActive || this.renderToken !== token) return;
-      this.position(target, step.placement);
+      this.position(target, step);
       this.setPresentationVisible(true);
     }
 
@@ -326,7 +332,7 @@
       return waitForTourVisibility(document.querySelector(step.selector), 1600, step.selector);
     }
 
-    position(target, preferredPlacement) {
+    position(target, step) {
       const padding = 10;
       const rect = target.getBoundingClientRect();
       const highlightRect = {
@@ -347,10 +353,10 @@
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
       const gap = 18;
-      const placements = buildPlacementPreference(preferredPlacement);
+      const placements = buildPlacementPreference(step);
       let selected = null;
 
-      placements.some((placement) => {
+      placements.forEach((placement) => {
         const candidate = calculateTooltipPlacement({
           placement,
           rect,
@@ -361,11 +367,14 @@
           viewportHeight
         });
         if (candidate.fits) {
-          selected = candidate;
-          return true;
+          if (!selected || !selected.fits) {
+            selected = candidate;
+            return;
+          }
         }
-        if (!selected) selected = candidate;
-        return false;
+        if (!selected || compareTooltipCandidates(candidate, selected) < 0) {
+          selected = candidate;
+        }
       });
 
       if (!selected) {
@@ -383,6 +392,13 @@
       this.dom.tooltip.style.top = `${selected.top}px`;
       this.dom.tooltip.style.left = `${selected.left}px`;
       this.positionArrow(selected, rect);
+    }
+
+    repositionActiveStep() {
+      if (!this.isActive || !this.activeTarget || !this.activeStep) return;
+      if (!isVisibleForWebsiteTour(this.activeTarget)) return;
+      this.position(this.activeTarget, this.activeStep);
+      this.setPresentationVisible(true);
     }
 
     positionArrow(placement, rect) {
@@ -461,7 +477,7 @@
     handleViewportChange() {
       if (!this.isActive) return;
       window.requestAnimationFrame(() => {
-        this.render();
+        this.repositionActiveStep();
       });
     }
 
@@ -495,13 +511,13 @@
         selector: '#station-overview-summary',
         title: '這裡是您負責的駐站',
         content: '每一張卡片代表一個您目前管理的駐站，先快速確認駐站名稱與數量是否符合預期。',
-        placement: 'bottom'
+        placements: ['right', 'left', 'top', 'bottom']
       },
       {
         selector: '[data-station-overview-trigger]',
         title: '點一個駐站查看收案人員',
         content: '建議先點任一駐站，確認站內的收案人員組成是否正確，避免後續調整到錯的駐站。',
-        placement: 'bottom',
+        placements: ['right', 'left', 'top', 'bottom'],
         nextAction: async () => {
           const trigger = document.querySelector('[data-station-overview-trigger]');
           if (trigger) {
@@ -514,7 +530,7 @@
         selector: '#station-overview-body',
         title: '核對收案人員名單',
         content: '這裡會列出該駐站的收案人員、職稱與 Email。請先確認站內成員是否完整。',
-        placement: 'right',
+        placements: ['left', 'top', 'right', 'bottom'],
         beforeShow: async () => {
           if (document.getElementById('station-overview-modal').classList.contains('hidden')) {
             const trigger = document.querySelector('[data-station-overview-trigger]');
@@ -742,10 +758,16 @@
     ];
   }
 
-  function buildPlacementPreference(preferredPlacement) {
-    const preferred = ['top', 'right', 'bottom', 'left'].includes(preferredPlacement) ? preferredPlacement : 'bottom';
-    const all = ['bottom', 'right', 'top', 'left'];
-    return [preferred].concat(all.filter((item) => item !== preferred));
+  function buildPlacementPreference(step) {
+    const validPlacements = ['top', 'right', 'bottom', 'left'];
+    const configuredPlacements = Array.isArray(step && step.placements)
+      ? step.placements.filter((placement) => validPlacements.includes(placement))
+      : [];
+    const fallbackPlacement = validPlacements.includes(step && step.placement)
+      ? step.placement
+      : 'bottom';
+    const orderedPlacements = configuredPlacements.length ? configuredPlacements : [fallbackPlacement];
+    return orderedPlacements.concat(validPlacements.filter((item) => orderedPlacements.indexOf(item) === -1));
   }
 
   function calculateTooltipPlacement(config) {
@@ -781,13 +803,80 @@
       && left >= 12
       && (left + tooltipWidth) <= (viewportWidth - 12)
       && (top + tooltipHeight) <= (viewportHeight - 12);
+    const overflow = Math.max(12 - top, 0)
+      + Math.max(12 - left, 0)
+      + Math.max((left + tooltipWidth) - (viewportWidth - 12), 0)
+      + Math.max((top + tooltipHeight) - (viewportHeight - 12), 0);
 
     return {
       placement,
       top: clampedTop,
       left: clampedLeft,
-      fits
+      fits,
+      overflow
     };
+  }
+
+  function compareTooltipCandidates(candidate, current) {
+    if (candidate.fits && !current.fits) return -1;
+    if (!candidate.fits && current.fits) return 1;
+    if (candidate.overflow !== current.overflow) return candidate.overflow - current.overflow;
+    return 0;
+  }
+
+  function scrollTargetIntoSafeView(target, options = {}) {
+    if (!target) return false;
+    const scroller = findTourScrollContainer(target);
+    const margin = Number(options.margin || 18);
+    const behavior = options.behavior || 'smooth';
+    const rect = target.getBoundingClientRect();
+
+    if (scroller === document.scrollingElement || scroller === document.documentElement || scroller === document.body) {
+      const topInset = Number(options.topInset || 96);
+      const bottomInset = Number(options.bottomInset || 28);
+      const safeTop = topInset + margin;
+      const safeBottom = window.innerHeight - bottomInset - margin;
+      let delta = 0;
+
+      if (rect.top < safeTop) {
+        delta = rect.top - safeTop;
+      } else if (rect.bottom > safeBottom) {
+        delta = rect.bottom - safeBottom;
+      }
+
+      if (Math.abs(delta) < 4) return false;
+      window.scrollBy({ top: delta, behavior });
+      return true;
+    }
+
+    const containerRect = scroller.getBoundingClientRect();
+    const containerTopInset = Number(options.containerTopInset || 20);
+    const containerBottomInset = Number(options.containerBottomInset || 20);
+    const safeTop = containerRect.top + containerTopInset + margin;
+    const safeBottom = containerRect.bottom - containerBottomInset - margin;
+    let delta = 0;
+
+    if (rect.top < safeTop) {
+      delta = rect.top - safeTop;
+    } else if (rect.bottom > safeBottom) {
+      delta = rect.bottom - safeBottom;
+    }
+
+    if (Math.abs(delta) < 4) return false;
+    scroller.scrollBy({ top: delta, behavior });
+    return true;
+  }
+
+  function findTourScrollContainer(element) {
+    let current = element ? element.parentElement : null;
+    while (current && current !== document.body) {
+      const style = window.getComputedStyle(current);
+      if (/(auto|scroll|overlay)/.test(style.overflowY || '') && current.scrollHeight > current.clientHeight) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
   }
 
   async function ensureStationEditorReadyForTour(mode) {
