@@ -1043,7 +1043,7 @@ function buildStationCode_(stationType, suffix) {
 }
 
 function getPersonnelStatusForStation_(stationCode) {
-  return normalizeOrgCode_(stationCode).startsWith('GRP-CO-EX-') ? '委外廠商' : '在職';
+  return normalizeOrgCode_(stationCode).startsWith('GRP-CO-EX-') ? '委外廠商' : '在勤';
 }
 
 function findOrgNameByCode_(sheet, orgCode) {
