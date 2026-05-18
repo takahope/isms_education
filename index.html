@@ -1447,6 +1447,144 @@
       display: none;
     }
 
+    .easter-egg-fab {
+      position: fixed;
+      right: 24px;
+      bottom: 108px;
+      z-index: 980;
+      width: 120px;
+      height: 148px;
+      border: none;
+      padding: 0;
+      background: transparent;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .easter-egg-fab:active {
+      cursor: grabbing;
+      transform: none;
+    }
+
+    .easter-egg-fab.is-dragging {
+      transition: none;
+    }
+
+    .easter-egg-shell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: 56% 56% 50% 50% / 64% 64% 42% 42%;
+      background:
+        radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.95), transparent 18%),
+        radial-gradient(circle at 66% 74%, rgba(255, 255, 255, 0.16), transparent 36%),
+        linear-gradient(180deg, #fef3c7 0%, #fde68a 34%, #fbbf24 68%, #f59e0b 100%);
+      border: 1px solid rgba(217, 119, 6, 0.28);
+      box-shadow:
+        0 20px 40px rgba(120, 53, 15, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.72),
+        inset 0 -10px 18px rgba(180, 83, 9, 0.18);
+      overflow: hidden;
+      transform: rotate(-8deg);
+      transition: transform 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease;
+    }
+
+    .easter-egg-shell::before,
+    .easter-egg-shell::after {
+      content: '';
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      height: 16px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(251, 191, 36, 0.08), rgba(191, 219, 254, 0.92), rgba(244, 114, 182, 0.88), rgba(251, 191, 36, 0.16));
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+      opacity: 0.95;
+    }
+
+    .easter-egg-shell::before {
+      top: 42px;
+      transform: rotate(-10deg);
+    }
+
+    .easter-egg-shell::after {
+      top: 78px;
+      transform: rotate(8deg);
+    }
+
+    .easter-egg-fab:hover .easter-egg-shell,
+    .easter-egg-fab:focus-visible .easter-egg-shell {
+      transform: rotate(-4deg) translateY(-3px);
+      box-shadow:
+        0 24px 50px rgba(120, 53, 15, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.82),
+        inset 0 -10px 18px rgba(180, 83, 9, 0.16);
+      filter: saturate(1.05);
+    }
+
+    .easter-egg-fab:focus-visible {
+      outline: none;
+    }
+
+    .easter-egg-fab:focus-visible .easter-egg-shell {
+      box-shadow:
+        0 0 0 4px rgba(56, 189, 248, 0.3),
+        0 24px 50px rgba(120, 53, 15, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.82),
+        inset 0 -10px 18px rgba(180, 83, 9, 0.16);
+    }
+
+    .easter-egg-content {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 26px 18px 18px;
+      text-align: center;
+      color: #7c2d12;
+    }
+
+    .easter-egg-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(255, 251, 235, 0.82);
+      border: 1px solid rgba(251, 191, 36, 0.32);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #9a3412;
+      box-shadow: 0 6px 14px rgba(180, 83, 9, 0.08);
+    }
+
+    .easter-egg-title {
+      font-size: 1rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #7c2d12;
+    }
+
+    .easter-egg-time {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: rgba(124, 45, 18, 0.84);
+    }
+
+    .easter-egg-note {
+      font-size: 0.74rem;
+      line-height: 1.35;
+      color: rgba(120, 53, 15, 0.8);
+      max-width: 86px;
+    }
+
     /* Quiz Cards */
     .quiz-toolbar {
       display: flex;
@@ -1657,6 +1795,40 @@
         display: inline;
       }
 
+      .easter-egg-fab {
+        width: 98px;
+        height: 122px;
+        right: 12px;
+        bottom: 96px;
+      }
+
+      .easter-egg-shell::before {
+        top: 34px;
+      }
+
+      .easter-egg-shell::after {
+        top: 64px;
+      }
+
+      .easter-egg-content {
+        padding: 20px 12px 14px;
+        gap: 3px;
+      }
+
+      .easter-egg-kicker {
+        padding: 4px 8px;
+        font-size: 0.64rem;
+      }
+
+      .easter-egg-title {
+        font-size: 0.9rem;
+      }
+
+      .easter-egg-time,
+      .easter-egg-note {
+        font-size: 0.7rem;
+      }
+
       .quiz-toolbar {
         align-items: stretch;
       }
@@ -1761,6 +1933,23 @@
         
         <button id="btn-goto-quiz" onclick="proceedToQuiz()" class="btn btn-success hidden">
           前往測驗
+        </button>
+
+        <button
+          id="easter-egg-btn"
+          type="button"
+          class="easter-egg-fab hidden"
+          aria-label="彩蛋捷徑，跳到影片 2 點 29 分 20 秒"
+          title="彩蛋捷徑：跳到 02:29:20"
+        >
+          <span class="easter-egg-shell">
+            <span class="easter-egg-content">
+              <span class="easter-egg-kicker">Egg</span>
+              <span class="easter-egg-title">彩蛋捷徑</span>
+              <span class="easter-egg-time">02:29:20</span>
+              <span class="easter-egg-note">拖曳移動後可快速跳轉</span>
+            </span>
+          </span>
         </button>
       </div>
 
@@ -1997,6 +2186,7 @@
     const POINTS_PER_QUESTION = 10;
     const IDLE_TIME_MS = 15 * 60 * 1000;
     const REQUIRED_WATCH_TIME_SEC = 1 * 60;
+    const EASTER_EGG_TARGET_SEC = (2 * 60 * 60) + (29 * 60) + 20;
     const VIDEO_DURATION_FALLBACK_SEC = (2 * 60 * 60) + (31 * 60) + 21;
     const PROGRESS_SCHEMA_VERSION = 2;
     const NATURAL_PLAYBACK_DELTA_SEC = 2.5;
@@ -2028,9 +2218,16 @@
     let currentPassingScore = PASSING_SCORE;
     let isQuizLoading = false;
     let isDraggingReplayWindow = false;
+    let isDraggingEasterEggButton = false;
     let dragPointerId = null;
     let dragOffsetX = 0;
     let dragOffsetY = 0;
+    let easterEggPointerId = null;
+    let easterEggDragOffsetX = 0;
+    let easterEggDragOffsetY = 0;
+    let easterEggPointerStartX = 0;
+    let easterEggPointerStartY = 0;
+    let didDragEasterEggButton = false;
     let blurCheckTimeout = null;
     let lastFocusAlertAt = 0;
     let videoDurationSec = VIDEO_DURATION_FALLBACK_SEC;
@@ -2044,6 +2241,7 @@
     document.addEventListener('DOMContentLoaded', () => {
       setLoadingMessage(IDENTITY_LOADING_MESSAGE);
       bindReplayWindowEvents();
+      bindEasterEggButtonEvents();
       bindStationEditorEvents();
       bindStationOverviewEvents();
       fetchUserProfile();
@@ -4960,6 +5158,7 @@
       const fillEl = document.getElementById('progress-fill');
       const textEl = document.getElementById('progress-text');
       const btnQuiz = document.getElementById('btn-goto-quiz');
+      const easterEggBtn = document.getElementById('easter-egg-btn');
       const currentEl = document.getElementById('time-current');
       const progressMaxSec = Math.max(videoDurationSec, REQUIRED_WATCH_TIME_SEC, 1);
 
@@ -4973,10 +5172,13 @@
         fillEl.classList.add('success');
         textEl.classList.add('success');
         btnQuiz.classList.remove('hidden');
+        easterEggBtn.classList.remove('hidden');
+        keepEasterEggButtonInViewport();
       } else {
         fillEl.classList.remove('success');
         textEl.classList.remove('success');
         btnQuiz.classList.add('hidden');
+        easterEggBtn.classList.add('hidden');
       }
     }
 
@@ -5285,6 +5487,43 @@
       window.addEventListener('resize', keepReplayWindowInViewport);
     }
 
+    function bindEasterEggButtonEvents() {
+      const easterEggBtn = document.getElementById('easter-egg-btn');
+      easterEggBtn.addEventListener('click', jumpToEasterEggTime);
+      easterEggBtn.addEventListener('pointerdown', startEasterEggButtonDrag);
+      window.addEventListener('pointermove', dragEasterEggButton);
+      window.addEventListener('pointerup', stopEasterEggButtonDrag);
+      window.addEventListener('pointercancel', stopEasterEggButtonDrag);
+      window.addEventListener('resize', keepEasterEggButtonInViewport);
+    }
+
+    function jumpToEasterEggTime() {
+      if (didDragEasterEggButton) {
+        didDragEasterEggButton = false;
+        return;
+      }
+
+      if (!player || typeof player.seekTo !== 'function') {
+        Swal.fire('提醒', '影片播放器仍在載入中，請稍候再試。', 'info');
+        return;
+      }
+
+      if (typeof player.getCurrentTime === 'function') {
+        flushProgressTracking(player.getCurrentTime());
+      }
+
+      lastPlaybackPosition = EASTER_EGG_TARGET_SEC;
+      previousTrackedPosition = EASTER_EGG_TARGET_SEC;
+      player.seekTo(EASTER_EGG_TARGET_SEC, true);
+      updateReviewedSegmentState(EASTER_EGG_TARGET_SEC);
+      updateProgressUI(getWatchedSeconds());
+
+      if (typeof player.playVideo === 'function') {
+        player.playVideo();
+      }
+      resetIdleTimer();
+    }
+
     function openReplayWindow() {
       if (typeof YT === 'undefined' || !YT.Player) {
         Swal.fire('提醒', '影片播放器仍在載入中，請稍候再試。', 'info');
@@ -5385,6 +5624,85 @@
       replayWindow.style.top = `${top}px`;
       replayWindow.style.right = 'auto';
       replayWindow.style.bottom = 'auto';
+    }
+
+    function startEasterEggButtonDrag(event) {
+      const easterEggBtn = document.getElementById('easter-egg-btn');
+      if (easterEggBtn.classList.contains('hidden')) return;
+
+      isDraggingEasterEggButton = true;
+      didDragEasterEggButton = false;
+      easterEggPointerId = event.pointerId;
+      easterEggPointerStartX = event.clientX;
+      easterEggPointerStartY = event.clientY;
+
+      const rect = easterEggBtn.getBoundingClientRect();
+      easterEggDragOffsetX = event.clientX - rect.left;
+      easterEggDragOffsetY = event.clientY - rect.top;
+
+      easterEggBtn.style.left = `${rect.left}px`;
+      easterEggBtn.style.top = `${rect.top}px`;
+      easterEggBtn.style.right = 'auto';
+      easterEggBtn.style.bottom = 'auto';
+      easterEggBtn.classList.add('is-dragging');
+      easterEggBtn.setPointerCapture(event.pointerId);
+    }
+
+    function dragEasterEggButton(event) {
+      if (!isDraggingEasterEggButton || event.pointerId !== easterEggPointerId) return;
+
+      const easterEggBtn = document.getElementById('easter-egg-btn');
+      const width = easterEggBtn.offsetWidth;
+      const height = easterEggBtn.offsetHeight;
+      const deltaX = event.clientX - easterEggPointerStartX;
+      const deltaY = event.clientY - easterEggPointerStartY;
+      if (!didDragEasterEggButton && Math.hypot(deltaX, deltaY) > 6) {
+        didDragEasterEggButton = true;
+      }
+
+      const maxLeft = Math.max(0, window.innerWidth - width);
+      const maxTop = Math.max(0, window.innerHeight - height);
+      const left = clamp(event.clientX - easterEggDragOffsetX, 0, maxLeft);
+      const top = clamp(event.clientY - easterEggDragOffsetY, 0, maxTop);
+
+      easterEggBtn.style.left = `${left}px`;
+      easterEggBtn.style.top = `${top}px`;
+    }
+
+    function stopEasterEggButtonDrag(event) {
+      if (!isDraggingEasterEggButton || event.pointerId !== easterEggPointerId) return;
+
+      const easterEggBtn = document.getElementById('easter-egg-btn');
+      if (easterEggBtn.hasPointerCapture(event.pointerId)) {
+        easterEggBtn.releasePointerCapture(event.pointerId);
+      }
+
+      isDraggingEasterEggButton = false;
+      easterEggPointerId = null;
+      easterEggBtn.classList.remove('is-dragging');
+      keepEasterEggButtonInViewport();
+    }
+
+    function keepEasterEggButtonInViewport() {
+      const easterEggBtn = document.getElementById('easter-egg-btn');
+      if (easterEggBtn.classList.contains('hidden')) return;
+
+      const width = easterEggBtn.offsetWidth;
+      const height = easterEggBtn.offsetHeight;
+      const defaultLeft = Math.max(12, window.innerWidth - width - 24);
+      const defaultTop = Math.max(12, window.innerHeight - height - 108);
+      const rect = easterEggBtn.getBoundingClientRect();
+      const left = easterEggBtn.style.left
+        ? clamp(rect.left, 0, Math.max(0, window.innerWidth - width))
+        : defaultLeft;
+      const top = easterEggBtn.style.top
+        ? clamp(rect.top, 0, Math.max(0, window.innerHeight - height))
+        : defaultTop;
+
+      easterEggBtn.style.left = `${left}px`;
+      easterEggBtn.style.top = `${top}px`;
+      easterEggBtn.style.right = 'auto';
+      easterEggBtn.style.bottom = 'auto';
     }
 
     function buildLocalQuizPayload() {
