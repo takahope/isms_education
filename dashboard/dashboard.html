@@ -768,11 +768,20 @@
             <label for="notify-template-type">範本類型</label>
             <select id="notify-template-type">
               <option value="personalized">個人化版</option>
+              <option value="case_staff_personalized">收案人員版</option>
+              <option value="parental_leave_personalized">育嬰假版</option>
               <option value="announcement">公告版</option>
               <option value="group_announcement">組別版</option>
               <option value="station_manager_announcement">駐站管理員版</option>
               <option value="leadership_announcement_summary">長官主管摘要版</option>
               <option value="leadership_announcement">長官主管完整版</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="notify-delivery-mode">寄送方式</label>
+            <select id="notify-delivery-mode">
+              <option value="individual">個人化逐封</option>
+              <option value="single_bcc">單封 BCC</option>
             </select>
           </div>
           <div class="field">
@@ -1025,6 +1034,7 @@
         personnelStatusOptions: [],
         templates: {},
         defaultTemplateType: 'personalized',
+        defaultDeliveryModeByTemplateType: {},
         placeholdersByTemplateType: {},
         lastPreviewPayloadJson: '',
         previewLoaded: false
@@ -1050,6 +1060,7 @@
         applySelectedNotificationTemplate();
         resetNotificationPreview();
       });
+      document.getElementById('notify-delivery-mode').addEventListener('change', resetNotificationPreview);
       document.getElementById('status-filter').addEventListener('change', (event) => {
         state.filters.status = String(event.target.value || '').trim();
         renderDashboard();
@@ -1116,6 +1127,7 @@
       state.notification.personnelStatusOptions = Array.isArray(response.personnelStatusOptions) ? response.personnelStatusOptions : [];
       state.notification.templates = response.templates || {};
       state.notification.defaultTemplateType = response.defaultTemplateType || 'personalized';
+      state.notification.defaultDeliveryModeByTemplateType = response.defaultDeliveryModeByTemplateType || {};
       state.notification.placeholdersByTemplateType = response.placeholderTokensByTemplateType || {};
       state.courseTitle = response.courseTitle || state.courseTitle;
       state.dashboardUrl = response.dashboardUrl || state.dashboardUrl;
@@ -1550,6 +1562,7 @@
       const orgCode = String(document.getElementById('notify-org-code').value || '').trim();
       return {
         templateType: String(document.getElementById('notify-template-type').value || 'personalized').trim(),
+        deliveryMode: String(document.getElementById('notify-delivery-mode').value || 'individual').trim(),
         target: {
           orgType: String(document.getElementById('notify-org-type').value || '').trim(),
           level: String(document.getElementById('notify-org-level').value || '').trim(),
@@ -1572,8 +1585,10 @@
       const templateType = String(document.getElementById('notify-template-type').value || 'personalized').trim();
       const template = state.notification.templates[templateType] || { subject: '', htmlBody: '' };
       const placeholders = state.notification.placeholdersByTemplateType[templateType] || [];
+      const defaultDeliveryMode = state.notification.defaultDeliveryModeByTemplateType[templateType] || 'individual';
       document.getElementById('notify-subject').value = template.subject || '';
       document.getElementById('notify-body').value = template.htmlBody || '';
+      document.getElementById('notify-delivery-mode').value = defaultDeliveryMode;
       document.getElementById('placeholder-note').textContent = `可用變數：${placeholders.join('、') || '無'}`;
     }
 
@@ -1601,7 +1616,7 @@
         state.notification.lastPreviewPayloadJson = JSON.stringify(payload);
         renderNotificationPreview(response);
         document.getElementById('send-notification-btn').disabled = response.recipientCount <= 0;
-        const modeText = response.deliveryMode === 'single_bcc' ? '單封公告信（BCC 全部）' : '個人化逐封寄送';
+        const modeText = getNotificationDeliveryModeLabel(response.deliveryMode);
         setNotificationFeedback(`預覽完成，共 ${response.recipientCount} 位收件人；寄送方式：${modeText}。`);
       } catch (error) {
         setNotificationFeedback(error && error.message ? error.message : '通知預覽失敗。', true);
@@ -1622,8 +1637,9 @@
         if (!response || !response.success) {
           throw new Error((response && response.message) || '通知寄送失敗。');
         }
-        const modeText = getNotificationTemplateLabel(response.templateType);
-        const message = `寄送完成：${modeText} 成功 ${response.sentCount} 封，略過 ${response.skippedCount} 位，失敗 ${response.failureCount || 0} 封。`;
+        const modeText = getNotificationDeliveryModeLabel(response.deliveryMode);
+        const templateText = getNotificationTemplateLabel(response.templateType);
+        const message = `寄送完成：${templateText} / ${modeText}，成功 ${response.sentCount} 封，略過 ${response.skippedCount} 位，失敗 ${response.failureCount || 0} 封。`;
         setNotificationFeedback(message);
         await loadDashboardData();
       } catch (error) {
@@ -1641,7 +1657,7 @@
       const criteria = response.criteriaSummary || {};
       const personnelStatusLabel = criteria.personnelStatus || '全部狀態';
       document.getElementById('preview-criteria').textContent =
-        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.orgCode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 訓練狀態 ${criteria.trainingStatus || ''} / 人員狀態 ${personnelStatusLabel}${response.deliveryMode === 'single_bcc' ? ' / 單封 BCC 全部' : ' / 個別寄送'}`;
+        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.orgCode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 訓練狀態 ${criteria.trainingStatus || ''} / 人員狀態 ${personnelStatusLabel} / ${getNotificationDeliveryModeLabel(response.deliveryMode)}`;
 
       renderRecipientList('preview-recipient-list', response.recipients || [], false);
       renderRecipientList('preview-skipped-list', response.skipped || [], true);
@@ -1650,6 +1666,8 @@
     function getNotificationTemplateLabel(templateType) {
       const labelMap = {
         personalized: '個人化版',
+        case_staff_personalized: '收案人員版',
+        parental_leave_personalized: '育嬰假版',
         announcement: '公告版',
         group_announcement: '組別版',
         station_manager_announcement: '駐站管理員版',
@@ -1657,6 +1675,10 @@
         leadership_announcement: '長官主管完整版'
       };
       return labelMap[String(templateType || '').trim()] || '個人化版';
+    }
+
+    function getNotificationDeliveryModeLabel(deliveryMode) {
+      return String(deliveryMode || '').trim() === 'single_bcc' ? '單封 BCC 全部' : '個人化逐封';
     }
 
     function getNotificationDescendantModeLabel(descendantMode) {

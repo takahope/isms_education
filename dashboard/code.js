@@ -16,7 +16,7 @@ const DASHBOARD_CONFIG = {
 const TRAINING_SHEET_HEADERS = {
   訓練紀錄: ['時間戳記', '姓名', '使用者信箱', '課程名稱', '測驗分數', '測驗結果', '測驗批次ID', '題目數', '及格門檻'],
   觀看進度: ['使用者信箱', '課程名稱', '影片ID', '已觀看區間', '已觀看秒數', '最後播放位置', '最後更新時間', '最後同步來源版本'],
-  通知紀錄: ['時間戳記', '操作者信箱', '課程名稱', '範本類型', '組織類型', '層級', '組別代碼', '包含下層', '狀態篩選', '人員狀態篩選', '主旨', '收件人數', '成功數', '略過數']
+  通知紀錄: ['時間戳記', '操作者信箱', '課程名稱', '範本類型', '寄送方式', '組織類型', '層級', '組別代碼', '包含下層', '狀態篩選', '人員狀態篩選', '主旨', '收件人數', '成功數', '略過數']
 };
 
 function doGet() {
@@ -154,12 +154,15 @@ function getTrainingNotificationBootstrap() {
     courseTitle: context.courseTitle,
     placeholderTokensByTemplateType: {
       personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
+      case_staff_personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
+      parental_leave_personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
       announcement: ['{{課程名稱}}', '{{上課網址}}'],
       group_announcement: ['{{組別稱呼}}', '{{課程名稱}}', '{{上課網址}}'],
       station_manager_announcement: ['{{駐站管理稱呼}}', '{{課程名稱}}', '{{上課網址}}'],
       leadership_announcement_summary: ['{{課程名稱}}', '{{上課網址}}'],
       leadership_announcement: ['{{課程名稱}}', '{{上課網址}}']
     },
+    defaultDeliveryModeByTemplateType: buildDefaultDeliveryModeByTemplateType_(),
     defaultTemplateType: 'personalized',
     templates: buildNotificationTemplates_(context.courseTitle),
     orgOptions,
@@ -793,11 +796,26 @@ function buildNotificationOrgOptions_(orgNodes) {
 function buildNotificationTemplates_(courseTitle) {
   return {
     personalized: buildPersonalizedNotificationTemplate_(courseTitle),
+    case_staff_personalized: buildCaseStaffPersonalizedNotificationTemplate_(courseTitle),
+    parental_leave_personalized: buildParentalLeavePersonalizedNotificationTemplate_(courseTitle),
     announcement: buildAnnouncementNotificationTemplate_(courseTitle),
     group_announcement: buildGroupAnnouncementNotificationTemplate_(courseTitle),
     station_manager_announcement: buildStationManagerAnnouncementTemplate_(courseTitle),
     leadership_announcement_summary: buildLeadershipAnnouncementSummaryTemplate_(courseTitle),
     leadership_announcement: buildLeadershipAnnouncementNotificationTemplate_(courseTitle)
+  };
+}
+
+function buildDefaultDeliveryModeByTemplateType_() {
+  return {
+    personalized: 'individual',
+    case_staff_personalized: 'individual',
+    parental_leave_personalized: 'individual',
+    announcement: 'single_bcc',
+    group_announcement: 'single_bcc',
+    station_manager_announcement: 'single_bcc',
+    leadership_announcement_summary: 'single_bcc',
+    leadership_announcement: 'single_bcc'
   };
 }
 
@@ -819,6 +837,38 @@ function buildPersonalizedNotificationTemplate_(courseTitle) {
     htmlBody: [
       '<p>{{姓名}} 您好：</p>',
       '<p>提醒您，因應本次資訊安全暨個資保護教育訓練安排，請協助完成課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>',
+      `<p>您目前的訓練資訊如下：<br>課程名稱：${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}教育訓練<br>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}</p>`,
+      '<p>請於 8 月 30 日前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
+      buildNotificationWatchReminderHtml_(),
+      buildNotificationLoginReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
+    ].join('')
+  };
+}
+
+function buildCaseStaffPersonalizedNotificationTemplate_(courseTitle) {
+  return {
+    subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
+    htmlBody: [
+      '<p>{{姓名}} 您好：</p>',
+      '<p>提醒您，因應本次資訊安全暨個資保護教育訓練安排，您目前屬於收案相關人員通知對象，請協助完成課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>',
+      `<p>您目前的訓練資訊如下：<br>課程名稱：${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}教育訓練<br>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}</p>`,
+      '<p>請於 8 月 30 日前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
+      buildNotificationWatchReminderHtml_(),
+      buildNotificationLoginReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
+    ].join('')
+  };
+}
+
+function buildParentalLeavePersonalizedNotificationTemplate_(courseTitle) {
+  return {
+    subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
+    htmlBody: [
+      '<p>{{姓名}} 您好：</p>',
+      '<p>提醒您，因應本次資訊安全暨個資保護教育訓練安排，您目前屬於人員狀態標記為育嬰假的通知對象，請協助完成課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>',
       `<p>您目前的訓練資訊如下：<br>課程名稱：${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}教育訓練<br>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}</p>`,
       '<p>請於 8 月 30 日前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
       buildNotificationWatchReminderHtml_(),
@@ -926,8 +976,8 @@ function executeTrainingNotification_(payload, options) {
     const trainingCourseUrl = getTrainingCourseUrl_();
     const selection = selectNotificationRecipients_(context, normalizedPayload);
     const templateContext = buildNotificationTemplateContext_(context, normalizedPayload);
-    const isSingleBccDelivery = isSingleBccNotificationTemplate_(normalizedPayload.templateType);
-    const previewRecipient = normalizedPayload.templateType === 'personalized'
+    const isSingleBccDelivery = normalizedPayload.deliveryMode === 'single_bcc';
+    const previewRecipient = normalizedPayload.deliveryMode === 'individual'
       ? (selection.recipients[0] || null)
       : null;
     const sampleSubject = previewRecipient
@@ -946,7 +996,7 @@ function executeTrainingNotification_(payload, options) {
         courseTitle: context.courseTitle,
         criteriaSummary: buildNotificationCriteriaSummary_(normalizedPayload),
         templateType: normalizedPayload.templateType,
-        deliveryMode: isSingleBccDelivery ? 'single_bcc' : 'individual',
+        deliveryMode: normalizedPayload.deliveryMode,
         recipientCount: selection.recipients.length,
         skippedCount: selection.skipped.length,
         recipients: selection.recipients.slice(0, 200),
@@ -1016,7 +1066,7 @@ function executeTrainingNotification_(payload, options) {
       courseTitle: context.courseTitle,
       criteriaSummary: buildNotificationCriteriaSummary_(normalizedPayload),
       templateType: normalizedPayload.templateType,
-      deliveryMode: isSingleBccDelivery ? 'single_bcc' : 'individual',
+      deliveryMode: normalizedPayload.deliveryMode,
       recipientCount: selection.recipients.length,
       sentCount,
       skippedCount: selection.skipped.length,
@@ -1038,6 +1088,7 @@ function normalizeNotificationPayload_(payload) {
   const target = payload && payload.target ? payload.target : {};
   const template = payload && payload.template ? payload.template : {};
   const templateType = String(payload && payload.templateType || 'personalized').trim() || 'personalized';
+  const deliveryMode = String(payload && payload.deliveryMode || 'individual').trim() || 'individual';
   const trainingStatus = String(payload && payload.trainingStatus || 'incomplete').trim() || 'incomplete';
   const personnelStatus = String(payload && payload.personnelStatus || '').trim();
   const descendantMode = String(target.descendantMode || 'self').trim() || 'self';
@@ -1051,7 +1102,8 @@ function normalizeNotificationPayload_(payload) {
 
   if (!subject) throw new Error('通知主旨不得為空。');
   if (!htmlBody) throw new Error('通知內文不得為空。');
-  if (!['personalized', 'announcement', 'group_announcement', 'station_manager_announcement', 'leadership_announcement_summary', 'leadership_announcement'].includes(templateType)) throw new Error('通知範本類型不正確。');
+  if (!['personalized', 'case_staff_personalized', 'parental_leave_personalized', 'announcement', 'group_announcement', 'station_manager_announcement', 'leadership_announcement_summary', 'leadership_announcement'].includes(templateType)) throw new Error('通知範本類型不正確。');
+  if (!['individual', 'single_bcc'].includes(deliveryMode)) throw new Error('寄送方式不正確。');
   if (!orgType) throw new Error('請選擇組織類型。');
   if (assignmentMatch !== 'primary_only') throw new Error('目前僅支援依主職寄送。');
   if (levelValue !== '' && (!Number.isFinite(orgLevel) || orgLevel <= 0)) throw new Error('組織層級格式不正確。');
@@ -1061,6 +1113,7 @@ function normalizeNotificationPayload_(payload) {
 
   return {
     templateType,
+    deliveryMode,
     target: {
       orgType,
       level: levelValue === '' ? '' : orgLevel,
@@ -1253,13 +1306,10 @@ function isStationOrgCode_(orgCode) {
   return String(orgCode || '').trim().toUpperCase().startsWith('GRP-CO-');
 }
 
-function isSingleBccNotificationTemplate_(templateType) {
-  return ['announcement', 'group_announcement', 'station_manager_announcement', 'leadership_announcement_summary', 'leadership_announcement'].includes(String(templateType || '').trim());
-}
-
 function buildNotificationCriteriaSummary_(payload) {
   return {
     templateType: payload.templateType,
+    deliveryMode: payload.deliveryMode,
     orgType: payload.target.orgType,
     level: payload.target.level,
     orgCode: payload.target.orgCode,
@@ -1285,6 +1335,7 @@ function appendNotificationLog_(entry) {
     entry.operatorEmail || '',
     entry.courseTitle || '',
     getNotificationTemplateLabel_(entry.payload.templateType),
+    getNotificationDeliveryModeLabel_(entry.payload.deliveryMode),
     entry.payload.target.orgType || '',
     entry.payload.target.level === '' ? '' : Number(entry.payload.target.level || 0),
     entry.payload.target.orgCode || '',
@@ -1302,6 +1353,8 @@ function appendNotificationLog_(entry) {
 function getNotificationTemplateLabel_(templateType) {
   const labels = {
     personalized: '個人化版',
+    case_staff_personalized: '收案人員版',
+    parental_leave_personalized: '育嬰假版',
     announcement: '公告版',
     group_announcement: '組別版',
     station_manager_announcement: '駐站管理員版',
@@ -1309,6 +1362,14 @@ function getNotificationTemplateLabel_(templateType) {
     leadership_announcement: '長官主管完整版'
   };
   return labels[String(templateType || '').trim()] || '個人化版';
+}
+
+function getNotificationDeliveryModeLabel_(deliveryMode) {
+  const labels = {
+    individual: '個人化逐封',
+    single_bcc: '單封 BCC'
+  };
+  return labels[String(deliveryMode || 'individual').trim()] || '個人化逐封';
 }
 
 function getNotificationDescendantModeLabel_(descendantMode) {
