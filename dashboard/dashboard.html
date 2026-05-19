@@ -1015,6 +1015,8 @@
   </div>
 
   <script>
+    const NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE = '__CASE_STAFF__';
+
     const state = {
       viewerEmail: '',
       generatedAt: '',
@@ -1512,6 +1514,7 @@
       const levelValue = document.getElementById('notify-org-level').value;
       const current = getNotificationTypeConfig(typeValue);
       const groupSelect = document.getElementById('notify-org-code');
+      const previousValue = String(groupSelect.value || '').trim();
       groupSelect.innerHTML = '<option value="">全部組別</option>';
       let groups = [];
       if (current && Array.isArray(current.levels)) {
@@ -1524,12 +1527,34 @@
           });
         }
       }
+      if (shouldShowCaseStaffVirtualOption(groups)) {
+        const option = document.createElement('option');
+        option.value = NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE;
+        option.textContent = '收案人員';
+        groupSelect.appendChild(option);
+      }
       groups.forEach((group) => {
         const option = document.createElement('option');
         option.value = group.code;
         option.textContent = `${group.name || group.code}｜${group.code}`;
         groupSelect.appendChild(option);
       });
+      if ([...groupSelect.options].some((option) => option.value === previousValue)) {
+        groupSelect.value = previousValue;
+      }
+    }
+
+    function shouldShowCaseStaffVirtualOption(groups) {
+      return groups.some((group) => isCaseStaffOrgCode(group && group.code));
+    }
+
+    function isCaseStaffVirtualTarget(orgCode) {
+      return String(orgCode || '').trim().toUpperCase() === NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE;
+    }
+
+    function isCaseStaffOrgCode(orgCode) {
+      const normalized = String(orgCode || '').trim().toUpperCase();
+      return normalized.startsWith('GRP-CO-') && !normalized.startsWith('GRP-CO-EX-');
     }
 
     function getNotificationTypeConfig(typeValue) {
@@ -1560,6 +1585,7 @@
 
     function buildNotificationPayload() {
       const orgCode = String(document.getElementById('notify-org-code').value || '').trim();
+      const isCaseStaffVirtual = isCaseStaffVirtualTarget(orgCode);
       return {
         templateType: String(document.getElementById('notify-template-type').value || 'personalized').trim(),
         deliveryMode: String(document.getElementById('notify-delivery-mode').value || 'individual').trim(),
@@ -1567,7 +1593,7 @@
           orgType: String(document.getElementById('notify-org-type').value || '').trim(),
           level: String(document.getElementById('notify-org-level').value || '').trim(),
           orgCode,
-          descendantMode: orgCode
+          descendantMode: orgCode && !isCaseStaffVirtual
             ? String(document.getElementById('notify-descendant-mode').value || 'self').trim()
             : 'self',
           assignmentMatch: 'primary_only'
@@ -1595,7 +1621,7 @@
     function syncNotificationDescendantModeState() {
       const orgCode = String(document.getElementById('notify-org-code').value || '').trim();
       const select = document.getElementById('notify-descendant-mode');
-      if (!orgCode) {
+      if (!orgCode || isCaseStaffVirtualTarget(orgCode)) {
         select.value = 'self';
         select.disabled = true;
         return;
@@ -1656,8 +1682,11 @@
 
       const criteria = response.criteriaSummary || {};
       const personnelStatusLabel = criteria.personnelStatus || '全部狀態';
+      const orgCodeLabel = getNotificationTargetOrgLabel(criteria.orgCode);
+      const shouldShowLevel = criteria.orgCode !== NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE && criteria.level !== '' && typeof criteria.level !== 'undefined';
+      const shouldShowDescendantMode = criteria.orgCode && criteria.orgCode !== NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE;
       document.getElementById('preview-criteria').textContent =
-        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${criteria.level !== '' && typeof criteria.level !== 'undefined' ? ` / 第 ${criteria.level} 層` : ''}${criteria.orgCode ? ` / ${criteria.orgCode}` : ''}${criteria.orgCode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 訓練狀態 ${criteria.trainingStatus || ''} / 人員狀態 ${personnelStatusLabel} / ${getNotificationDeliveryModeLabel(response.deliveryMode)}`;
+        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${shouldShowLevel ? ` / 第 ${criteria.level} 層` : ''}${orgCodeLabel ? ` / ${orgCodeLabel}` : ''}${shouldShowDescendantMode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 訓練狀態 ${criteria.trainingStatus || ''} / 人員狀態 ${personnelStatusLabel} / ${getNotificationDeliveryModeLabel(response.deliveryMode)}`;
 
       renderRecipientList('preview-recipient-list', response.recipients || [], false);
       renderRecipientList('preview-skipped-list', response.skipped || [], true);
@@ -1679,6 +1708,10 @@
 
     function getNotificationDeliveryModeLabel(deliveryMode) {
       return String(deliveryMode || '').trim() === 'single_bcc' ? '單封 BCC 全部' : '個人化逐封';
+    }
+
+    function getNotificationTargetOrgLabel(orgCode) {
+      return isCaseStaffVirtualTarget(orgCode) ? '收案人員' : String(orgCode || '').trim();
     }
 
     function getNotificationDescendantModeLabel(descendantMode) {

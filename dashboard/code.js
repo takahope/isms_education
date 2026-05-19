@@ -13,6 +13,8 @@ const DASHBOARD_CONFIG = {
   notificationLogSheetName: '通知紀錄'
 };
 
+const NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE = '__CASE_STAFF__';
+
 const TRAINING_SHEET_HEADERS = {
   訓練紀錄: ['時間戳記', '姓名', '使用者信箱', '課程名稱', '測驗分數', '測驗結果', '測驗批次ID', '題目數', '及格門檻'],
   觀看進度: ['使用者信箱', '課程名稱', '影片ID', '已觀看區間', '已觀看秒數', '最後播放位置', '最後更新時間', '最後同步來源版本'],
@@ -793,6 +795,15 @@ function buildNotificationOrgOptions_(orgNodes) {
     }));
 }
 
+function isCaseStaffVirtualTarget_(orgCode) {
+  return normalizeOrgCode_(orgCode) === normalizeOrgCode_(NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE);
+}
+
+function isCaseStaffOrgCode_(orgCode) {
+  const normalized = normalizeOrgCode_(orgCode);
+  return normalized.startsWith('GRP-CO-') && !normalized.startsWith('GRP-CO-EX-');
+}
+
 function buildNotificationTemplates_(courseTitle) {
   return {
     personalized: buildPersonalizedNotificationTemplate_(courseTitle),
@@ -1133,6 +1144,7 @@ function normalizeNotificationPayload_(payload) {
 function selectNotificationRecipients_(context, payload) {
   const orgCodes = resolveNotificationTargetOrgCodes_(context.orgNodes, payload.target);
   const orgCodeSet = new Set(orgCodes.map((item) => normalizeOrgCode_(item)));
+  const isCaseStaffVirtualTarget = isCaseStaffVirtualTarget_(payload.target.orgCode);
   const dedupe = new Set();
   const recipients = [];
   const skipped = [];
@@ -1141,9 +1153,13 @@ function selectNotificationRecipients_(context, payload) {
     const reasons = [];
     if (!learner.email) reasons.push('缺少信箱');
     if (learner.assignmentType && learner.assignmentType !== '主職') reasons.push('非主職');
-    if (learner.assignmentOrgType !== payload.target.orgType) reasons.push('組織類型不符');
-    if (payload.target.level !== '' && Number(learner.assignmentOrgLevel || 0) !== Number(payload.target.level)) reasons.push('層級不符');
-    if (orgCodeSet.size > 0 && !orgCodeSet.has(normalizeOrgCode_(learner.assignmentOrgCode))) reasons.push('不在目標組織');
+    if (isCaseStaffVirtualTarget) {
+      if (!isCaseStaffOrgCode_(learner.assignmentOrgCode)) reasons.push('不在收案人員範圍');
+    } else {
+      if (learner.assignmentOrgType !== payload.target.orgType) reasons.push('組織類型不符');
+      if (payload.target.level !== '' && Number(learner.assignmentOrgLevel || 0) !== Number(payload.target.level)) reasons.push('層級不符');
+      if (orgCodeSet.size > 0 && !orgCodeSet.has(normalizeOrgCode_(learner.assignmentOrgCode))) reasons.push('不在目標組織');
+    }
     if (!matchesNotificationStatusFilter_(learner.status, payload.trainingStatus)) reasons.push('訓練狀態不符');
     if (payload.personnelStatus && String(learner.personnelStatus || '').trim() !== payload.personnelStatus) reasons.push('人員狀態不符');
     if (!isValidEmail_(learner.email)) reasons.push('信箱格式不正確');
@@ -1178,6 +1194,7 @@ function selectNotificationRecipients_(context, payload) {
 }
 
 function resolveNotificationTargetOrgCodes_(orgNodes, target) {
+  if (isCaseStaffVirtualTarget_(target.orgCode)) return [];
   const filteredByType = orgNodes.filter((node) => String(node.type || '').trim() === target.orgType);
   if (!target.orgCode) {
     if (target.level === '') return filteredByType.map((node) => node.code);
@@ -1307,13 +1324,14 @@ function isStationOrgCode_(orgCode) {
 }
 
 function buildNotificationCriteriaSummary_(payload) {
+  const isCaseStaffVirtualTarget = isCaseStaffVirtualTarget_(payload.target.orgCode);
   return {
     templateType: payload.templateType,
     deliveryMode: payload.deliveryMode,
     orgType: payload.target.orgType,
-    level: payload.target.level,
+    level: isCaseStaffVirtualTarget ? '' : payload.target.level,
     orgCode: payload.target.orgCode,
-    descendantMode: payload.target.descendantMode,
+    descendantMode: isCaseStaffVirtualTarget ? 'self' : payload.target.descendantMode,
     trainingStatus: payload.trainingStatus,
     personnelStatus: payload.personnelStatus,
     assignmentMatch: payload.target.assignmentMatch
@@ -1337,8 +1355,8 @@ function appendNotificationLog_(entry) {
     getNotificationTemplateLabel_(entry.payload.templateType),
     getNotificationDeliveryModeLabel_(entry.payload.deliveryMode),
     entry.payload.target.orgType || '',
-    entry.payload.target.level === '' ? '' : Number(entry.payload.target.level || 0),
-    entry.payload.target.orgCode || '',
+    isCaseStaffVirtualTarget_(entry.payload.target.orgCode) ? '' : (entry.payload.target.level === '' ? '' : Number(entry.payload.target.level || 0)),
+    getNotificationTargetOrgLabel_(entry.payload.target.orgCode),
     getNotificationDescendantModeLabel_(entry.payload.target.descendantMode),
     entry.payload.trainingStatus || '',
     entry.payload.personnelStatus || '',
@@ -1370,6 +1388,11 @@ function getNotificationDeliveryModeLabel_(deliveryMode) {
     single_bcc: '單封 BCC'
   };
   return labels[String(deliveryMode || 'individual').trim()] || '個人化逐封';
+}
+
+function getNotificationTargetOrgLabel_(orgCode) {
+  if (isCaseStaffVirtualTarget_(orgCode)) return '收案人員';
+  return String(orgCode || '').trim();
 }
 
 function getNotificationDescendantModeLabel_(descendantMode) {
