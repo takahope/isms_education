@@ -809,6 +809,10 @@ function buildNotificationLoginReminderHtml_() {
   return '<p>請先確認已使用院方 Gmail 帳號登入後，再點擊下方連結進入課程，以確保系統能正確記錄您的教育訓練與測驗完成狀態。</p>';
 }
 
+function buildNotificationAutoReplyFooterHtml_() {
+  return '<p>此為自動發送之通知信件，無需直接回覆。</p><p>如有任何問題，請聯絡專案管理組(策略組)。</p>';
+}
+
 function buildPersonalizedNotificationTemplate_(courseTitle) {
   return {
     subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
@@ -819,7 +823,8 @@ function buildPersonalizedNotificationTemplate_(courseTitle) {
       '<p>請於 8 月 30 日前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
-      '<p><a href="{{上課網址}}">前往上課</a></p>'
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
     ].join('')
   };
 }
@@ -833,7 +838,8 @@ function buildAnnouncementNotificationTemplate_(courseTitle) {
       '<p>本次課程可同時折抵資安三小時時數與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格。請於 8 月 30 日以前完成課程，感謝大家的協助。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
-      '<p><a href="{{上課網址}}">前往上課</a></p>'
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
     ].join('')
   };
 }
@@ -847,7 +853,8 @@ function buildGroupAnnouncementNotificationTemplate_(courseTitle) {
       '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗，謝謝大家的配合。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
-      '<p><a href="{{上課網址}}">前往上課</a></p>'
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
     ].join('')
   };
 }
@@ -864,7 +871,8 @@ function buildStationManagerAnnouncementTemplate_(courseTitle) {
       '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
-      '<p><a href="{{上課網址}}">前往上課</a></p>'
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
     ].join('')
   };
 }
@@ -880,7 +888,8 @@ function buildLeadershipAnnouncementNotificationTemplate_(courseTitle) {
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
      '<p><a href="{{上課網址}}">前往上課</a></p>',
-     '<p>敬請撥冗參與。</p>'
+     '<p>敬請撥冗參與。</p>',
+     buildNotificationAutoReplyFooterHtml_()
     ].join('')
   };
 }
@@ -895,7 +904,8 @@ function buildLeadershipAnnouncementSummaryTemplate_(courseTitle) {
       '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。如已完成相關要求，請忽略此信。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
-      '<p><a href="{{上課網址}}">前往上課</a></p>'
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
     ].join('')
   };
 }
