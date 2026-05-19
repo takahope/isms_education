@@ -1884,7 +1884,6 @@
           <span class="easter-egg-shell">
             <span class="easter-egg-content">
               <span class="easter-egg-title">彩蛋</span>
-              <span class="easter-egg-time">02:29:22</span>
             </span>
           </span>
         </button>
@@ -2280,6 +2279,7 @@
         isStationManager: Boolean(profile && profile.isStationManager),
         isStationStaff: Boolean(profile && profile.isStationStaff),
         canEditStationAssignments: Boolean(profile && profile.canEditStationAssignments),
+        canSeeEasterEgg: Boolean(profile && profile.canSeeEasterEgg),
         profileLoadFailed: Boolean(profile && profile.profileLoadFailed)
       };
     }
@@ -5105,13 +5105,18 @@
 
       fillEl.style.width = `${percentage}%`;
       currentEl.textContent = formatTime(currentTime);
+      const canShowEasterEgg = Boolean(currentUserProfile && currentUserProfile.canSeeEasterEgg);
 
       if (currentTime >= REQUIRED_WATCH_TIME_SEC) {
         fillEl.classList.add('success');
         textEl.classList.add('success');
         btnQuiz.classList.remove('hidden');
-        easterEggBtn.classList.remove('hidden');
-        keepEasterEggButtonInViewport();
+        if (canShowEasterEgg) {
+          easterEggBtn.classList.remove('hidden');
+          keepEasterEggButtonInViewport();
+        } else {
+          easterEggBtn.classList.add('hidden');
+        }
       } else {
         fillEl.classList.remove('success');
         textEl.classList.remove('success');

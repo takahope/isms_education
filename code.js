@@ -65,7 +65,8 @@ function getCurrentUserProfile() {
       managedStations: context.managedStations,
       isStationManager: context.viewer.isStationManager,
       isStationStaff: context.viewer.isStationStaff,
-      canEditStationAssignments: context.viewer.canEditStationAssignments
+      canEditStationAssignments: context.viewer.canEditStationAssignments,
+      canSeeEasterEgg: context.viewer.canSeeEasterEgg
     };
   } catch (error) {
     console.error('讀取首頁人員資料失敗:', error);
@@ -78,6 +79,7 @@ function getCurrentUserProfile() {
       isStationManager: false,
       isStationStaff: false,
       canEditStationAssignments: false,
+      canSeeEasterEgg: false,
       message: error && error.message ? error.message : '無法讀取人員資料'
     };
   }
@@ -433,6 +435,7 @@ function buildHomeProfileContext_(viewerEmail) {
     || (viewerAssignments[0] && viewerAssignments[0].name)
     || ''
   ).trim();
+  const canSeeEasterEgg = viewerAssignments.some((item) => isEasterEggAllowedOrgCode_(item.orgCode));
 
   return {
     viewer: {
@@ -440,7 +443,8 @@ function buildHomeProfileContext_(viewerEmail) {
       name: viewerName,
       isStationManager: managedStations.length > 0,
       isStationStaff: selfAssignments.length > 0,
-      canEditStationAssignments: managedStations.length > 0 || selfAssignments.length > 0
+      canEditStationAssignments: managedStations.length > 0 || selfAssignments.length > 0,
+      canSeeEasterEgg
     },
     assignments: buildUserAssignmentsFromRecords_(viewerAssignments, stationByCode),
     managedStations
@@ -1261,6 +1265,21 @@ function getAssignmentSortOrder_(type) {
 
 function normalizeEmail_(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function getEasterEggAllowedOrgCodes_() {
+  if (typeof ENV === 'undefined' || !Array.isArray(ENV.EASTER_EGG_ALLOWED_ORG_CODES)) {
+    return [];
+  }
+  return ENV.EASTER_EGG_ALLOWED_ORG_CODES
+    .map((item) => normalizeOrgCode_(item))
+    .filter(Boolean);
+}
+
+function isEasterEggAllowedOrgCode_(orgCode) {
+  const normalizedOrgCode = normalizeOrgCode_(orgCode);
+  if (!normalizedOrgCode) return false;
+  return getEasterEggAllowedOrgCodes_().includes(normalizedOrgCode);
 }
 
 function normalizeOrgCode_(value) {
