@@ -164,9 +164,11 @@ function getTrainingNotificationBootstrap() {
       leadership_announcement_summary: ['{{課程名稱}}', '{{上課網址}}'],
       leadership_announcement: ['{{課程名稱}}', '{{上課網址}}']
     },
+    placeholderTokensByTemplateAndDeliveryMode: buildNotificationPlaceholderTokensByTemplateAndDeliveryMode_(),
     defaultDeliveryModeByTemplateType: buildDefaultDeliveryModeByTemplateType_(),
     defaultTemplateType: 'personalized',
     templates: buildNotificationTemplates_(context.courseTitle),
+    templatesByDeliveryMode: buildNotificationTemplatesByDeliveryMode_(context.courseTitle),
     orgOptions,
     personnelStatusOptions: context.personnelStatusOptions
   };
@@ -807,13 +809,31 @@ function isCaseStaffOrgCode_(orgCode) {
 function buildNotificationTemplates_(courseTitle) {
   return {
     personalized: buildPersonalizedNotificationTemplate_(courseTitle),
-    case_staff_personalized: buildCaseStaffPersonalizedNotificationTemplate_(courseTitle),
+    case_staff_personalized: buildCaseStaffIndividualNotificationTemplate_(courseTitle),
     parental_leave_personalized: buildParentalLeavePersonalizedNotificationTemplate_(courseTitle),
     announcement: buildAnnouncementNotificationTemplate_(courseTitle),
     group_announcement: buildGroupAnnouncementNotificationTemplate_(courseTitle),
     station_manager_announcement: buildStationManagerAnnouncementTemplate_(courseTitle),
     leadership_announcement_summary: buildLeadershipAnnouncementSummaryTemplate_(courseTitle),
     leadership_announcement: buildLeadershipAnnouncementNotificationTemplate_(courseTitle)
+  };
+}
+
+function buildNotificationTemplatesByDeliveryMode_(courseTitle) {
+  return {
+    case_staff_personalized: {
+      individual: buildCaseStaffIndividualNotificationTemplate_(courseTitle),
+      single_bcc: buildCaseStaffSingleBccNotificationTemplate_(courseTitle)
+    }
+  };
+}
+
+function buildNotificationPlaceholderTokensByTemplateAndDeliveryMode_() {
+  return {
+    case_staff_personalized: {
+      individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
+      single_bcc: ['{{課程名稱}}', '{{上課網址}}']
+    }
   };
 }
 
@@ -858,7 +878,7 @@ function buildPersonalizedNotificationTemplate_(courseTitle) {
   };
 }
 
-function buildCaseStaffPersonalizedNotificationTemplate_(courseTitle) {
+function buildCaseStaffIndividualNotificationTemplate_(courseTitle) {
   return {
     subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
     htmlBody: [
@@ -866,6 +886,21 @@ function buildCaseStaffPersonalizedNotificationTemplate_(courseTitle) {
       '<p>提醒您，因應本次資訊安全暨個資保護教育訓練安排，您目前屬於收案相關人員通知對象，請協助完成課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>',
       `<p>您目前的訓練資訊如下：<br>課程名稱：${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}教育訓練<br>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}</p>`,
       '<p>請於 8 月 30 日前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
+      buildNotificationWatchReminderHtml_(),
+      buildNotificationLoginReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
+    ].join('')
+  };
+}
+
+function buildCaseStaffSingleBccNotificationTemplate_(courseTitle) {
+  return {
+    subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
+    htmlBody: [
+      '<p>各位收案人員同仁們好：</p>',
+      `<p>因應本次資訊安全暨個資保護教育訓練安排，現通知所有收案相關人員協助完成<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>`,
+      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。如已完成相關要求，請忽略此信。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>',

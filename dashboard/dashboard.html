@@ -1035,9 +1035,11 @@
         orgOptions: [],
         personnelStatusOptions: [],
         templates: {},
+        templatesByDeliveryMode: {},
         defaultTemplateType: 'personalized',
         defaultDeliveryModeByTemplateType: {},
         placeholdersByTemplateType: {},
+        placeholderTokensByTemplateAndDeliveryMode: {},
         lastPreviewPayloadJson: '',
         previewLoaded: false
       }
@@ -1062,7 +1064,10 @@
         applySelectedNotificationTemplate();
         resetNotificationPreview();
       });
-      document.getElementById('notify-delivery-mode').addEventListener('change', resetNotificationPreview);
+      document.getElementById('notify-delivery-mode').addEventListener('change', () => {
+        applySelectedNotificationTemplate({ preserveDeliveryMode: true });
+        resetNotificationPreview();
+      });
       document.getElementById('status-filter').addEventListener('change', (event) => {
         state.filters.status = String(event.target.value || '').trim();
         renderDashboard();
@@ -1128,9 +1133,11 @@
       state.notification.orgOptions = Array.isArray(response.orgOptions) ? response.orgOptions : [];
       state.notification.personnelStatusOptions = Array.isArray(response.personnelStatusOptions) ? response.personnelStatusOptions : [];
       state.notification.templates = response.templates || {};
+      state.notification.templatesByDeliveryMode = response.templatesByDeliveryMode || {};
       state.notification.defaultTemplateType = response.defaultTemplateType || 'personalized';
       state.notification.defaultDeliveryModeByTemplateType = response.defaultDeliveryModeByTemplateType || {};
       state.notification.placeholdersByTemplateType = response.placeholderTokensByTemplateType || {};
+      state.notification.placeholderTokensByTemplateAndDeliveryMode = response.placeholderTokensByTemplateAndDeliveryMode || {};
       state.courseTitle = response.courseTitle || state.courseTitle;
       state.dashboardUrl = response.dashboardUrl || state.dashboardUrl;
       document.getElementById('notify-template-type').value = state.notification.defaultTemplateType;
@@ -1607,14 +1614,38 @@
       };
     }
 
-    function applySelectedNotificationTemplate() {
+    function getSelectedNotificationTemplateDefinition(templateType, deliveryMode) {
+      const normalizedTemplateType = String(templateType || '').trim();
+      const normalizedDeliveryMode = String(deliveryMode || 'individual').trim();
+      const byDeliveryMode = state.notification.templatesByDeliveryMode[normalizedTemplateType] || null;
+      if (byDeliveryMode && byDeliveryMode[normalizedDeliveryMode]) {
+        return byDeliveryMode[normalizedDeliveryMode];
+      }
+      return state.notification.templates[normalizedTemplateType] || { subject: '', htmlBody: '' };
+    }
+
+    function getSelectedNotificationPlaceholders(templateType, deliveryMode) {
+      const normalizedTemplateType = String(templateType || '').trim();
+      const normalizedDeliveryMode = String(deliveryMode || 'individual').trim();
+      const byDeliveryMode = state.notification.placeholderTokensByTemplateAndDeliveryMode[normalizedTemplateType] || null;
+      if (byDeliveryMode && Array.isArray(byDeliveryMode[normalizedDeliveryMode])) {
+        return byDeliveryMode[normalizedDeliveryMode];
+      }
+      return state.notification.placeholdersByTemplateType[normalizedTemplateType] || [];
+    }
+
+    function applySelectedNotificationTemplate(options) {
+      const preserveDeliveryMode = Boolean(options && options.preserveDeliveryMode);
       const templateType = String(document.getElementById('notify-template-type').value || 'personalized').trim();
-      const template = state.notification.templates[templateType] || { subject: '', htmlBody: '' };
-      const placeholders = state.notification.placeholdersByTemplateType[templateType] || [];
       const defaultDeliveryMode = state.notification.defaultDeliveryModeByTemplateType[templateType] || 'individual';
+      if (!preserveDeliveryMode) {
+        document.getElementById('notify-delivery-mode').value = defaultDeliveryMode;
+      }
+      const deliveryMode = String(document.getElementById('notify-delivery-mode').value || defaultDeliveryMode).trim();
+      const template = getSelectedNotificationTemplateDefinition(templateType, deliveryMode);
+      const placeholders = getSelectedNotificationPlaceholders(templateType, deliveryMode);
       document.getElementById('notify-subject').value = template.subject || '';
       document.getElementById('notify-body').value = template.htmlBody || '';
-      document.getElementById('notify-delivery-mode').value = defaultDeliveryMode;
       document.getElementById('placeholder-note').textContent = `可用變數：${placeholders.join('、') || '無'}`;
     }
 
