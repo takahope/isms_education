@@ -51,11 +51,16 @@ function getCurrentUserEmail() {
   }
 }
 
-function getCurrentUserProfile() {
+function getCurrentUserProfile(payload) {
   const fallbackEmail = getCurrentUserEmail();
+  const normalizedPayload = normalizeCurrentUserProfilePayload_(payload);
 
   try {
     const context = buildHomeProfileContext_(fallbackEmail);
+    const trainingStatus = getCourseCompletionStatus_(
+      context.viewer.email,
+      normalizedPayload.videoTitle
+    );
 
     return {
       success: true,
@@ -66,7 +71,8 @@ function getCurrentUserProfile() {
       isStationManager: context.viewer.isStationManager,
       isStationStaff: context.viewer.isStationStaff,
       canEditStationAssignments: context.viewer.canEditStationAssignments,
-      canSeeEasterEgg: context.viewer.canSeeEasterEgg
+      canSeeEasterEgg: context.viewer.canSeeEasterEgg,
+      trainingStatus
     };
   } catch (error) {
     console.error('讀取首頁人員資料失敗:', error);
@@ -80,6 +86,7 @@ function getCurrentUserProfile() {
       isStationStaff: false,
       canEditStationAssignments: false,
       canSeeEasterEgg: false,
+      trainingStatus: buildTrainingStatusSummary_('not_attempted'),
       message: error && error.message ? error.message : '無法讀取人員資料'
     };
   }
@@ -1265,6 +1272,80 @@ function getAssignmentSortOrder_(type) {
 
 function normalizeEmail_(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeCurrentUserProfilePayload_(payload) {
+  return {
+    videoTitle: String(payload && payload.videoTitle || '').trim()
+  };
+}
+
+function getCourseCompletionStatus_(userEmail, videoTitle) {
+  const normalizedUserEmail = normalizeEmail_(userEmail);
+  const normalizedVideoTitle = String(videoTitle || '').trim();
+  if (!normalizedUserEmail || !normalizedVideoTitle) {
+    return buildTrainingStatusSummary_('not_attempted');
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(QUIZ_CONFIG.trainingRecordSheetName);
+  if (!sheet) {
+    return buildTrainingStatusSummary_('not_attempted');
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return buildTrainingStatusSummary_('not_attempted');
+  }
+
+  const rows = sheet.getRange(2, 1, lastRow - 1, 6).getDisplayValues();
+  let attemptCount = 0;
+  let latestPassedAt = '';
+  let hasPassed = false;
+
+  rows.forEach((row) => {
+    const recordEmail = normalizeEmail_(row[2]);
+    const recordVideoTitle = String(row[3] || '').trim();
+    if (recordEmail !== normalizedUserEmail || recordVideoTitle !== normalizedVideoTitle) {
+      return;
+    }
+
+    attemptCount += 1;
+    if (String(row[5] || '').trim() === '通過') {
+      hasPassed = true;
+      latestPassedAt = String(row[0] || '').trim() || latestPassedAt;
+    }
+  });
+
+  if (hasPassed) {
+    return buildTrainingStatusSummary_('passed', {
+      attemptCount,
+      latestPassedAt
+    });
+  }
+  if (attemptCount > 0) {
+    return buildTrainingStatusSummary_('attempted_not_passed', { attemptCount });
+  }
+  return buildTrainingStatusSummary_('not_attempted');
+}
+
+function buildTrainingStatusSummary_(state, options) {
+  const normalizedState = String(state || '').trim() || 'not_attempted';
+  const attemptCount = Number(options && options.attemptCount || 0);
+  const latestPassedAt = String(options && options.latestPassedAt || '').trim();
+  const labelMap = {
+    passed: '已完成課程｜已通過測驗',
+    attempted_not_passed: '尚未完成課程｜已有測驗紀錄但尚未通過',
+    not_attempted: '尚未完成課程｜尚無測驗通過紀錄'
+  };
+
+  return {
+    state: labelMap[normalizedState] ? normalizedState : 'not_attempted',
+    hasPassed: normalizedState === 'passed',
+    label: labelMap[normalizedState] || labelMap.not_attempted,
+    attemptCount,
+    latestPassedAt
+  };
 }
 
 function getEasterEggAllowedOrgCodes_() {

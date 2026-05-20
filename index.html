@@ -229,6 +229,69 @@
       z-index: 1;
     }
 
+    .training-status-banner {
+      position: relative;
+      z-index: 1;
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.96) 0%, rgba(255, 255, 255, 0.98) 100%);
+    }
+
+    .training-status-banner.is-passed {
+      border-color: rgba(16, 185, 129, 0.28);
+      background: linear-gradient(180deg, rgba(236, 253, 245, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%);
+    }
+
+    .training-status-banner.is-attempted-not-passed {
+      border-color: rgba(245, 158, 11, 0.24);
+      background: linear-gradient(180deg, rgba(255, 251, 235, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%);
+    }
+
+    .training-status-banner.is-not-attempted {
+      border-color: rgba(148, 163, 184, 0.22);
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%);
+    }
+
+    .training-status-label {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.06);
+      color: #334155;
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .training-status-banner.is-passed .training-status-label {
+      background: rgba(16, 185, 129, 0.14);
+      color: #047857;
+    }
+
+    .training-status-banner.is-attempted-not-passed .training-status-label {
+      background: rgba(245, 158, 11, 0.14);
+      color: #b45309;
+    }
+
+    .training-status-title {
+      margin-top: 10px;
+      font-size: 0.98rem;
+      font-weight: 800;
+      color: #0f172a;
+      word-break: break-word;
+    }
+
+    .training-status-meta {
+      margin-top: 6px;
+      font-size: 0.82rem;
+      color: var(--color-text-muted);
+      word-break: break-word;
+    }
+
     .station-overview-summary {
       position: relative;
       z-index: 1;
@@ -1840,6 +1903,7 @@
             <div class="account-name hidden" id="display-user-name"></div>
           </div>
           <div class="assignment-list hidden" id="display-user-assignments" data-tour="assignments"></div>
+          <div class="training-status-banner hidden" id="training-status-banner" aria-live="polite"></div>
           <div class="station-overview-summary hidden" id="station-overview-summary"></div>
         </div>
         <p class="result-desc">請確認您的帳號、職務無誤後再開始本次訓練，包含一段核心觀念影片，以及課後評量測驗。</p>
@@ -2199,6 +2263,7 @@
         isStationManager: false,
         isStationStaff: false,
         canEditStationAssignments: false,
+        trainingStatus: createDefaultTrainingStatus(),
         profileLoadFailed: true
       };
     }
@@ -2243,7 +2308,7 @@
           .withFailureHandler(() => {
             finalizeProfileLoadFallback('目前無法讀取人員資料，請稍後重新整理頁面。');
           })
-          .getCurrentUserProfile();
+          .getCurrentUserProfile({ videoTitle: VIDEO_TITLE });
       } else {
         setTimeout(() => {
           const fallbackProfile = normalizeUserProfile(null, 'local-tester@example.com');
@@ -2280,7 +2345,34 @@
         isStationStaff: Boolean(profile && profile.isStationStaff),
         canEditStationAssignments: Boolean(profile && profile.canEditStationAssignments),
         canSeeEasterEgg: Boolean(profile && profile.canSeeEasterEgg),
+        trainingStatus: normalizeTrainingStatus(profile && profile.trainingStatus),
         profileLoadFailed: Boolean(profile && profile.profileLoadFailed)
+      };
+    }
+
+    function createDefaultTrainingStatus() {
+      return {
+        state: 'not_attempted',
+        hasPassed: false,
+        label: '尚未完成課程｜尚無測驗通過紀錄',
+        attemptCount: 0,
+        latestPassedAt: ''
+      };
+    }
+
+    function normalizeTrainingStatus(trainingStatus) {
+      const fallback = createDefaultTrainingStatus();
+      const state = String(trainingStatus && trainingStatus.state || fallback.state).trim();
+      const normalizedState = ['passed', 'attempted_not_passed', 'not_attempted'].includes(state)
+        ? state
+        : fallback.state;
+
+      return {
+        state: normalizedState,
+        hasPassed: normalizedState === 'passed',
+        label: String(trainingStatus && trainingStatus.label || fallback.label).trim() || fallback.label,
+        attemptCount: Number(trainingStatus && trainingStatus.attemptCount || 0),
+        latestPassedAt: String(trainingStatus && trainingStatus.latestPassedAt || '').trim()
       };
     }
 
@@ -2317,6 +2409,7 @@
       const emailEl = document.getElementById('display-user-email');
       const nameEl = document.getElementById('display-user-name');
       const assignmentsEl = document.getElementById('display-user-assignments');
+      const trainingStatusEl = document.getElementById('training-status-banner');
       const editBtn = document.getElementById('station-editor-open-btn');
       const tourBtn = document.getElementById('website-tour-open-btn');
       const stationSummaryEl = document.getElementById('station-overview-summary');
@@ -2387,6 +2480,35 @@
       }
 
       renderManagedStationsSummary(profile, stationSummaryEl);
+      renderTrainingStatusBanner(profile.trainingStatus, trainingStatusEl);
+    }
+
+    function renderTrainingStatusBanner(trainingStatus, container) {
+      if (!container) return;
+
+      const normalized = normalizeTrainingStatus(trainingStatus);
+      const modifierClassMap = {
+        passed: 'is-passed',
+        attempted_not_passed: 'is-attempted-not-passed',
+        not_attempted: 'is-not-attempted'
+      };
+      const metaParts = [];
+
+      if (normalized.attemptCount > 0) {
+        metaParts.push(`測驗紀錄 ${normalized.attemptCount} 筆`);
+      }
+      if (normalized.latestPassedAt) {
+        metaParts.push(`最近通過時間：${normalized.latestPassedAt}`);
+      }
+
+      container.className = 'training-status-banner';
+      container.classList.add(modifierClassMap[normalized.state] || modifierClassMap.not_attempted);
+      container.classList.remove('hidden');
+      container.innerHTML = `
+        <div class="training-status-label">課程完成狀態</div>
+        <div class="training-status-title">${escapeHtml(normalized.label)}</div>
+        <div class="training-status-meta">${escapeHtml(metaParts.join('｜') || '此狀態僅供提示，不影響重新觀看影片或重新測驗。')}</div>
+      `;
     }
 
     function renderManagedStationsSummary(profile, container) {
@@ -2886,7 +3008,7 @@
 
     async function refreshUserProfileCard() {
       try {
-        const profile = await callServer('getCurrentUserProfile');
+        const profile = await callServer('getCurrentUserProfile', { videoTitle: VIDEO_TITLE });
         const normalizedProfile = normalizeUserProfile(profile, currentUserEmail || 'guest@example.com');
         currentUserEmail = normalizedProfile.email;
         currentUserProfile = normalizedProfile;
