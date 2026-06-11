@@ -495,7 +495,6 @@
 
   function buildWebsiteTourSteps(profile) {
     if (profile.isStationManager) return buildStationManagerTourSteps();
-    if (profile.isStationStaff) return buildStationStaffTourSteps();
     return buildGeneralUserTourSteps();
   }
 
@@ -947,7 +946,9 @@
 
   function getWebsiteTourSeenKey(profile) {
     const email = String(profile && profile.email || '').trim().toLowerCase();
-    return `gas_training_tour_seen_${email || 'guest'}_v2`;
+    const isReadonlyStationStaff = Boolean(profile && profile.isStationStaff && !profile.isStationManager);
+    const version = isReadonlyStationStaff ? 'v3_general' : 'v2';
+    return `gas_training_tour_seen_${email || 'guest'}_${version}`;
   }
 
   function isWebsiteTourEligible(profile) {

@@ -2336,14 +2336,18 @@
             }))
         : [];
 
+      const isStationManager = Boolean(profile && profile.isStationManager);
+      const isStationStaff = Boolean(profile && profile.isStationStaff);
+      const canEditStationAssignments = Boolean(profile && profile.canEditStationAssignments && isStationManager);
+
       return {
         email: normalizedEmail,
         name: String((profile && profile.name) || '').trim(),
         assignments,
         managedStations: normalizeManagedStations(profile && profile.managedStations),
-        isStationManager: Boolean(profile && profile.isStationManager),
-        isStationStaff: Boolean(profile && profile.isStationStaff),
-        canEditStationAssignments: Boolean(profile && profile.canEditStationAssignments),
+        isStationManager,
+        isStationStaff,
+        canEditStationAssignments,
         canSeeEasterEgg: Boolean(profile && profile.canSeeEasterEgg),
         trainingStatus: normalizeTrainingStatus(profile && profile.trainingStatus),
         profileLoadFailed: Boolean(profile && profile.profileLoadFailed)
@@ -3229,13 +3233,17 @@
       const stationManagerCandidates = Array.isArray(payload && payload.stationManagerCandidates) ? payload.stationManagerCandidates : [];
       const personnelOptions = Array.isArray(payload && payload.personnelOptions) ? payload.personnelOptions : [];
 
+      const isStationManager = Boolean(viewer.isStationManager);
+      const isStationStaff = Boolean(viewer.isStationStaff);
+      const canEditStationAssignments = Boolean(viewer.canEditStationAssignments && isStationManager);
+
       return {
         viewer: {
           email: String(viewer.email || '').trim(),
           name: String(viewer.name || '').trim(),
-          isStationManager: Boolean(viewer.isStationManager),
-          isStationStaff: Boolean(viewer.isStationStaff),
-          canEditStationAssignments: Boolean(viewer.canEditStationAssignments)
+          isStationManager,
+          isStationStaff,
+          canEditStationAssignments
         },
         allStations: allStations.map((station) => ({
           code: String(station.code || '').trim(),

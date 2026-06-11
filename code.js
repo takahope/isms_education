@@ -450,7 +450,7 @@ function buildHomeProfileContext_(viewerEmail) {
       name: viewerName,
       isStationManager: managedStations.length > 0,
       isStationStaff: selfAssignments.length > 0,
-      canEditStationAssignments: managedStations.length > 0 || selfAssignments.length > 0,
+      canEditStationAssignments: managedStations.length > 0,
       canSeeEasterEgg
     },
     assignments: buildUserAssignmentsFromRecords_(viewerAssignments, stationByCode),
@@ -510,7 +510,7 @@ function buildStationEditorContext_(viewerEmail) {
 
   const isStationManager = managedStations.length > 0;
   const isStationStaff = selfAssignments.length > 0;
-  const canEditStationAssignments = isStationManager || isStationStaff;
+  const canEditStationAssignments = isStationManager;
   const uniqueStationStaffMap = new Map();
 
   visibleStationAssignments.forEach((item) => {
@@ -933,16 +933,11 @@ function validateStationEditorChange_(change) {
 }
 
 function assertCanDeleteStationAssignment_(assignment, viewerEmail, viewerIsStationManager) {
-  const assignmentEmail = normalizeEmail_(assignment.email);
-  if (assignmentEmail === viewerEmail) return;
   if (viewerIsStationManager) return;
   throw new Error('您沒有刪除此駐站收案配置的權限。');
 }
 
 function assertCanMoveStationAssignment_(assignment, targetStation, viewerEmail, viewerIsStationManager) {
-  const assignmentEmail = normalizeEmail_(assignment.email);
-  if (assignmentEmail === viewerEmail) return;
-
   if (viewerIsStationManager) return;
   throw new Error('您沒有搬移此駐站收案配置的權限。');
 }
@@ -952,7 +947,6 @@ function assertCanAddStationAssignment_(targetEmail, station, viewerEmail, viewe
     throw new Error('只能新增既有站務人員到駐站。');
   }
 
-  if (targetEmail === viewerEmail) return;
   if (viewerIsStationManager) return;
   throw new Error('您沒有新增此駐站收案配置的權限。');
 }
