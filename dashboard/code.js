@@ -162,7 +162,8 @@ function getTrainingNotificationBootstrap() {
       group_announcement: ['{{組別稱呼}}', '{{課程名稱}}', '{{上課網址}}'],
       station_manager_announcement: ['{{駐站管理稱呼}}', '{{課程名稱}}', '{{上課網址}}'],
       leadership_announcement_summary: ['{{課程名稱}}', '{{上課網址}}'],
-      leadership_announcement: ['{{課程名稱}}', '{{上課網址}}']
+      leadership_announcement: ['{{課程名稱}}', '{{上課網址}}'],
+      case_staff_layered_reminder: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{駐站列表}}', '{{駐站管理員姓名}}', '{{組長姓名}}', '{{未完成人員名單}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}']
     },
     placeholderTokensByTemplateAndDeliveryMode: buildNotificationPlaceholderTokensByTemplateAndDeliveryMode_(),
     defaultDeliveryModeByTemplateType: buildDefaultDeliveryModeByTemplateType_(),
@@ -810,6 +811,7 @@ function buildNotificationTemplates_(courseTitle) {
   return {
     personalized: buildPersonalizedNotificationTemplate_(courseTitle),
     case_staff_personalized: buildCaseStaffIndividualNotificationTemplate_(courseTitle),
+    case_staff_layered_reminder: buildCaseStaffLayeredReminderTemplateBundle_(courseTitle),
     parental_leave_personalized: buildParentalLeavePersonalizedNotificationTemplate_(courseTitle),
     announcement: buildAnnouncementNotificationTemplate_(courseTitle),
     group_announcement: buildGroupAnnouncementNotificationTemplate_(courseTitle),
@@ -824,6 +826,9 @@ function buildNotificationTemplatesByDeliveryMode_(courseTitle) {
     case_staff_personalized: {
       individual: buildCaseStaffIndividualNotificationTemplate_(courseTitle),
       single_bcc: buildCaseStaffSingleBccNotificationTemplate_(courseTitle)
+    },
+    case_staff_layered_reminder: {
+      layered: buildCaseStaffLayeredReminderTemplateBundle_(courseTitle)
     }
   };
 }
@@ -833,6 +838,9 @@ function buildNotificationPlaceholderTokensByTemplateAndDeliveryMode_() {
     case_staff_personalized: {
       individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
       single_bcc: ['{{課程名稱}}', '{{上課網址}}']
+    },
+    case_staff_layered_reminder: {
+      layered: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{駐站列表}}', '{{駐站管理員姓名}}', '{{組長姓名}}', '{{未完成人員名單}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}']
     }
   };
 }
@@ -841,6 +849,7 @@ function buildDefaultDeliveryModeByTemplateType_() {
   return {
     personalized: 'individual',
     case_staff_personalized: 'individual',
+    case_staff_layered_reminder: 'layered',
     parental_leave_personalized: 'individual',
     announcement: 'single_bcc',
     group_announcement: 'single_bcc',
@@ -906,6 +915,44 @@ function buildCaseStaffSingleBccNotificationTemplate_(courseTitle) {
       '<p><a href="{{上課網址}}">前往上課</a></p>',
       buildNotificationAutoReplyFooterHtml_()
     ].join('')
+  };
+}
+
+function buildCaseStaffLayeredReminderTemplateBundle_(courseTitle) {
+  const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
+  return {
+    caseStaff: {
+      subject: '【教育訓練提醒】請完成資訊安全暨個資保護教育訓練',
+      htmlBody: [
+        '<p>{{姓名}} 您好：</p>',
+        `<p>系統顯示您目前仍未完成<strong>${safeCourseTitle}</strong>課程，請協助儘速完成影片觀看與課後測驗。</p>`,
+        '<p>您目前的訓練資訊如下：<br>目前狀態：{{訓練狀態}}<br>收案駐站：{{駐站列表}}<br>職稱：{{職稱}}</p>',
+        buildNotificationWatchReminderHtml_(),
+        buildNotificationLoginReminderHtml_(),
+        '<p><a href="{{上課網址}}">前往上課</a></p>',
+        buildNotificationAutoReplyFooterHtml_()
+      ].join('')
+    },
+    stationManager: {
+      subject: '【教育訓練追蹤】駐站收案人員未完成名單',
+      htmlBody: [
+        '<p>{{駐站管理員姓名}} 您好：</p>',
+        `<p>以下為您所管理駐站中，尚未完成<strong>${safeCourseTitle}</strong>的收案人員名單，請協助提醒完成課程影片觀看與測驗。</p>`,
+        '<p>{{未完成人員名單}}</p>',
+        '<p><a href="{{上課網址}}">前往上課頁面</a></p>',
+        buildNotificationAutoReplyFooterHtml_()
+      ].join('')
+    },
+    teamLead: {
+      subject: '【教育訓練追蹤】收案組未完成名單',
+      htmlBody: [
+        '<p>{{組長姓名}} 您好：</p>',
+        `<p>以下為收案組目前尚未完成<strong>${safeCourseTitle}</strong>的收案人員名單，請協助掌握與提醒。</p>`,
+        '<p>{{未完成人員名單}}</p>',
+        '<p><a href="{{上課網址}}">前往上課頁面</a></p>',
+        buildNotificationAutoReplyFooterHtml_()
+      ].join('')
+    }
   };
 }
 
@@ -1020,6 +1067,9 @@ function executeTrainingNotification_(payload, options) {
     const normalizedPayload = normalizeNotificationPayload_(payload);
     const context = buildDashboardContext_();
     const trainingCourseUrl = getTrainingCourseUrl_();
+    if (normalizedPayload.templateType === 'case_staff_layered_reminder') {
+      return executeCaseStaffLayeredNotification_(normalizedPayload, context, trainingCourseUrl, viewerEmail, dryRun);
+    }
     const selection = selectNotificationRecipients_(context, normalizedPayload);
     const templateContext = buildNotificationTemplateContext_(context, normalizedPayload);
     const isSingleBccDelivery = normalizedPayload.deliveryMode === 'single_bcc';
@@ -1135,6 +1185,7 @@ function normalizeNotificationPayload_(payload) {
   const template = payload && payload.template ? payload.template : {};
   const templateType = String(payload && payload.templateType || 'personalized').trim() || 'personalized';
   const deliveryMode = String(payload && payload.deliveryMode || 'individual').trim() || 'individual';
+  const layeredTargetRole = String(payload && payload.layeredTargetRole || 'all').trim() || 'all';
   const trainingStatus = String(payload && payload.trainingStatus || 'incomplete').trim() || 'incomplete';
   const personnelStatus = String(payload && payload.personnelStatus || '').trim();
   const descendantMode = String(target.descendantMode || 'self').trim() || 'self';
@@ -1145,11 +1196,17 @@ function normalizeNotificationPayload_(payload) {
   const assignmentMatch = String(target.assignmentMatch || 'primary_only').trim() || 'primary_only';
   const subject = String(template.subject || '').trim();
   const htmlBody = String(template.htmlBody || '').trim();
+  const allowedTemplateTypes = ['personalized', 'case_staff_personalized', 'case_staff_layered_reminder', 'parental_leave_personalized', 'announcement', 'group_announcement', 'station_manager_announcement', 'leadership_announcement_summary', 'leadership_announcement'];
 
-  if (!subject) throw new Error('通知主旨不得為空。');
-  if (!htmlBody) throw new Error('通知內文不得為空。');
-  if (!['personalized', 'case_staff_personalized', 'parental_leave_personalized', 'announcement', 'group_announcement', 'station_manager_announcement', 'leadership_announcement_summary', 'leadership_announcement'].includes(templateType)) throw new Error('通知範本類型不正確。');
-  if (!['individual', 'single_bcc'].includes(deliveryMode)) throw new Error('寄送方式不正確。');
+  if (!allowedTemplateTypes.includes(templateType)) throw new Error('通知範本類型不正確。');
+  if (templateType === 'case_staff_layered_reminder') {
+    if (deliveryMode !== 'layered') throw new Error('收案分層提醒僅支援分層寄送。');
+    if (!['all', 'case_staff', 'station_manager', 'team_lead'].includes(layeredTargetRole)) throw new Error('分層通知對象不正確。');
+  } else {
+    if (!subject) throw new Error('通知主旨不得為空。');
+    if (!htmlBody) throw new Error('通知內文不得為空。');
+    if (!['individual', 'single_bcc'].includes(deliveryMode)) throw new Error('寄送方式不正確。');
+  }
   if (!orgType) throw new Error('請選擇組織類型。');
   if (assignmentMatch !== 'primary_only') throw new Error('目前僅支援依主職寄送。');
   if (levelValue !== '' && (!Number.isFinite(orgLevel) || orgLevel <= 0)) throw new Error('組織層級格式不正確。');
@@ -1160,20 +1217,368 @@ function normalizeNotificationPayload_(payload) {
   return {
     templateType,
     deliveryMode,
+    layeredTargetRole,
     target: {
       orgType,
-      level: levelValue === '' ? '' : orgLevel,
-      orgCode,
-      descendantMode,
+      level: templateType === 'case_staff_layered_reminder' ? '' : (levelValue === '' ? '' : orgLevel),
+      orgCode: templateType === 'case_staff_layered_reminder' ? NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE : orgCode,
+      descendantMode: templateType === 'case_staff_layered_reminder' ? 'self' : descendantMode,
       assignmentMatch
     },
     trainingStatus,
     personnelStatus,
     template: {
-      subject,
-      htmlBody
+      subject: templateType === 'case_staff_layered_reminder' ? '收案分層提醒' : subject,
+      htmlBody: templateType === 'case_staff_layered_reminder' ? '依角色套用分層範本' : htmlBody
+    },
+    layeredTemplates: templateType === 'case_staff_layered_reminder'
+      ? normalizeLayeredNotificationTemplates_(payload && payload.layeredTemplates, layeredTargetRole)
+      : null
+  };
+}
+
+function normalizeLayeredNotificationTemplates_(templates, layeredTargetRole) {
+  const source = templates || {};
+  const roleKeys = getRequiredLayeredTemplateKeys_(layeredTargetRole);
+  const normalized = {};
+
+  roleKeys.forEach((key) => {
+    const item = source[key] || {};
+    const subject = String(item.subject || '').trim();
+    const htmlBody = String(item.htmlBody || '').trim();
+    if (!subject) throw new Error('分層通知主旨不得為空。');
+    if (!htmlBody) throw new Error('分層通知內文不得為空。');
+    normalized[key] = { subject, htmlBody };
+  });
+
+  return normalized;
+}
+
+function getRequiredLayeredTemplateKeys_(layeredTargetRole) {
+  const role = String(layeredTargetRole || 'all').trim();
+  if (role === 'case_staff') return ['caseStaff'];
+  if (role === 'station_manager') return ['stationManager'];
+  if (role === 'team_lead') return ['teamLead'];
+  return ['caseStaff', 'stationManager', 'teamLead'];
+}
+
+function executeCaseStaffLayeredNotification_(payload, context, trainingCourseUrl, viewerEmail, dryRun) {
+  const selection = selectCaseStaffLayeredRecipients_(context, payload);
+  const sampleRecipient = selection.recipients[0] || null;
+  const sampleTemplate = sampleRecipient ? getLayeredTemplateForRole_(payload.layeredTemplates, sampleRecipient.roleKey) : payload.layeredTemplates.caseStaff;
+  const sampleSubject = sampleRecipient
+    ? applyLayeredNotificationTemplate_(sampleTemplate.subject, sampleRecipient, context.courseTitle, trainingCourseUrl)
+    : '';
+  const sampleHtmlBody = sampleRecipient
+    ? applyLayeredNotificationTemplate_(sampleTemplate.htmlBody, sampleRecipient, context.courseTitle, trainingCourseUrl)
+    : '';
+
+  if (dryRun) {
+    return {
+      success: true,
+      authorized: true,
+      viewerEmail,
+      mode: 'preview',
+      courseTitle: context.courseTitle,
+      criteriaSummary: buildNotificationCriteriaSummary_(payload),
+      templateType: payload.templateType,
+      deliveryMode: payload.deliveryMode,
+      layeredTargetRole: payload.layeredTargetRole,
+      recipientCount: selection.recipients.length,
+      skippedCount: selection.skipped.length,
+      roleCounts: selection.roleCounts,
+      recipients: selection.recipients.slice(0, 200),
+      skipped: selection.skipped.slice(0, 200),
+      sampleSubject,
+      sampleHtmlBody
+    };
+  }
+
+  const failures = [];
+  let sentCount = 0;
+  selection.recipients.forEach((recipient) => {
+    const template = getLayeredTemplateForRole_(payload.layeredTemplates, recipient.roleKey);
+    const subject = applyLayeredNotificationTemplate_(template.subject, recipient, context.courseTitle, trainingCourseUrl);
+    const htmlBody = applyLayeredNotificationTemplate_(template.htmlBody, recipient, context.courseTitle, trainingCourseUrl);
+    try {
+      MailApp.sendEmail({
+        to: recipient.email,
+        subject,
+        htmlBody
+      });
+      sentCount += 1;
+    } catch (error) {
+      failures.push({
+        email: recipient.email,
+        name: recipient.name,
+        roleLabel: recipient.roleLabel,
+        message: error && error.message ? error.message : String(error)
+      });
+    }
+  });
+
+  appendNotificationLog_({
+    operatorEmail: viewerEmail,
+    courseTitle: context.courseTitle,
+    payload,
+    recipientCount: selection.recipients.length,
+    sentCount,
+    skippedCount: selection.skipped.length + failures.length
+  });
+
+  return {
+    success: true,
+    authorized: true,
+    viewerEmail,
+    mode: 'send',
+    courseTitle: context.courseTitle,
+    criteriaSummary: buildNotificationCriteriaSummary_(payload),
+    templateType: payload.templateType,
+    deliveryMode: payload.deliveryMode,
+    layeredTargetRole: payload.layeredTargetRole,
+    recipientCount: selection.recipients.length,
+    sentCount,
+    skippedCount: selection.skipped.length,
+    failureCount: failures.length,
+    roleCounts: selection.roleCounts,
+    skipped: selection.skipped.slice(0, 200),
+    failed: failures.slice(0, 200)
+  };
+}
+
+function selectCaseStaffLayeredRecipients_(context, payload) {
+  const includeCaseStaff = payload.layeredTargetRole === 'all' || payload.layeredTargetRole === 'case_staff';
+  const includeStationManager = payload.layeredTargetRole === 'all' || payload.layeredTargetRole === 'station_manager';
+  const includeTeamLead = payload.layeredTargetRole === 'all' || payload.layeredTargetRole === 'team_lead';
+  const stationAssignmentsByEmail = buildCaseStaffStationAssignmentsByEmail_(context.assignments || [], context.orgNodeMap);
+  const teamLeads = buildCaseStaffTeamLeadRecipients_(context.assignments || []);
+  const caseStaffRecipients = [];
+  const stationManagerMap = new Map();
+  const teamLeadMap = new Map();
+  const skipped = [];
+  const seenCaseStaffEmails = new Set();
+
+  (context.learners || []).forEach((learner) => {
+    const email = normalizeEmail_(learner.email);
+    const stationAssignments = stationAssignmentsByEmail.get(email) || [];
+    const reasons = [];
+    if (!email) reasons.push('缺少信箱');
+    if (!isValidEmail_(email)) reasons.push('信箱格式不正確');
+    if (seenCaseStaffEmails.has(email)) reasons.push('重複信箱');
+    if (stationAssignments.length === 0) reasons.push('不在收案人員範圍');
+    if (!matchesNotificationStatusFilter_(learner.status, payload.trainingStatus)) reasons.push('訓練狀態不符');
+    if (payload.personnelStatus && String(learner.personnelStatus || '').trim() !== payload.personnelStatus) reasons.push('人員狀態不符');
+
+    if (reasons.length > 0) {
+      if (['缺少信箱', '信箱格式不正確', '重複信箱'].includes(reasons[0])) {
+        skipped.push({
+          email: learner.email,
+          name: learner.name,
+          roleLabel: '收案人員',
+          reason: reasons[0]
+        });
+      }
+      return;
+    }
+
+    seenCaseStaffEmails.add(email);
+    const stationList = stationAssignments.map((item) => item.stationName || item.stationCode).filter(Boolean).join('、');
+    const stationManagerNames = Array.from(new Set(stationAssignments.map((item) => item.managerName || item.managerEmail).filter(Boolean))).join('、');
+    const caseStaffRecipient = {
+      roleKey: 'case_staff',
+      roleLabel: '收案人員',
+      email,
+      name: learner.name,
+      personnelStatus: learner.personnelStatus,
+      assignmentOrgName: stationList || learner.assignmentOrgName,
+      assignmentTitle: learner.assignmentTitle,
+      stationList,
+      stationManagerNames,
+      watchedPercent: learner.watchedPercent,
+      bestScore: learner.bestScore,
+      status: learner.status,
+      statusLabel: learner.statusLabel
+    };
+    if (includeCaseStaff) caseStaffRecipients.push(caseStaffRecipient);
+
+    stationAssignments.forEach((stationAssignment) => {
+      const managerEmail = normalizeEmail_(stationAssignment.managerEmail);
+      if (!includeStationManager) return;
+      if (!managerEmail || !isValidEmail_(managerEmail)) {
+        skipped.push({
+          email: managerEmail,
+          name: stationAssignment.managerName || stationAssignment.stationName,
+          roleLabel: '駐站管理員',
+          reason: `找不到 ${stationAssignment.stationName || stationAssignment.stationCode} 的有效駐站管理員信箱`
+        });
+        return;
+      }
+      if (!stationManagerMap.has(managerEmail)) {
+        stationManagerMap.set(managerEmail, {
+          roleKey: 'station_manager',
+          roleLabel: '駐站管理員',
+          email: managerEmail,
+          name: stationAssignment.managerName || managerEmail,
+          members: [],
+          memberKeySet: new Set()
+        });
+      }
+      appendLayeredMember_(stationManagerMap.get(managerEmail), learner, stationAssignment);
+    });
+
+    if (includeTeamLead) {
+      teamLeads.forEach((lead) => {
+        if (!teamLeadMap.has(lead.email)) {
+          teamLeadMap.set(lead.email, {
+            roleKey: 'team_lead',
+            roleLabel: '收案組組長',
+            email: lead.email,
+            name: lead.name,
+            members: [],
+            memberKeySet: new Set()
+          });
+        }
+        stationAssignments.forEach((stationAssignment) => {
+          appendLayeredMember_(teamLeadMap.get(lead.email), learner, stationAssignment);
+        });
+      });
+    }
+  });
+
+  if (includeTeamLead && teamLeads.length === 0) {
+    skipped.push({
+      email: '',
+      name: '收案組組長',
+      roleLabel: '收案組組長',
+      reason: '找不到 GRP-CO 職稱含「組長」的人員'
+    });
+  }
+
+  const stationManagerRecipients = Array.from(stationManagerMap.values()).map(finalizeLayeredSummaryRecipient_);
+  const teamLeadRecipients = Array.from(teamLeadMap.values()).map(finalizeLayeredSummaryRecipient_);
+  const recipients = caseStaffRecipients.concat(stationManagerRecipients, teamLeadRecipients);
+
+  return {
+    recipients,
+    skipped,
+    roleCounts: {
+      caseStaff: caseStaffRecipients.length,
+      stationManager: stationManagerRecipients.length,
+      teamLead: teamLeadRecipients.length
     }
   };
+}
+
+function buildCaseStaffStationAssignmentsByEmail_(assignments, orgNodeMap) {
+  const grouped = new Map();
+  (assignments || []).forEach((assignment) => {
+    if (!isCaseStaffOrgCode_(assignment.orgCode)) return;
+    const email = normalizeEmail_(assignment.email);
+    if (!email) return;
+    const station = orgNodeMap && orgNodeMap.get(normalizeOrgCode_(assignment.orgCode)) || null;
+    if (!grouped.has(email)) grouped.set(email, []);
+    grouped.get(email).push({
+      stationCode: String(assignment.orgCode || '').trim(),
+      stationName: String(assignment.orgName || (station && station.name) || '').trim(),
+      title: String(assignment.title || '').trim(),
+      managerEmail: normalizeEmail_((station && station.managerEmail) || assignment.managerEmail),
+      managerName: String((station && station.managerName) || assignment.managerName || '').trim()
+    });
+  });
+  return grouped;
+}
+
+function buildCaseStaffTeamLeadRecipients_(assignments) {
+  const leadsByEmail = new Map();
+  (assignments || []).forEach((assignment) => {
+    const email = normalizeEmail_(assignment.email);
+    if (normalizeOrgCode_(assignment.orgCode) !== 'GRP-CO') return;
+    if (!titleContainsLeaderKeyword_(assignment.title)) return;
+    if (!email || !isValidEmail_(email)) return;
+    if (leadsByEmail.has(email)) return;
+    leadsByEmail.set(email, {
+      email,
+      name: String(assignment.name || email).trim()
+    });
+  });
+  return Array.from(leadsByEmail.values()).sort((a, b) => String(a.name || a.email).localeCompare(String(b.name || b.email), 'zh-Hant'));
+}
+
+function appendLayeredMember_(recipient, learner, stationAssignment) {
+  const key = [
+    normalizeEmail_(learner.email),
+    normalizeOrgCode_(stationAssignment.stationCode)
+  ].join('||');
+  if (recipient.memberKeySet.has(key)) return;
+  recipient.memberKeySet.add(key);
+  recipient.members.push({
+    name: String(learner.name || learner.email || '').trim(),
+    email: normalizeEmail_(learner.email),
+    stationName: String(stationAssignment.stationName || stationAssignment.stationCode || '').trim(),
+    stationCode: String(stationAssignment.stationCode || '').trim(),
+    title: String(stationAssignment.title || learner.assignmentTitle || '').trim(),
+    statusLabel: String(learner.statusLabel || '').trim(),
+    managerName: String(stationAssignment.managerName || stationAssignment.managerEmail || '').trim()
+  });
+}
+
+function finalizeLayeredSummaryRecipient_(recipient) {
+  const members = recipient.members
+    .slice()
+    .sort((left, right) => `${left.stationName}${left.name}`.localeCompare(`${right.stationName}${right.name}`, 'zh-Hant'));
+  return {
+    roleKey: recipient.roleKey,
+    roleLabel: recipient.roleLabel,
+    email: recipient.email,
+    name: recipient.name,
+    members,
+    memberCount: members.length,
+    memberListHtml: buildLayeredMemberListHtml_(members),
+    assignmentOrgName: '',
+    assignmentTitle: `${recipient.roleLabel}彙總`
+  };
+}
+
+function buildLayeredMemberListHtml_(members) {
+  if (!members || members.length === 0) return '目前沒有未完成人員。';
+  return members.map((member) => {
+    const parts = [
+      member.stationName ? `[${escapeHtml_(member.stationName)}]` : '',
+      escapeHtml_(member.name || member.email || '未命名人員'),
+      member.email ? `(${escapeHtml_(member.email)})` : '',
+      member.statusLabel ? `：${escapeHtml_(member.statusLabel)}` : '',
+      member.managerName ? `，駐管：${escapeHtml_(member.managerName)}` : ''
+    ].filter(Boolean).join(' ');
+    return `- ${parts}`;
+  }).join('<br>');
+}
+
+function getLayeredTemplateForRole_(templates, roleKey) {
+  if (roleKey === 'station_manager') return templates.stationManager;
+  if (roleKey === 'team_lead') return templates.teamLead;
+  return templates.caseStaff;
+}
+
+function applyLayeredNotificationTemplate_(template, recipient, courseTitle, trainingCourseUrl) {
+  const replacements = {
+    '{{姓名}}': recipient.name || '',
+    '{{信箱}}': recipient.email || '',
+    '{{單位}}': recipient.assignmentOrgName || '',
+    '{{職稱}}': recipient.assignmentTitle || '',
+    '{{駐站列表}}': recipient.stationList || recipient.assignmentOrgName || '',
+    '{{駐站管理員姓名}}': recipient.name || '',
+    '{{組長姓名}}': recipient.name || '',
+    '{{未完成人員名單}}': recipient.memberListHtml || '',
+    '{{課程名稱}}': courseTitle || DASHBOARD_CONFIG.defaultCourseTitle,
+    '{{訓練狀態}}': recipient.statusLabel || '',
+    '{{上課網址}}': trainingCourseUrl || ''
+  };
+
+  let output = String(template || '');
+  Object.keys(replacements).forEach((token) => {
+    output = output.split(token).join(String(replacements[token]));
+  });
+  return output;
 }
 
 function selectNotificationRecipients_(context, payload) {
@@ -1363,6 +1768,7 @@ function buildNotificationCriteriaSummary_(payload) {
   return {
     templateType: payload.templateType,
     deliveryMode: payload.deliveryMode,
+    layeredTargetRole: payload.layeredTargetRole || '',
     orgType: payload.target.orgType,
     level: isCaseStaffVirtualTarget ? '' : payload.target.level,
     orgCode: payload.target.orgCode,
@@ -1407,6 +1813,7 @@ function getNotificationTemplateLabel_(templateType) {
   const labels = {
     personalized: '個人化版',
     case_staff_personalized: '收案人員版',
+    case_staff_layered_reminder: '收案分層提醒',
     parental_leave_personalized: '育嬰假版',
     announcement: '公告版',
     group_announcement: '組別版',
@@ -1420,7 +1827,8 @@ function getNotificationTemplateLabel_(templateType) {
 function getNotificationDeliveryModeLabel_(deliveryMode) {
   const labels = {
     individual: '個人化逐封',
-    single_bcc: '單封 BCC'
+    single_bcc: '單封 BCC',
+    layered: '分層寄送'
   };
   return labels[String(deliveryMode || 'individual').trim()] || '個人化逐封';
 }

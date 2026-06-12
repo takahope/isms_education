@@ -769,6 +769,7 @@
             <select id="notify-template-type">
               <option value="personalized">個人化版</option>
               <option value="case_staff_personalized">收案人員版</option>
+              <option value="case_staff_layered_reminder">收案分層提醒</option>
               <option value="parental_leave_personalized">育嬰假版</option>
               <option value="announcement">公告版</option>
               <option value="group_announcement">組別版</option>
@@ -782,6 +783,16 @@
             <select id="notify-delivery-mode">
               <option value="individual">個人化逐封</option>
               <option value="single_bcc">單封 BCC</option>
+              <option value="layered">分層寄送</option>
+            </select>
+          </div>
+          <div class="field hidden" id="notify-layered-target-field">
+            <label for="notify-layered-target-role">分層通知對象</label>
+            <select id="notify-layered-target-role">
+              <option value="all">全部</option>
+              <option value="case_staff">只寄收案人員</option>
+              <option value="station_manager">只寄駐站管理員</option>
+              <option value="team_lead">只寄收案組組長</option>
             </select>
           </div>
           <div class="field">
@@ -829,14 +840,33 @@
               <span>主職寄送</span>
             </div>
           </div>
-          <div class="field" style="grid-column: 1 / -1;">
+          <div class="field" id="notify-subject-field" style="grid-column: 1 / -1;">
             <label for="notify-subject">郵件主旨</label>
             <input id="notify-subject" type="text" placeholder="請輸入通知主旨">
           </div>
-          <div class="field" style="grid-column: 1 / -1;">
+          <div class="field" id="notify-body-field" style="grid-column: 1 / -1;">
             <label for="notify-body">郵件 HTML 內文</label>
             <textarea id="notify-body" placeholder="請輸入 HTML 內容"></textarea>
             <div id="placeholder-note" class="template-note"></div>
+          </div>
+          <div class="field hidden" id="notify-layered-template-fields" style="grid-column: 1 / -1;">
+            <label>分層郵件範本</label>
+            <div class="template-note" id="layered-placeholder-note"></div>
+            <div class="template-note" data-layered-template-section="case_staff">
+              <strong>收案人員信件</strong>
+              <input id="notify-layered-case-subject" type="text" placeholder="收案人員主旨" style="margin-top:8px;">
+              <textarea id="notify-layered-case-body" placeholder="收案人員 HTML 內文" style="margin-top:8px;"></textarea>
+            </div>
+            <div class="template-note" data-layered-template-section="station_manager">
+              <strong>駐站管理員彙總信</strong>
+              <input id="notify-layered-manager-subject" type="text" placeholder="駐站管理員主旨" style="margin-top:8px;">
+              <textarea id="notify-layered-manager-body" placeholder="駐站管理員 HTML 內文" style="margin-top:8px;"></textarea>
+            </div>
+            <div class="template-note" data-layered-template-section="team_lead">
+              <strong>收案組組長彙總信</strong>
+              <input id="notify-layered-lead-subject" type="text" placeholder="收案組組長主旨" style="margin-top:8px;">
+              <textarea id="notify-layered-lead-body" placeholder="收案組組長 HTML 內文" style="margin-top:8px;"></textarea>
+            </div>
           </div>
         </div>
         <div class="notification-actions">
@@ -1068,6 +1098,10 @@
         applySelectedNotificationTemplate({ preserveDeliveryMode: true });
         resetNotificationPreview();
       });
+      document.getElementById('notify-layered-target-role').addEventListener('change', () => {
+        syncLayeredTemplateSections();
+        resetNotificationPreview();
+      });
       document.getElementById('status-filter').addEventListener('change', (event) => {
         state.filters.status = String(event.target.value || '').trim();
         renderDashboard();
@@ -1099,6 +1133,16 @@
       document.getElementById('notify-descendant-mode').addEventListener('change', resetNotificationPreview);
       document.getElementById('notify-subject').addEventListener('input', resetNotificationPreview);
       document.getElementById('notify-body').addEventListener('input', resetNotificationPreview);
+      [
+        'notify-layered-case-subject',
+        'notify-layered-case-body',
+        'notify-layered-manager-subject',
+        'notify-layered-manager-body',
+        'notify-layered-lead-subject',
+        'notify-layered-lead-body'
+      ].forEach((id) => {
+        document.getElementById(id).addEventListener('input', resetNotificationPreview);
+      });
     }
 
     async function bootstrapDashboard() {
@@ -1593,9 +1637,12 @@
     function buildNotificationPayload() {
       const orgCode = String(document.getElementById('notify-org-code').value || '').trim();
       const isCaseStaffVirtual = isCaseStaffVirtualTarget(orgCode);
+      const templateType = String(document.getElementById('notify-template-type').value || 'personalized').trim();
+      const isLayered = templateType === 'case_staff_layered_reminder';
       return {
-        templateType: String(document.getElementById('notify-template-type').value || 'personalized').trim(),
+        templateType,
         deliveryMode: String(document.getElementById('notify-delivery-mode').value || 'individual').trim(),
+        layeredTargetRole: String(document.getElementById('notify-layered-target-role').value || 'all').trim(),
         target: {
           orgType: String(document.getElementById('notify-org-type').value || '').trim(),
           level: String(document.getElementById('notify-org-level').value || '').trim(),
@@ -1610,6 +1657,24 @@
         template: {
           subject: String(document.getElementById('notify-subject').value || '').trim(),
           htmlBody: String(document.getElementById('notify-body').value || '').trim()
+        },
+        layeredTemplates: isLayered ? buildLayeredNotificationTemplatesPayload() : null
+      };
+    }
+
+    function buildLayeredNotificationTemplatesPayload() {
+      return {
+        caseStaff: {
+          subject: String(document.getElementById('notify-layered-case-subject').value || '').trim(),
+          htmlBody: String(document.getElementById('notify-layered-case-body').value || '').trim()
+        },
+        stationManager: {
+          subject: String(document.getElementById('notify-layered-manager-subject').value || '').trim(),
+          htmlBody: String(document.getElementById('notify-layered-manager-body').value || '').trim()
+        },
+        teamLead: {
+          subject: String(document.getElementById('notify-layered-lead-subject').value || '').trim(),
+          htmlBody: String(document.getElementById('notify-layered-lead-body').value || '').trim()
         }
       };
     }
@@ -1644,9 +1709,56 @@
       const deliveryMode = String(document.getElementById('notify-delivery-mode').value || defaultDeliveryMode).trim();
       const template = getSelectedNotificationTemplateDefinition(templateType, deliveryMode);
       const placeholders = getSelectedNotificationPlaceholders(templateType, deliveryMode);
-      document.getElementById('notify-subject').value = template.subject || '';
-      document.getElementById('notify-body').value = template.htmlBody || '';
+      if (templateType === 'case_staff_layered_reminder') {
+        applyLayeredNotificationTemplateBundle(template);
+      } else {
+        document.getElementById('notify-subject').value = template.subject || '';
+        document.getElementById('notify-body').value = template.htmlBody || '';
+      }
       document.getElementById('placeholder-note').textContent = `可用變數：${placeholders.join('、') || '無'}`;
+      document.getElementById('layered-placeholder-note').textContent = `可用變數：${placeholders.join('、') || '無'}`;
+      syncLayeredNotificationUi();
+    }
+
+    function applyLayeredNotificationTemplateBundle(template) {
+      const bundle = template || {};
+      const caseStaff = bundle.caseStaff || {};
+      const stationManager = bundle.stationManager || {};
+      const teamLead = bundle.teamLead || {};
+      document.getElementById('notify-layered-case-subject').value = caseStaff.subject || '';
+      document.getElementById('notify-layered-case-body').value = caseStaff.htmlBody || '';
+      document.getElementById('notify-layered-manager-subject').value = stationManager.subject || '';
+      document.getElementById('notify-layered-manager-body').value = stationManager.htmlBody || '';
+      document.getElementById('notify-layered-lead-subject').value = teamLead.subject || '';
+      document.getElementById('notify-layered-lead-body').value = teamLead.htmlBody || '';
+    }
+
+    function syncLayeredNotificationUi() {
+      const isLayered = String(document.getElementById('notify-template-type').value || '').trim() === 'case_staff_layered_reminder';
+      document.getElementById('notify-layered-target-field').classList.toggle('hidden', !isLayered);
+      document.getElementById('notify-layered-template-fields').classList.toggle('hidden', !isLayered);
+      document.getElementById('notify-subject-field').classList.toggle('hidden', isLayered);
+      document.getElementById('notify-body-field').classList.toggle('hidden', isLayered);
+      document.getElementById('notify-delivery-mode').disabled = isLayered;
+      if (!isLayered) return;
+
+      document.getElementById('notify-delivery-mode').value = 'layered';
+      document.getElementById('notify-status').value = 'incomplete';
+      const groupSelect = document.getElementById('notify-org-code');
+      if ([...groupSelect.options].some((option) => option.value === NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE)) {
+        groupSelect.value = NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE;
+      }
+      syncLayeredTemplateSections();
+      syncNotificationDescendantModeState();
+    }
+
+    function syncLayeredTemplateSections() {
+      const role = String(document.getElementById('notify-layered-target-role').value || 'all').trim();
+      document.querySelectorAll('[data-layered-template-section]').forEach((section) => {
+        const sectionRole = section.getAttribute('data-layered-template-section');
+        const shouldShow = role === 'all' || role === sectionRole;
+        section.classList.toggle('hidden', !shouldShow);
+      });
     }
 
     function syncNotificationDescendantModeState() {
@@ -1716,8 +1828,11 @@
       const orgCodeLabel = getNotificationTargetOrgLabel(criteria.orgCode);
       const shouldShowLevel = criteria.orgCode !== NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE && criteria.level !== '' && typeof criteria.level !== 'undefined';
       const shouldShowDescendantMode = criteria.orgCode && criteria.orgCode !== NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE;
+      const roleSummary = response.roleCounts
+        ? ` / ${formatLayeredRoleCounts(response.roleCounts)} / ${getLayeredTargetRoleLabel(criteria.layeredTargetRole || response.layeredTargetRole)}`
+        : '';
       document.getElementById('preview-criteria').textContent =
-        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${shouldShowLevel ? ` / 第 ${criteria.level} 層` : ''}${orgCodeLabel ? ` / ${orgCodeLabel}` : ''}${shouldShowDescendantMode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 訓練狀態 ${criteria.trainingStatus || ''} / 人員狀態 ${personnelStatusLabel} / ${getNotificationDeliveryModeLabel(response.deliveryMode)}`;
+        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${shouldShowLevel ? ` / 第 ${criteria.level} 層` : ''}${orgCodeLabel ? ` / ${orgCodeLabel}` : ''}${shouldShowDescendantMode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 訓練狀態 ${criteria.trainingStatus || ''} / 人員狀態 ${personnelStatusLabel} / ${getNotificationDeliveryModeLabel(response.deliveryMode)}${roleSummary}`;
 
       renderRecipientList('preview-recipient-list', response.recipients || [], false);
       renderRecipientList('preview-skipped-list', response.skipped || [], true);
@@ -1727,6 +1842,7 @@
       const labelMap = {
         personalized: '個人化版',
         case_staff_personalized: '收案人員版',
+        case_staff_layered_reminder: '收案分層提醒',
         parental_leave_personalized: '育嬰假版',
         announcement: '公告版',
         group_announcement: '組別版',
@@ -1738,7 +1854,30 @@
     }
 
     function getNotificationDeliveryModeLabel(deliveryMode) {
-      return String(deliveryMode || '').trim() === 'single_bcc' ? '單封 BCC 全部' : '個人化逐封';
+      const labels = {
+        individual: '個人化逐封',
+        single_bcc: '單封 BCC 全部',
+        layered: '分層寄送'
+      };
+      return labels[String(deliveryMode || 'individual').trim()] || '個人化逐封';
+    }
+
+    function getLayeredTargetRoleLabel(role) {
+      const labels = {
+        all: '全部角色',
+        case_staff: '只寄收案人員',
+        station_manager: '只寄駐站管理員',
+        team_lead: '只寄收案組組長'
+      };
+      return labels[String(role || 'all').trim()] || '全部角色';
+    }
+
+    function formatLayeredRoleCounts(roleCounts) {
+      return [
+        `收案人員 ${Number(roleCounts.caseStaff || 0)}`,
+        `駐站管理員 ${Number(roleCounts.stationManager || 0)}`,
+        `組長 ${Number(roleCounts.teamLead || 0)}`
+      ].join(' / ');
     }
 
     function getNotificationTargetOrgLabel(orgCode) {
@@ -1773,9 +1912,9 @@
         node.innerHTML = `
           <div class="recipient-title">
             <strong>${escapeHtml(item.name || item.email || '未命名')}</strong>
-            <span>${isSkipped ? escapeHtml(item.reason || '') : escapeHtml(item.statusLabel || (item.email ? '收件人' : ''))}</span>
+            <span>${isSkipped ? escapeHtml(item.reason || '') : escapeHtml(item.roleLabel || item.statusLabel || (item.email ? '收件人' : ''))}</span>
           </div>
-          <div class="recipient-meta">${escapeHtml([item.email, item.assignmentOrgName, item.assignmentTitle].filter(Boolean).join('｜'))}</div>
+          <div class="recipient-meta">${escapeHtml([item.email, item.assignmentOrgName, item.assignmentTitle, item.memberCount ? `彙總 ${item.memberCount} 人` : ''].filter(Boolean).join('｜'))}</div>
         `;
         container.appendChild(node);
       });
