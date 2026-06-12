@@ -1820,8 +1820,7 @@
       document.getElementById('notification-preview').classList.remove('hidden');
       document.getElementById('preview-recipient-count').textContent = String(response.recipientCount || 0);
       document.getElementById('preview-skipped-count').textContent = String(response.skippedCount || 0);
-      document.getElementById('preview-subject').textContent = response.sampleSubject || '';
-      document.getElementById('preview-html').innerHTML = response.sampleHtmlBody || '';
+      renderNotificationSamplePreview(response);
 
       const criteria = response.criteriaSummary || {};
       const personnelStatusLabel = criteria.personnelStatus || '全部狀態';
@@ -1836,6 +1835,27 @@
 
       renderRecipientList('preview-recipient-list', response.recipients || [], false);
       renderRecipientList('preview-skipped-list', response.skipped || [], true);
+    }
+
+    function renderNotificationSamplePreview(response) {
+      const sampleMessages = Array.isArray(response && response.sampleMessages) ? response.sampleMessages : [];
+      const subjectEl = document.getElementById('preview-subject');
+      const htmlEl = document.getElementById('preview-html');
+      if (sampleMessages.length === 0) {
+        subjectEl.textContent = response.sampleSubject || '';
+        htmlEl.innerHTML = response.sampleHtmlBody || '';
+        return;
+      }
+
+      subjectEl.textContent = `分層郵件內容預覽（${sampleMessages.length} 種角色）`;
+      htmlEl.innerHTML = sampleMessages.map((message) => `
+        <section class="template-note" style="margin-bottom:14px;">
+          <strong>${escapeHtml(message.roleLabel || '分層角色')}</strong>
+          ${message.recipientName ? `<div class="small muted">樣本收件人：${escapeHtml(message.recipientName)}</div>` : ''}
+          <div style="margin-top:8px;"><strong>${escapeHtml(message.subject || '')}</strong></div>
+          <div class="preview-html" style="margin-top:8px;">${message.htmlBody || ''}</div>
+        </section>
+      `).join('');
     }
 
     function getNotificationTemplateLabel(templateType) {

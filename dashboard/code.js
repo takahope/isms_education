@@ -1264,14 +1264,8 @@ function getRequiredLayeredTemplateKeys_(layeredTargetRole) {
 
 function executeCaseStaffLayeredNotification_(payload, context, trainingCourseUrl, viewerEmail, dryRun) {
   const selection = selectCaseStaffLayeredRecipients_(context, payload);
-  const sampleRecipient = selection.recipients[0] || null;
-  const sampleTemplate = sampleRecipient ? getLayeredTemplateForRole_(payload.layeredTemplates, sampleRecipient.roleKey) : payload.layeredTemplates.caseStaff;
-  const sampleSubject = sampleRecipient
-    ? applyLayeredNotificationTemplate_(sampleTemplate.subject, sampleRecipient, context.courseTitle, trainingCourseUrl)
-    : '';
-  const sampleHtmlBody = sampleRecipient
-    ? applyLayeredNotificationTemplate_(sampleTemplate.htmlBody, sampleRecipient, context.courseTitle, trainingCourseUrl)
-    : '';
+  const sampleMessages = buildLayeredSampleMessages_(payload, selection, context.courseTitle, trainingCourseUrl);
+  const primarySampleMessage = sampleMessages[0] || { subject: '', htmlBody: '' };
 
   if (dryRun) {
     return {
@@ -1289,8 +1283,9 @@ function executeCaseStaffLayeredNotification_(payload, context, trainingCourseUr
       roleCounts: selection.roleCounts,
       recipients: selection.recipients.slice(0, 200),
       skipped: selection.skipped.slice(0, 200),
-      sampleSubject,
-      sampleHtmlBody
+      sampleSubject: primarySampleMessage.subject,
+      sampleHtmlBody: primarySampleMessage.htmlBody,
+      sampleMessages
     };
   }
 
@@ -1344,6 +1339,36 @@ function executeCaseStaffLayeredNotification_(payload, context, trainingCourseUr
     skipped: selection.skipped.slice(0, 200),
     failed: failures.slice(0, 200)
   };
+}
+
+function buildLayeredSampleMessages_(payload, selection, courseTitle, trainingCourseUrl) {
+  const roleOrder = [
+    { roleKey: 'case_staff', roleLabel: '收案人員' },
+    { roleKey: 'station_manager', roleLabel: '駐站管理員' },
+    { roleKey: 'team_lead', roleLabel: '收案組組長' }
+  ];
+
+  return roleOrder
+    .filter((role) => shouldIncludeLayeredRole_(payload.layeredTargetRole, role.roleKey))
+    .map((role) => {
+      const recipient = (selection.recipients || []).find((item) => item.roleKey === role.roleKey);
+      if (!recipient) return null;
+      const template = getLayeredTemplateForRole_(payload.layeredTemplates, role.roleKey);
+      return {
+        roleKey: role.roleKey,
+        roleLabel: role.roleLabel,
+        recipientName: recipient.name || recipient.email || '',
+        subject: applyLayeredNotificationTemplate_(template.subject, recipient, courseTitle, trainingCourseUrl),
+        htmlBody: applyLayeredNotificationTemplate_(template.htmlBody, recipient, courseTitle, trainingCourseUrl)
+      };
+    })
+    .filter(Boolean);
+}
+
+function shouldIncludeLayeredRole_(layeredTargetRole, roleKey) {
+  const targetRole = String(layeredTargetRole || 'all').trim();
+  if (targetRole === 'all') return true;
+  return targetRole === roleKey;
 }
 
 function selectCaseStaffLayeredRecipients_(context, payload) {
