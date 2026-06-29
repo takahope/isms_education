@@ -1842,6 +1842,9 @@
     function getSelectedNotificationTemplateDefinition(templateType, deliveryMode) {
       const normalizedTemplateType = String(templateType || '').trim();
       const normalizedDeliveryMode = String(deliveryMode || 'individual').trim();
+      if (normalizedDeliveryMode === 'direct') {
+        return state.notification.templates.announcement || { subject: '', htmlBody: '' };
+      }
       const byDeliveryMode = state.notification.templatesByDeliveryMode[normalizedTemplateType] || null;
       if (byDeliveryMode && byDeliveryMode[normalizedDeliveryMode]) {
         return byDeliveryMode[normalizedDeliveryMode];
@@ -1852,6 +1855,9 @@
     function getSelectedNotificationPlaceholders(templateType, deliveryMode) {
       const normalizedTemplateType = String(templateType || '').trim();
       const normalizedDeliveryMode = String(deliveryMode || 'individual').trim();
+      if (normalizedDeliveryMode === 'direct') {
+        return state.notification.placeholdersByTemplateType.announcement || [];
+      }
       const byDeliveryMode = state.notification.placeholderTokensByTemplateAndDeliveryMode[normalizedTemplateType] || null;
       if (byDeliveryMode && Array.isArray(byDeliveryMode[normalizedDeliveryMode])) {
         return byDeliveryMode[normalizedDeliveryMode];

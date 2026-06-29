@@ -378,7 +378,7 @@ function buildDashboardContext_() {
       ? Math.min(100, Math.round((progress.watchedSecondsCount / DASHBOARD_CONFIG.requiredWatchSeconds) * 100))
       : 0;
     const watchCompleted = progress.watchedSecondsCount >= DASHBOARD_CONFIG.requiredWatchSeconds;
-    const status = resolveLearnerTrainingStatus_(watchCompleted, quiz.hasPassed, progress.watchedSecondsCount, quiz.attemptCount);
+    const status = resolveLearnerTrainingStatus_(watchCompleted, quiz.hasPassed, progress.watchedSecondsCount, quiz.attemptCount, progress.hasProgressRecord);
     const lastActivityAt = getLatestTimestampString_(progress.updatedAt, quiz.latestAttemptAt);
 
     learners.push({
@@ -613,6 +613,7 @@ function buildProgressSummaryByEmail_(records) {
     const email = normalizeEmail_(record.userEmail);
     if (!summaryByEmail.has(email)) summaryByEmail.set(email, createEmptyProgressSummary_());
     const current = summaryByEmail.get(email);
+    current.hasProgressRecord = true;
     if (record.watchedSecondsCount > current.watchedSecondsCount) {
       current.watchedSecondsCount = record.watchedSecondsCount;
       current.watchedRanges = record.watchedRanges;
@@ -645,14 +646,15 @@ function createEmptyProgressSummary_() {
     watchedRanges: '',
     lastPlaybackPosition: 0,
     updatedAt: '',
-    videoTitle: ''
+    videoTitle: '',
+    hasProgressRecord: false
   };
 }
 
-function resolveLearnerTrainingStatus_(watchCompleted, hasPassed, watchedSecondsCount, attemptCount) {
+function resolveLearnerTrainingStatus_(watchCompleted, hasPassed, watchedSecondsCount, attemptCount, hasProgressRecord) {
   if (watchCompleted && hasPassed) return 'completed';
   if (watchCompleted && !hasPassed) return 'pending_quiz';
-  if (watchedSecondsCount > 0 || attemptCount > 0) return 'in_progress';
+  if (watchedSecondsCount > 0 || attemptCount > 0 || hasProgressRecord) return 'in_progress';
   return 'not_started';
 }
 
