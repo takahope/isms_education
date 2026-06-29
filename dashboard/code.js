@@ -5,6 +5,7 @@ const DASHBOARD_CONFIG = {
   recentActivityDays: 7,
   defaultCourseTitle: '資安暨個資教育訓練',
   maxAlertItems: 8,
+  bccBatchSize: 50,
   personnelSheetName: '人員主檔',
   orgSheetName: '組織架構樹',
   assignmentSheetName: '人員職務配置',
@@ -189,6 +190,13 @@ function safeMailQuota_() {
   } catch (error) {
     return 'N/A:' + (error && error.message ? error.message : String(error));
   }
+}
+
+function chunkArray_(array, size) {
+  const chunks = [];
+  const step = Math.max(1, Number(size) || 1);
+  for (let i = 0; i < array.length; i += step) chunks.push(array.slice(i, i + step));
+  return chunks;
 }
 
 function renderDashboardPage_() {
@@ -1127,23 +1135,39 @@ function executeTrainingNotification_(payload, options) {
       if (bccRecipients.length === 0) {
         throw new Error('目前沒有可寄送的公告收件人。');
       }
-      console.log('[sendTrainingNotification] single_bcc to=%s bccCount=%s', viewerEmail, bccRecipients.length);
-      try {
-        MailApp.sendEmail({
-          to: viewerEmail,
-          bcc: bccRecipients.join(','),
-          subject: applyGenericNotificationTemplate_(normalizedPayload.template.subject, context.courseTitle, trainingCourseUrl, templateContext),
-          htmlBody: applyGenericNotificationTemplate_(normalizedPayload.template.htmlBody, context.courseTitle, trainingCourseUrl, templateContext)
-        });
-        sentCount = 1;
-      } catch (error) {
-        console.error('[sendTrainingNotification] single_bcc 失敗:', error && error.stack ? error.stack : error);
-        failures.push({
-          email: viewerEmail,
-          name: '公告寄送',
-          message: error && error.message ? error.message : String(error)
-        });
-      }
+      const bccSubject = applyGenericNotificationTemplate_(normalizedPayload.template.subject, context.courseTitle, trainingCourseUrl, templateContext);
+      const bccHtmlBody = applyGenericNotificationTemplate_(normalizedPayload.template.htmlBody, context.courseTitle, trainingCourseUrl, templateContext);
+      const bccBatches = chunkArray_(bccRecipients, DASHBOARD_CONFIG.bccBatchSize);
+      console.log(
+        '[sendTrainingNotification] single_bcc to=%s bccCount=%s batches=%s batchSize=%s',
+        viewerEmail,
+        bccRecipients.length,
+        bccBatches.length,
+        DASHBOARD_CONFIG.bccBatchSize
+      );
+      bccBatches.forEach((batch, index) => {
+        try {
+          MailApp.sendEmail({
+            to: viewerEmail,
+            bcc: batch.join(','),
+            subject: bccSubject,
+            htmlBody: bccHtmlBody
+          });
+          sentCount += 1;
+        } catch (error) {
+          console.error(
+            '[sendTrainingNotification] single_bcc 批次 %s/%s 失敗: %s',
+            index + 1,
+            bccBatches.length,
+            error && error.stack ? error.stack : error
+          );
+          failures.push({
+            email: viewerEmail,
+            name: `公告寄送批次 ${index + 1}`,
+            message: error && error.message ? error.message : String(error)
+          });
+        }
+      });
     } else {
       selection.recipients.forEach((recipient) => {
         const subject = applyNotificationTemplate_(normalizedPayload.template.subject, recipient, context.courseTitle, trainingCourseUrl, templateContext);
