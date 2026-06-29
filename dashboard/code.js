@@ -183,6 +183,14 @@ function sendTrainingNotification(payload) {
   return executeTrainingNotification_(payload, { dryRun: false });
 }
 
+function safeMailQuota_() {
+  try {
+    return MailApp.getRemainingDailyQuota();
+  } catch (error) {
+    return 'N/A:' + (error && error.message ? error.message : String(error));
+  }
+}
+
 function renderDashboardPage_() {
   const viewerEmail = normalizeEmail_(getCurrentUserEmail());
   if (!canAccessDashboard_(viewerEmail)) {
@@ -907,8 +915,8 @@ function buildCaseStaffSingleBccNotificationTemplate_(courseTitle) {
   return {
     subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
     htmlBody: [
-      '<p>各位收案人員同仁們好：</p>',
-      `<p>因應本次資訊安全暨個資保護教育訓練安排，現通知所有收案相關人員協助完成<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>`,
+      '<p>各位收案同仁們好：</p>',
+      `<p>因應本年度資訊安全暨個資保護教育訓練安排，請收案相關人員協助完成<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>`,
       '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。如已完成相關要求，請忽略此信。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
@@ -1102,6 +1110,16 @@ function executeTrainingNotification_(payload, options) {
       };
     }
 
+    console.log(
+      '[sendTrainingNotification] viewer=%s deliveryMode=%s template=%s recipients=%s skipped=%s quota=%s',
+      viewerEmail,
+      normalizedPayload.deliveryMode,
+      normalizedPayload.templateType,
+      selection.recipients.length,
+      selection.skipped.length,
+      safeMailQuota_()
+    );
+
     const failures = [];
     let sentCount = 0;
     if (isSingleBccDelivery) {
@@ -1109,6 +1127,7 @@ function executeTrainingNotification_(payload, options) {
       if (bccRecipients.length === 0) {
         throw new Error('目前沒有可寄送的公告收件人。');
       }
+      console.log('[sendTrainingNotification] single_bcc to=%s bccCount=%s', viewerEmail, bccRecipients.length);
       try {
         MailApp.sendEmail({
           to: viewerEmail,
@@ -1118,6 +1137,7 @@ function executeTrainingNotification_(payload, options) {
         });
         sentCount = 1;
       } catch (error) {
+        console.error('[sendTrainingNotification] single_bcc 失敗:', error && error.stack ? error.stack : error);
         failures.push({
           email: viewerEmail,
           name: '公告寄送',
@@ -1136,6 +1156,11 @@ function executeTrainingNotification_(payload, options) {
           });
           sentCount += 1;
         } catch (error) {
+          console.error(
+            '[sendTrainingNotification] 寄送失敗 email=%s msg=%s',
+            recipient.email,
+            error && error.message ? error.message : String(error)
+          );
           failures.push({
             email: recipient.email,
             name: recipient.name,
@@ -1167,6 +1192,7 @@ function executeTrainingNotification_(payload, options) {
       sentCount,
       skippedCount: selection.skipped.length,
       failureCount: failures.length,
+      failureMessage: failures.length ? failures[0].message : '',
       skipped: selection.skipped.slice(0, 200),
       failed: failures.slice(0, 200)
     };

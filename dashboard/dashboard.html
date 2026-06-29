@@ -384,6 +384,33 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    /* 收件人 / 略過名單：超過固定高度即出現滑桿，卡片不再無限延伸 */
+    .recipient-list {
+      max-height: 360px;
+      overflow-y: auto;
+      padding-right: 6px;
+      /* 預留滑桿空間並避免內容貼齊邊緣 */
+      scrollbar-width: thin;
+      scrollbar-color: var(--line-strong) transparent;
+    }
+
+    .recipient-list::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .recipient-list::-webkit-scrollbar-thumb {
+      background: var(--line-strong);
+      border-radius: 999px;
+    }
+
+    .recipient-list::-webkit-scrollbar-thumb:hover {
+      background: var(--teal);
+    }
+
+    .recipient-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
     .summary-chip,
     .alert-card,
     .unit-card,
@@ -1809,7 +1836,9 @@
         const modeText = getNotificationDeliveryModeLabel(response.deliveryMode);
         const templateText = getNotificationTemplateLabel(response.templateType);
         const message = `寄送完成：${templateText} / ${modeText}，成功 ${response.sentCount} 封，略過 ${response.skippedCount} 位，失敗 ${response.failureCount || 0} 封。`;
-        setNotificationFeedback(message);
+        const hasFailure = (response.failureCount || 0) > 0;
+        const detail = hasFailure && response.failureMessage ? `\n失敗原因：${response.failureMessage}` : '';
+        setNotificationFeedback(message + detail, hasFailure);
         await loadDashboardData();
       } catch (error) {
         setNotificationFeedback(error && error.message ? error.message : '通知寄送失敗。', true);
@@ -1926,7 +1955,7 @@
         return;
       }
 
-      items.slice(0, 20).forEach((item) => {
+      items.forEach((item) => {
         const node = document.createElement('div');
         node.className = 'recipient-item';
         node.innerHTML = `
@@ -1953,6 +1982,7 @@
       const el = document.getElementById('notification-feedback');
       el.textContent = message || '';
       el.style.color = isError ? '#b91c1c' : '';
+      el.style.whiteSpace = 'pre-line';
     }
 
     function callServer(name, payload) {
