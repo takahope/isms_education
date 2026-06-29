@@ -1089,6 +1089,13 @@ function executeTrainingNotification_(payload, options) {
     const selection = selectNotificationRecipients_(context, normalizedPayload);
     const templateContext = buildNotificationTemplateContext_(context, normalizedPayload);
     const isSingleBccDelivery = normalizedPayload.deliveryMode === 'single_bcc';
+    const isDirectDelivery = normalizedPayload.deliveryMode === 'direct';
+    if (isDirectDelivery) {
+      const directTotal = selection.recipients.length + normalizedPayload.cc.length;
+      if (directTotal > DASHBOARD_CONFIG.bccBatchSize) {
+        throw new Error(`直接寄送收件人含 CC 共 ${directTotal} 人，超過單封上限 ${DASHBOARD_CONFIG.bccBatchSize} 人。請改用單封 BCC 或縮小寄送範圍。`);
+      }
+    }
     const previewRecipient = normalizedPayload.deliveryMode === 'individual'
       ? (selection.recipients[0] || null)
       : null;
@@ -1111,6 +1118,7 @@ function executeTrainingNotification_(payload, options) {
         deliveryMode: normalizedPayload.deliveryMode,
         recipientCount: selection.recipients.length,
         skippedCount: selection.skipped.length,
+        ccCount: normalizedPayload.cc.length,
         recipients: selection.recipients.slice(0, 200),
         skipped: selection.skipped.slice(0, 200),
         sampleSubject,
@@ -1168,6 +1176,32 @@ function executeTrainingNotification_(payload, options) {
           });
         }
       });
+    } else if (isDirectDelivery) {
+      const toEmails = selection.recipients.map((recipient) => recipient.email).filter(Boolean);
+      if (toEmails.length === 0) {
+        throw new Error('目前沒有可寄送的收件人。');
+      }
+      const ccEmails = normalizedPayload.cc || [];
+      const directSubject = applyGenericNotificationTemplate_(normalizedPayload.template.subject, context.courseTitle, trainingCourseUrl, templateContext);
+      const directHtmlBody = applyGenericNotificationTemplate_(normalizedPayload.template.htmlBody, context.courseTitle, trainingCourseUrl, templateContext);
+      console.log('[sendTrainingNotification] direct toCount=%s ccCount=%s', toEmails.length, ccEmails.length);
+      try {
+        const mailOptions = {
+          to: toEmails.join(','),
+          subject: directSubject,
+          htmlBody: directHtmlBody
+        };
+        if (ccEmails.length > 0) mailOptions.cc = ccEmails.join(',');
+        MailApp.sendEmail(mailOptions);
+        sentCount = 1;
+      } catch (error) {
+        console.error('[sendTrainingNotification] direct 失敗:', error && error.stack ? error.stack : error);
+        failures.push({
+          email: toEmails[0] || viewerEmail,
+          name: '直接寄送',
+          message: error && error.message ? error.message : String(error)
+        });
+      }
     } else {
       selection.recipients.forEach((recipient) => {
         const subject = applyNotificationTemplate_(normalizedPayload.template.subject, recipient, context.courseTitle, trainingCourseUrl, templateContext);
@@ -1215,6 +1249,7 @@ function executeTrainingNotification_(payload, options) {
       recipientCount: selection.recipients.length,
       sentCount,
       skippedCount: selection.skipped.length,
+      ccCount: normalizedPayload.cc.length,
       failureCount: failures.length,
       failureMessage: failures.length ? failures[0].message : '',
       skipped: selection.skipped.slice(0, 200),
@@ -1228,6 +1263,20 @@ function executeTrainingNotification_(payload, options) {
       error && error.message ? error.message : '寄送通知失敗。'
     );
   }
+}
+
+function normalizeNotificationCcList_(rawCc, deliveryMode) {
+  if (deliveryMode !== 'direct' || !rawCc) return [];
+  const items = Array.isArray(rawCc) ? rawCc : String(rawCc).split(/[\n,;]+/);
+  const seen = new Set();
+  const result = [];
+  items.forEach((item) => {
+    const email = normalizeEmail_(item);
+    if (!email || !isValidEmail_(email) || seen.has(email)) return;
+    seen.add(email);
+    result.push(email);
+  });
+  return result;
 }
 
 function normalizeNotificationPayload_(payload) {
@@ -1246,6 +1295,7 @@ function normalizeNotificationPayload_(payload) {
   const assignmentMatch = String(target.assignmentMatch || 'primary_only').trim() || 'primary_only';
   const subject = String(template.subject || '').trim();
   const htmlBody = String(template.htmlBody || '').trim();
+  const cc = normalizeNotificationCcList_(payload && payload.cc, deliveryMode);
   const allowedTemplateTypes = ['personalized', 'case_staff_personalized', 'case_staff_layered_reminder', 'parental_leave_personalized', 'announcement', 'group_announcement', 'station_manager_announcement', 'leadership_announcement_summary', 'leadership_announcement'];
 
   if (!allowedTemplateTypes.includes(templateType)) throw new Error('通知範本類型不正確。');
@@ -1255,7 +1305,7 @@ function normalizeNotificationPayload_(payload) {
   } else {
     if (!subject) throw new Error('通知主旨不得為空。');
     if (!htmlBody) throw new Error('通知內文不得為空。');
-    if (!['individual', 'single_bcc'].includes(deliveryMode)) throw new Error('寄送方式不正確。');
+    if (!['individual', 'single_bcc', 'direct'].includes(deliveryMode)) throw new Error('寄送方式不正確。');
   }
   if (!orgType) throw new Error('請選擇組織類型。');
   if (assignmentMatch !== 'primary_only') throw new Error('目前僅支援依主職寄送。');
@@ -1268,6 +1318,7 @@ function normalizeNotificationPayload_(payload) {
     templateType,
     deliveryMode,
     layeredTargetRole,
+    cc,
     target: {
       orgType,
       level: templateType === 'case_staff_layered_reminder' ? '' : (levelValue === '' ? '' : orgLevel),
@@ -1903,6 +1954,7 @@ function getNotificationDeliveryModeLabel_(deliveryMode) {
   const labels = {
     individual: '個人化逐封',
     single_bcc: '單封 BCC',
+    direct: '直接寄送',
     layered: '分層寄送'
   };
   return labels[String(deliveryMode || 'individual').trim()] || '個人化逐封';

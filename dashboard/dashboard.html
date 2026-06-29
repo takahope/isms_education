@@ -345,6 +345,44 @@
       line-height: 1.7;
     }
 
+    .cc-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .cc-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px 4px 12px;
+      border-radius: 999px;
+      background: var(--teal-soft);
+      color: var(--teal);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .cc-chip button {
+      border: 0;
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(15, 118, 110, 0.18);
+      color: var(--teal);
+      font-size: 13px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .cc-chip button:hover {
+      background: rgba(15, 118, 110, 0.32);
+    }
+
     .notification-actions {
       display: flex;
       gap: 10px;
@@ -810,8 +848,16 @@
             <select id="notify-delivery-mode">
               <option value="individual">個人化逐封</option>
               <option value="single_bcc">單封 BCC</option>
+              <option value="direct">直接寄送（互相可見）</option>
               <option value="layered">分層寄送</option>
             </select>
+          </div>
+          <div class="field hidden" id="notify-cc-field" style="grid-column: 1 / -1;">
+            <label for="notify-cc-input">副本 CC（直接寄送專用）</label>
+            <input id="notify-cc-input" type="text" list="notify-cc-options" placeholder="輸入或選擇人員後按 Enter 加入；可手動輸入名單外 email">
+            <datalist id="notify-cc-options"></datalist>
+            <div id="notify-cc-chips" class="cc-chips"></div>
+            <div id="notify-cc-note" class="template-note"></div>
           </div>
           <div class="field hidden" id="notify-layered-target-field">
             <label for="notify-layered-target-role">分層通知對象</label>
@@ -1097,6 +1143,7 @@
         defaultDeliveryModeByTemplateType: {},
         placeholdersByTemplateType: {},
         placeholderTokensByTemplateAndDeliveryMode: {},
+        ccSelected: [],
         lastPreviewPayloadJson: '',
         previewLoaded: false
       }
@@ -1123,8 +1170,16 @@
       });
       document.getElementById('notify-delivery-mode').addEventListener('change', () => {
         applySelectedNotificationTemplate({ preserveDeliveryMode: true });
+        syncNotificationCcUi();
         resetNotificationPreview();
       });
+      document.getElementById('notify-cc-input').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ',') {
+          event.preventDefault();
+          addCcRecipientFromInput();
+        }
+      });
+      document.getElementById('notify-cc-input').addEventListener('change', addCcRecipientFromInput);
       document.getElementById('notify-layered-target-role').addEventListener('change', () => {
         syncLayeredTemplateSections();
         resetNotificationPreview();
@@ -1231,6 +1286,7 @@
         state.allLearners = Array.isArray(response.learners) ? response.learners : [];
         document.getElementById('generated-at').textContent = formatDateTime(state.generatedAt) || '無資料';
         populateUnitFilter(state.allLearners);
+        populateCcOptions();
         renderDashboard();
       } catch (error) {
         showError(error && error.message ? error.message : '無法載入儀表板資料。');
@@ -1661,14 +1717,91 @@
       }
     }
 
+    function syncNotificationCcUi() {
+      const deliveryMode = String(document.getElementById('notify-delivery-mode').value || 'individual').trim();
+      document.getElementById('notify-cc-field').classList.toggle('hidden', deliveryMode !== 'direct');
+    }
+
+    function populateCcOptions() {
+      const datalist = document.getElementById('notify-cc-options');
+      datalist.innerHTML = '';
+      state.allLearners.forEach((learner) => {
+        const email = String(learner.email || '').trim();
+        if (!email) return;
+        const option = document.createElement('option');
+        option.value = email;
+        option.label = `${learner.name || ''} <${email}>`;
+        datalist.appendChild(option);
+      });
+    }
+
+    function isValidEmailClient(email) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+    }
+
+    function setCcNote(message, isError) {
+      const note = document.getElementById('notify-cc-note');
+      note.textContent = message || '';
+      note.style.color = isError ? '#b91c1c' : '';
+    }
+
+    function addCcRecipientFromInput() {
+      const input = document.getElementById('notify-cc-input');
+      const raw = String(input.value || '').trim();
+      if (!raw) return;
+      const email = raw.toLowerCase();
+      if (!isValidEmailClient(email)) {
+        setCcNote(`Email 格式不正確：${raw}`, true);
+        return;
+      }
+      if (state.notification.ccSelected.includes(email)) {
+        setCcNote(`已加入：${email}`, false);
+        input.value = '';
+        return;
+      }
+      state.notification.ccSelected.push(email);
+      input.value = '';
+      setCcNote(`已加入 CC ${state.notification.ccSelected.length} 位。`, false);
+      renderCcChips();
+      resetNotificationPreview();
+    }
+
+    function removeCcRecipient(email) {
+      state.notification.ccSelected = state.notification.ccSelected.filter((item) => item !== email);
+      setCcNote(`目前 CC ${state.notification.ccSelected.length} 位。`, false);
+      renderCcChips();
+      resetNotificationPreview();
+    }
+
+    function renderCcChips() {
+      const container = document.getElementById('notify-cc-chips');
+      container.innerHTML = '';
+      const nameByEmail = new Map(state.allLearners.map((learner) => [String(learner.email || '').toLowerCase(), learner.name || '']));
+      state.notification.ccSelected.forEach((email) => {
+        const chip = document.createElement('span');
+        chip.className = 'cc-chip';
+        const label = nameByEmail.get(email) ? `${nameByEmail.get(email)} <${email}>` : email;
+        chip.appendChild(document.createTextNode(label));
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '×';
+        remove.setAttribute('aria-label', `移除 ${email}`);
+        remove.addEventListener('click', () => removeCcRecipient(email));
+        chip.appendChild(remove);
+        container.appendChild(chip);
+      });
+    }
+
     function buildNotificationPayload() {
       const orgCode = String(document.getElementById('notify-org-code').value || '').trim();
       const isCaseStaffVirtual = isCaseStaffVirtualTarget(orgCode);
       const templateType = String(document.getElementById('notify-template-type').value || 'personalized').trim();
       const isLayered = templateType === 'case_staff_layered_reminder';
+      const deliveryMode = String(document.getElementById('notify-delivery-mode').value || 'individual').trim();
       return {
         templateType,
-        deliveryMode: String(document.getElementById('notify-delivery-mode').value || 'individual').trim(),
+        deliveryMode,
+        cc: deliveryMode === 'direct' ? state.notification.ccSelected.slice() : [],
         layeredTargetRole: String(document.getElementById('notify-layered-target-role').value || 'all').trim(),
         target: {
           orgType: String(document.getElementById('notify-org-type').value || '').trim(),
@@ -1745,6 +1878,7 @@
       document.getElementById('placeholder-note').textContent = `可用變數：${placeholders.join('、') || '無'}`;
       document.getElementById('layered-placeholder-note').textContent = `可用變數：${placeholders.join('、') || '無'}`;
       syncLayeredNotificationUi();
+      syncNotificationCcUi();
     }
 
     function applyLayeredNotificationTemplateBundle(template) {
@@ -1859,8 +1993,9 @@
       const roleSummary = response.roleCounts
         ? ` / ${formatLayeredRoleCounts(response.roleCounts)} / ${getLayeredTargetRoleLabel(criteria.layeredTargetRole || response.layeredTargetRole)}`
         : '';
+      const ccSummary = response.ccCount ? ` / CC ${response.ccCount} 位` : '';
       document.getElementById('preview-criteria').textContent =
-        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${shouldShowLevel ? ` / 第 ${criteria.level} 層` : ''}${orgCodeLabel ? ` / ${orgCodeLabel}` : ''}${shouldShowDescendantMode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 訓練狀態 ${criteria.trainingStatus || ''} / 人員狀態 ${personnelStatusLabel} / ${getNotificationDeliveryModeLabel(response.deliveryMode)}${roleSummary}`;
+        `條件：${getNotificationTemplateLabel(criteria.templateType)} / ${criteria.orgType || ''}${shouldShowLevel ? ` / 第 ${criteria.level} 層` : ''}${orgCodeLabel ? ` / ${orgCodeLabel}` : ''}${shouldShowDescendantMode ? ` / ${getNotificationDescendantModeLabel(criteria.descendantMode)}` : ''} / 訓練狀態 ${criteria.trainingStatus || ''} / 人員狀態 ${personnelStatusLabel} / ${getNotificationDeliveryModeLabel(response.deliveryMode)}${roleSummary}${ccSummary}`;
 
       renderRecipientList('preview-recipient-list', response.recipients || [], false);
       renderRecipientList('preview-skipped-list', response.skipped || [], true);
@@ -1906,6 +2041,7 @@
       const labels = {
         individual: '個人化逐封',
         single_bcc: '單封 BCC 全部',
+        direct: '直接寄送（互相可見）',
         layered: '分層寄送'
       };
       return labels[String(deliveryMode || 'individual').trim()] || '個人化逐封';
