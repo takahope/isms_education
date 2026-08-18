@@ -16,6 +16,18 @@ const DASHBOARD_CONFIG = {
 
 const NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE = '__CASE_STAFF__';
 
+const DASHBOARD_EXCLUDED_PERSONNEL_STATUSES = new Set([
+  '離職',
+  '委外',
+  '委外廠商',
+  '合作',
+  '合作廠商'
+]);
+
+function isExcludedPersonnelStatus_(status) {
+  return DASHBOARD_EXCLUDED_PERSONNEL_STATUSES.has(String(status || '').trim());
+}
+
 const TRAINING_SHEET_HEADERS = {
   訓練紀錄: ['時間戳記', '姓名', '使用者信箱', '課程名稱', '測驗分數', '測驗結果', '測驗批次ID', '題目數', '及格門檻'],
   觀看進度: ['使用者信箱', '課程名稱', '影片ID', '已觀看區間', '已觀看秒數', '最後播放位置', '最後更新時間', '最後同步來源版本'],
@@ -371,6 +383,7 @@ function buildDashboardContext_() {
     if (!email) continue;
     const name = String(personnelRows[i][1] || '').trim();
     const personnelStatus = String(personnelRows[i][2] || '').trim();
+    if (isExcludedPersonnelStatus_(personnelStatus)) continue;
     const assignment = assignmentSummaries.get(email) || createEmptyAssignmentSummary_();
     const quiz = quizByEmail.get(email) || createEmptyQuizSummary_();
     const progress = progressByEmail.get(email) || createEmptyProgressSummary_();
@@ -435,7 +448,7 @@ function collectPersonnelStatusOptions_(personnelRows) {
   const options = [];
   for (let i = 1; i < personnelRows.length; i += 1) {
     const status = String(personnelRows[i][2] || '').trim();
-    if (!status || seen.has(status)) continue;
+    if (!status || isExcludedPersonnelStatus_(status) || seen.has(status)) continue;
     seen.add(status);
     options.push(status);
   }
