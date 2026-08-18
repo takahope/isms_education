@@ -325,8 +325,14 @@
       color: #fff;
     }
 
+    .filters-panel {
+      position: relative;
+      z-index: 30;
+    }
+
     .custom-multiselect {
       position: relative;
+      z-index: 40;
     }
 
     .multiselect-box {
@@ -354,14 +360,14 @@
       top: 100%;
       left: 0;
       right: 0;
-      z-index: 50;
+      z-index: 100;
       margin-top: 4px;
       max-height: 240px;
       overflow-y: auto;
       background: #ffffff;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
       padding: 6px;
     }
 
@@ -373,6 +379,20 @@
       border-radius: 4px;
       cursor: pointer;
       font-size: 13px;
+      user-select: none;
+    }
+
+    .multiselect-option-item input[type="checkbox"] {
+      width: 16px !important;
+      height: 16px !important;
+      min-height: 16px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 3px !important;
+      accent-color: var(--teal);
+      cursor: pointer;
+      flex-shrink: 0;
     }
 
     .multiselect-option-item:hover {
@@ -1073,7 +1093,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel filters-panel">
         <div class="panel-inner">
           <div class="panel-heading">
             <div>
