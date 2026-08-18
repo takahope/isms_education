@@ -841,9 +841,18 @@ function buildNotificationTemplates_(courseTitle) {
 
 function buildNotificationTemplatesByDeliveryMode_(courseTitle) {
   return {
+    personalized: {
+      individual: buildPersonalizedNotificationTemplate_(courseTitle),
+      direct: buildAnnouncementNotificationTemplate_(courseTitle)
+    },
     case_staff_personalized: {
       individual: buildCaseStaffIndividualNotificationTemplate_(courseTitle),
-      single_bcc: buildCaseStaffSingleBccNotificationTemplate_(courseTitle)
+      single_bcc: buildCaseStaffSingleBccNotificationTemplate_(courseTitle),
+      direct: buildCaseStaffSingleBccNotificationTemplate_(courseTitle)
+    },
+    parental_leave_personalized: {
+      individual: buildParentalLeavePersonalizedNotificationTemplate_(courseTitle),
+      direct: buildAnnouncementNotificationTemplate_(courseTitle)
     },
     case_staff_layered_reminder: {
       layered: buildCaseStaffLayeredReminderTemplateBundle_(courseTitle)
@@ -853,9 +862,18 @@ function buildNotificationTemplatesByDeliveryMode_(courseTitle) {
 
 function buildNotificationPlaceholderTokensByTemplateAndDeliveryMode_() {
   return {
+    personalized: {
+      individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
+      direct: ['{{課程名稱}}', '{{上課網址}}']
+    },
     case_staff_personalized: {
       individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
-      single_bcc: ['{{課程名稱}}', '{{上課網址}}']
+      single_bcc: ['{{課程名稱}}', '{{上課網址}}'],
+      direct: ['{{課程名稱}}', '{{上課網址}}']
+    },
+    parental_leave_personalized: {
+      individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
+      direct: ['{{課程名稱}}', '{{上課網址}}']
     },
     case_staff_layered_reminder: {
       layered: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{駐站列表}}', '{{駐站管理員姓名}}', '{{組長姓名}}', '{{未完成人員名單}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}']
@@ -1095,7 +1113,7 @@ function executeTrainingNotification_(payload, options) {
     if (isDirectDelivery) {
       const directTotal = selection.recipients.length + normalizedPayload.cc.length;
       if (directTotal > DASHBOARD_CONFIG.bccBatchSize) {
-        throw new Error(`直接寄送收件人含 CC 共 ${directTotal} 人，超過單封上限 ${DASHBOARD_CONFIG.bccBatchSize} 人。請改用單封 BCC 或縮小寄送範圍。`);
+        throw new Error(`單封多人收件人含 CC 共 ${directTotal} 人，超過單封上限 ${DASHBOARD_CONFIG.bccBatchSize} 人。請改用單封 BCC 或縮小寄送範圍。`);
       }
     }
     const previewRecipient = normalizedPayload.deliveryMode === 'individual'
@@ -1200,7 +1218,7 @@ function executeTrainingNotification_(payload, options) {
         console.error('[sendTrainingNotification] direct 失敗:', error && error.stack ? error.stack : error);
         failures.push({
           email: toEmails[0] || viewerEmail,
-          name: '直接寄送',
+          name: '單封多人',
           message: error && error.message ? error.message : String(error)
         });
       }
@@ -1956,7 +1974,7 @@ function getNotificationDeliveryModeLabel_(deliveryMode) {
   const labels = {
     individual: '個人化逐封',
     single_bcc: '單封 BCC',
-    direct: '直接寄送',
+    direct: '單封多人（互相可見）',
     layered: '分層寄送'
   };
   return labels[String(deliveryMode || 'individual').trim()] || '個人化逐封';
