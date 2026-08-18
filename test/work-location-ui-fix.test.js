@@ -4,9 +4,10 @@ const path = require('path');
 
 const html = fs.readFileSync(path.join(__dirname, '../dashboard/dashboard.html'), 'utf8');
 
-// 1. 驗證篩選面板具備層級堆疊 (filters-panel z-index)
+// 1. 驗證篩選面板具備層級堆疊與 overflow: visible (防止被 .panel overflow: hidden 截斷)
 assert(html.includes('filters-panel'), '篩選區塊 section 必須有 filters-panel class');
 assert(/\.filters-panel\s*\{[^}]*z-index:\s*(?:[1-9]\d*)/.test(html), '.filters-panel 必須設定明確的 z-index');
+assert(/\.filters-panel\s*\{[^}]*overflow:\s*visible/.test(html), '.filters-panel 必須設定 overflow: visible 以防止下拉選單被截斷');
 
 // 2. 驗證 multiselect-dropdown 與 custom-multiselect 的 z-index
 assert(/\.custom-multiselect\s*\{[^}]*z-index:\s*(?:[1-9]\d*)/.test(html), '.custom-multiselect 必須設定 z-index');
