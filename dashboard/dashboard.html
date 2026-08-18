@@ -848,12 +848,12 @@
             <select id="notify-delivery-mode">
               <option value="individual">個人化逐封</option>
               <option value="single_bcc">單封 BCC</option>
-              <option value="direct">直接寄送（互相可見）</option>
+              <option value="direct">單封多人（互相可見）</option>
               <option value="layered">分層寄送</option>
             </select>
           </div>
           <div class="field hidden" id="notify-cc-field" style="grid-column: 1 / -1;">
-            <label for="notify-cc-input">副本 CC（直接寄送專用）</label>
+            <label for="notify-cc-input">副本 CC（單封多人專用）</label>
             <input id="notify-cc-input" type="text" list="notify-cc-options" placeholder="輸入或選擇人員後按 Enter 加入；可手動輸入名單外 email">
             <datalist id="notify-cc-options"></datalist>
             <div id="notify-cc-chips" class="cc-chips"></div>
@@ -1842,9 +1842,6 @@
     function getSelectedNotificationTemplateDefinition(templateType, deliveryMode) {
       const normalizedTemplateType = String(templateType || '').trim();
       const normalizedDeliveryMode = String(deliveryMode || 'individual').trim();
-      if (normalizedDeliveryMode === 'direct') {
-        return state.notification.templates.announcement || { subject: '', htmlBody: '' };
-      }
       const byDeliveryMode = state.notification.templatesByDeliveryMode[normalizedTemplateType] || null;
       if (byDeliveryMode && byDeliveryMode[normalizedDeliveryMode]) {
         return byDeliveryMode[normalizedDeliveryMode];
@@ -1855,9 +1852,6 @@
     function getSelectedNotificationPlaceholders(templateType, deliveryMode) {
       const normalizedTemplateType = String(templateType || '').trim();
       const normalizedDeliveryMode = String(deliveryMode || 'individual').trim();
-      if (normalizedDeliveryMode === 'direct') {
-        return state.notification.placeholdersByTemplateType.announcement || [];
-      }
       const byDeliveryMode = state.notification.placeholderTokensByTemplateAndDeliveryMode[normalizedTemplateType] || null;
       if (byDeliveryMode && Array.isArray(byDeliveryMode[normalizedDeliveryMode])) {
         return byDeliveryMode[normalizedDeliveryMode];
@@ -2047,7 +2041,7 @@
       const labels = {
         individual: '個人化逐封',
         single_bcc: '單封 BCC 全部',
-        direct: '直接寄送（互相可見）',
+        direct: '單封多人（互相可見）',
         layered: '分層寄送'
       };
       return labels[String(deliveryMode || 'individual').trim()] || '個人化逐封';
