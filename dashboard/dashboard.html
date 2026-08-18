@@ -1040,6 +1040,10 @@
                 <input id="incomplete-toggle" type="checkbox">
                 <span>只看未完成</span>
               </div>
+              <div class="checkbox-field" style="margin-top: 4px;">
+                <input id="exclude-egc-toggle" type="checkbox" checked>
+                <span>排除倫理委員會</span>
+              </div>
             </div>
             <button id="reset-filters-btn" class="filter-reset" type="button">清除篩選</button>
           </div>
@@ -1131,7 +1135,8 @@
         search: '',
         status: '',
         unit: '',
-        incompleteOnly: false
+        incompleteOnly: false,
+        excludeEgc: true
       },
       notification: {
         enabled: false,
@@ -1184,12 +1189,25 @@
         syncLayeredTemplateSections();
         resetNotificationPreview();
       });
+      document.getElementById('exclude-egc-toggle').addEventListener('change', (event) => {
+        state.filters.excludeEgc = Boolean(event.target.checked);
+        if (state.filters.excludeEgc && state.filters.unit === '倫理委員會') {
+          state.filters.unit = '';
+          document.getElementById('unit-filter').value = '';
+        }
+        renderDashboard();
+      });
       document.getElementById('status-filter').addEventListener('change', (event) => {
         state.filters.status = String(event.target.value || '').trim();
         renderDashboard();
       });
       document.getElementById('unit-filter').addEventListener('change', (event) => {
-        state.filters.unit = String(event.target.value || '').trim();
+        const val = String(event.target.value || '').trim();
+        state.filters.unit = val;
+        if (val === '倫理委員會') {
+          state.filters.excludeEgc = false;
+          document.getElementById('exclude-egc-toggle').checked = false;
+        }
         renderDashboard();
       });
       document.getElementById('incomplete-toggle').addEventListener('change', (event) => {
@@ -1317,12 +1335,14 @@
         search: '',
         status: '',
         unit: '',
-        incompleteOnly: false
+        incompleteOnly: false,
+        excludeEgc: true
       };
       document.getElementById('search-input').value = '';
       document.getElementById('status-filter').value = '';
       document.getElementById('unit-filter').value = '';
       document.getElementById('incomplete-toggle').checked = false;
+      document.getElementById('exclude-egc-toggle').checked = true;
       renderDashboard();
     }
 
@@ -1339,8 +1359,20 @@
       hideLoading();
     }
 
+    function isEgcMember(learner) {
+      if (!learner) return false;
+      const orgCode = String(learner.assignmentOrgCode || '').trim().toUpperCase();
+      const orgName = String(learner.assignmentOrgName || '').trim();
+      const status = String(learner.personnelStatus || '').trim();
+      return orgCode === 'EGC' || orgName === '倫理委員會' || status === '倫理委員會';
+    }
+
     function applyFilters(learners) {
       return learners.filter((learner) => {
+        if (state.filters.excludeEgc && state.filters.unit !== '倫理委員會' && isEgcMember(learner)) {
+          return false;
+        }
+
         const searchHaystack = [
           learner.name,
           learner.email,
