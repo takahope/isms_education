@@ -17,6 +17,8 @@
       --muted: #5d7184;
       --line: rgba(17, 32, 49, 0.09);
       --line-strong: rgba(17, 32, 49, 0.16);
+      --border: rgba(17, 32, 49, 0.16);
+      --primary: #0f766e;
       --teal: #0f766e;
       --teal-soft: rgba(15, 118, 110, 0.11);
       --amber: #c77700;
@@ -251,7 +253,7 @@
     }
 
     .filters-grid {
-      grid-template-columns: 1.15fr 0.7fr 0.7fr 0.6fr auto;
+      grid-template-columns: 1.15fr 0.7fr 0.7fr 0.7fr 0.6fr auto;
       align-items: end;
     }
 
@@ -321,6 +323,72 @@
       border: none;
       background: var(--text);
       color: #fff;
+    }
+
+    .custom-multiselect {
+      position: relative;
+    }
+
+    .multiselect-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      min-height: 40px;
+      height: 46px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: #ffffff;
+      cursor: pointer;
+      font-size: 14px;
+      user-select: none;
+    }
+
+    .multiselect-box:focus {
+      outline: 2px solid var(--primary);
+    }
+
+    .multiselect-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      margin-top: 4px;
+      max-height: 240px;
+      overflow-y: auto;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      padding: 6px;
+    }
+
+    .multiselect-option-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .multiselect-option-item:hover {
+      background: #f1f5f9;
+    }
+
+    .cell-location {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 1px 6px;
+      background: #f1f5f9;
+      border-radius: 4px;
+      color: #475569;
+      font-size: 12px;
+      margin-top: 3px;
     }
 
     .inline-note,
@@ -1034,6 +1102,16 @@
                 <option value="">全部單位</option>
               </select>
             </div>
+            <div class="field custom-multiselect" id="location-multiselect-container">
+              <label>工作地點</label>
+              <div class="multiselect-box" id="location-dropdown-toggle" tabindex="0">
+                <span class="multiselect-label" id="location-selected-summary">全部地點</span>
+                <span class="multiselect-arrow">▾</span>
+              </div>
+              <div class="multiselect-dropdown hidden" id="location-dropdown-panel">
+                <div class="multiselect-options" id="location-options-list"></div>
+              </div>
+            </div>
             <div class="field">
               <label>快速篩選</label>
               <div class="checkbox-field">
@@ -1135,6 +1213,7 @@
         search: '',
         status: '',
         unit: '',
+        locations: [],
         incompleteOnly: false,
         excludeEgc: true
       },
@@ -1168,6 +1247,16 @@
       document.getElementById('search-input').addEventListener('input', (event) => {
         state.filters.search = String(event.target.value || '').trim().toLowerCase();
         renderDashboard();
+      });
+      document.getElementById('location-dropdown-toggle').addEventListener('click', (event) => {
+        event.stopPropagation();
+        document.getElementById('location-dropdown-panel').classList.toggle('hidden');
+      });
+      document.addEventListener('click', (event) => {
+        const container = document.getElementById('location-multiselect-container');
+        if (container && !container.contains(event.target)) {
+          document.getElementById('location-dropdown-panel').classList.add('hidden');
+        }
       });
       document.getElementById('notify-template-type').addEventListener('change', () => {
         applySelectedNotificationTemplate();
@@ -1304,6 +1393,7 @@
         state.allLearners = Array.isArray(response.learners) ? response.learners : [];
         document.getElementById('generated-at').textContent = formatDateTime(state.generatedAt) || '無資料';
         populateUnitFilter(state.allLearners);
+        populateLocationFilter(state.allLearners);
         populateCcOptions();
         renderDashboard();
       } catch (error) {
@@ -1330,11 +1420,58 @@
       unitFilter.value = currentValue;
     }
 
+    function populateLocationFilter(learners) {
+      const optionsList = document.getElementById('location-options-list');
+      if (!optionsList) return;
+      const uniqueLocations = Array.from(new Set(
+        learners.map((l) => String(l.location || '').trim()).filter(Boolean)
+      )).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+
+      optionsList.innerHTML = '';
+      uniqueLocations.forEach((loc) => {
+        const item = document.createElement('label');
+        item.className = 'multiselect-option-item';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = loc;
+        checkbox.checked = state.filters.locations.includes(loc);
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) {
+            if (!state.filters.locations.includes(loc)) state.filters.locations.push(loc);
+          } else {
+            state.filters.locations = state.filters.locations.filter((item) => item !== loc);
+          }
+          updateLocationSummaryLabel();
+          renderDashboard();
+        });
+        item.appendChild(checkbox);
+        item.appendChild(document.createTextNode(loc));
+        optionsList.appendChild(item);
+      });
+      updateLocationSummaryLabel();
+    }
+
+    function updateLocationSummaryLabel() {
+      const summaryEl = document.getElementById('location-selected-summary');
+      if (!summaryEl) return;
+      const count = state.filters.locations.length;
+      if (count === 0) {
+        summaryEl.textContent = '全部地點';
+      } else if (count === 1) {
+        summaryEl.textContent = state.filters.locations[0];
+      } else if (count === 2) {
+        summaryEl.textContent = `${state.filters.locations[0]}、${state.filters.locations[1]} (${count})`;
+      } else {
+        summaryEl.textContent = `${state.filters.locations[0]}、${state.filters.locations[1]} +${count - 2} (${count})`;
+      }
+    }
+
     function resetFilters() {
       state.filters = {
         search: '',
         status: '',
         unit: '',
+        locations: [],
         incompleteOnly: false,
         excludeEgc: true
       };
@@ -1343,6 +1480,9 @@
       document.getElementById('unit-filter').value = '';
       document.getElementById('incomplete-toggle').checked = false;
       document.getElementById('exclude-egc-toggle').checked = true;
+      const checkboxes = document.querySelectorAll('#location-options-list input[type="checkbox"]');
+      checkboxes.forEach((cb) => { cb.checked = false; });
+      updateLocationSummaryLabel();
       renderDashboard();
     }
 
@@ -1373,9 +1513,12 @@
           return false;
         }
 
+        if (state.filters.locations.length > 0 && !state.filters.locations.includes(learner.location)) return false;
+
         const searchHaystack = [
           learner.name,
           learner.email,
+          learner.location,
           learner.assignmentOrgName,
           learner.assignmentTitle,
           learner.assignmentLabel
@@ -1609,6 +1752,9 @@
       }
 
       learners.forEach((learner) => {
+        const locationBadge = learner.location
+          ? `<div class="cell-location">📍 ${escapeHtml(learner.location)}</div>`
+          : '';
         const row = document.createElement('tr');
         row.innerHTML = `
           <td>
@@ -1620,6 +1766,7 @@
           <td>
             <div>${escapeHtml(learner.assignmentLabel || '未設定職務')}</div>
             <div class="small muted">${escapeHtml(learner.assignmentOrgName || '')}</div>
+            ${locationBadge}
           </td>
           <td>
             <div><strong>${formatPercent(learner.watchedPercent)}%</strong> ・ ${formatDuration(learner.watchedSecondsCount)}</div>
