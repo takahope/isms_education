@@ -385,6 +385,7 @@ function buildDashboardContext_() {
     const name = String(personnelRows[i][1] || '').trim();
     const personnelStatus = String(personnelRows[i][2] || '').trim();
     if (isExcludedPersonnelStatus_(personnelStatus)) continue;
+    const location = String(personnelRows[i][7] || '').trim();
     const assignment = assignmentSummaries.get(email) || createEmptyAssignmentSummary_();
     const quiz = quizByEmail.get(email) || createEmptyQuizSummary_();
     const progress = progressByEmail.get(email) || createEmptyProgressSummary_();
@@ -399,6 +400,7 @@ function buildDashboardContext_() {
       email,
       name,
       personnelStatus,
+      location,
       assignmentLabel: assignment.assignmentLabel,
       assignmentType: assignment.assignmentType,
       assignmentOrgCode: assignment.assignmentOrgCode,
