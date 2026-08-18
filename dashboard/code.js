@@ -21,7 +21,8 @@ const DASHBOARD_EXCLUDED_PERSONNEL_STATUSES = new Set([
   '委外',
   '委外廠商',
   '合作',
-  '合作廠商'
+  '合作廠商',
+  '合作單位'
 ]);
 
 function isExcludedPersonnelStatus_(status) {
