@@ -1514,6 +1514,185 @@
       renderDashboard();
     }
 
+    function formatFiltersSummary(filters) {
+      const safeFilters = filters || {};
+      const statusMap = {
+        completed: '已完成',
+        pending_quiz: '待補測',
+        in_progress: '進行中',
+        not_started: '未開始'
+      };
+      return [
+        ['關鍵字搜尋', safeFilters.search ? `"${safeFilters.search}"` : '全部'],
+        ['訓練狀態', safeFilters.status ? (statusMap[safeFilters.status] || safeFilters.status) : '全部'],
+        ['所屬單位', safeFilters.unit || '全部'],
+        ['工作地點', Array.isArray(safeFilters.locations) && safeFilters.locations.length > 0 ? safeFilters.locations.join('、') : '全部'],
+        ['僅顯示未完成', safeFilters.incompleteOnly ? '是' : '否'],
+        ['排除倫理委員會', safeFilters.excludeEgc ? '是' : '否']
+      ];
+    }
+
+    function formatExportDateTime(date) {
+      if (!date) return '';
+      const d = (date instanceof Date && !isNaN(date.getTime()))
+        ? date
+        : new Date(typeof date === 'number' ? date : String(date).trim());
+      if (isNaN(d.getTime())) return '';
+      const YYYY = d.getFullYear();
+      const MM = String(d.getMonth() + 1).padStart(2, '0');
+      const DD = String(d.getDate()).padStart(2, '0');
+      const HH = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${YYYY}-${MM}-${DD} ${HH}:${mm}:${ss}`;
+    }
+
+    function buildSummarySheetAoa(meta, kpis, unitSummary, filtersSummaryList) {
+      const safeMeta = meta || {};
+      const safeKpis = kpis || {};
+      const safeUnits = Array.isArray(unitSummary) ? unitSummary : [];
+      const safeFilters = Array.isArray(filtersSummaryList)
+        ? filtersSummaryList
+        : formatFiltersSummary(filtersSummaryList);
+
+      const aoa = [
+        ['【報表基本資訊】', ''],
+        ['課程名稱', safeMeta.courseTitle || '未設定課程名稱'],
+        ['匯出時間', safeMeta.exportTime || formatExportDateTime(new Date())],
+        ['操作人員', safeMeta.operatorEmail || safeMeta.viewerEmail || '系統管理員'],
+        [],
+        ['【套用篩選條件】', '']
+      ];
+
+      safeFilters.forEach((item) => {
+        if (Array.isArray(item)) {
+          aoa.push([item[0], item[1]]);
+        } else if (typeof item === 'string') {
+          const parts = item.split(/[:：]/);
+          if (parts.length > 1) {
+            aoa.push([parts[0].trim(), parts.slice(1).join(':').trim()]);
+          } else {
+            aoa.push([item, '']);
+          }
+        }
+      });
+
+      aoa.push(
+        [],
+        ['【整體 KPI 指標】', ''],
+        ['應訓總人數', Number(safeKpis.total || 0)],
+        ['已完成人數', Number(safeKpis.completed || 0)],
+        ['待測驗人數', Number(safeKpis.pendingQuiz || 0)],
+        ['進行中人數', Number(safeKpis.inProgress || 0)],
+        ['未開始人數', Number(safeKpis.notStarted || 0)],
+        ['近 7 日活躍人數', Number(safeKpis.recentActive || 0)],
+        ['整體完成率', `${formatPercent(safeKpis.completionRate)}%`],
+        [],
+        ['【各單位完成概況】', '', '', '', ''],
+        ['單位名稱', '應訓人數', '已完成人數', '未完成人數', '單位完成率']
+      );
+
+      if (safeUnits.length === 0) {
+        aoa.push(['無單位資料', 0, 0, 0, '0%']);
+      } else {
+        safeUnits.forEach((u) => {
+          const total = Number(u.total || 0);
+          const completed = Number(u.completed || 0);
+          const incomplete = Math.max(0, total - completed);
+          const rate = u.completionRate !== undefined
+            ? `${formatPercent(u.completionRate)}%`
+            : (total > 0 ? `${formatPercent(Math.round((completed / total) * 1000) / 10)}%` : '0%');
+          aoa.push([u.unitName || '未設定單位', total, completed, incomplete, rate]);
+        });
+      }
+
+      return aoa;
+    }
+
+    function buildLearnerDetailsSheetAoa(learners) {
+      const headers = [
+        '姓名', '電子郵件', '工作地點', '所屬單位', '職務名稱',
+        '人員狀態', '觀看進度', '累計觀看秒數', '影片觀看合格', '測驗最佳分數',
+        '測驗最新分數', '測驗最新結果', '測驗測驗次數', '最終訓練狀態', '最後活動時間'
+      ];
+
+      const aoa = [headers];
+      const list = Array.isArray(learners) ? learners : [];
+
+      list.forEach((learner) => {
+        const row = [
+          learner.name || '',
+          learner.email || '',
+          learner.location || '-',
+          learner.assignmentOrgName || '未設定單位',
+          learner.assignmentTitle || '-',
+          learner.personnelStatus || '-',
+          `${formatPercent(learner.watchedPercent)}%`,
+          Number(learner.watchedSecondsCount || 0),
+          learner.watchCompleted ? '是' : '否',
+          (learner.bestScore !== null && learner.bestScore !== undefined && learner.bestScore !== '') ? Number(learner.bestScore) : '-',
+          (learner.latestScore !== null && learner.latestScore !== undefined && learner.latestScore !== '') ? Number(learner.latestScore) : '-',
+          learner.latestResult || '未作答',
+          Number(learner.attemptCount || 0),
+          learner.statusLabel || (learner.status === 'completed' ? '已完成' : learner.status === 'pending_quiz' ? '待補測' : learner.status === 'in_progress' ? '進行中' : '未開始'),
+          learner.lastActivityAt ? (formatExportDateTime(learner.lastActivityAt) || learner.lastActivityAt) : '無紀錄'
+        ];
+        aoa.push(row);
+      });
+
+      return aoa;
+    }
+
+    function calculateColWidths(aoa) {
+      if (!Array.isArray(aoa) || aoa.length === 0) return [];
+      const colWidths = [];
+      aoa.forEach((row) => {
+        if (!Array.isArray(row)) return;
+        row.forEach((cell, colIndex) => {
+          const str = (cell === null || cell === undefined) ? '' : String(cell);
+          let width = 0;
+          for (let i = 0; i < str.length; i += 1) {
+            const code = str.charCodeAt(i);
+            if (code > 255 || (code >= 0x4e00 && code <= 0x9fa5)) {
+              width += 2.1;
+            } else {
+              width += 1.1;
+            }
+          }
+          const paddedWidth = Math.ceil(width) + 3;
+          colWidths[colIndex] = Math.max(colWidths[colIndex] || 10, paddedWidth);
+        });
+      });
+      return colWidths.map((wch) => ({ wch: Math.min(60, Math.max(10, wch)) }));
+    }
+
+    function buildExportWorkbook(learners, kpis, unitSummary, state) {
+      if (typeof XLSX === 'undefined') {
+        throw new Error('未載入 XLSX 套件，無法建置匯出檔案。');
+      }
+
+      const wb = XLSX.utils.book_new();
+      const meta = {
+        courseTitle: (state && state.courseTitle) || '資訊安全教育訓練',
+        exportTime: formatExportDateTime(new Date()),
+        operatorEmail: (state && state.viewerEmail) || '系統管理員'
+      };
+
+      const filtersSummaryList = formatFiltersSummary(state ? state.filters : {});
+      const summaryAoa = buildSummarySheetAoa(meta, kpis, unitSummary, filtersSummaryList);
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+      wsSummary['!cols'] = calculateColWidths(summaryAoa);
+
+      const detailsAoa = buildLearnerDetailsSheetAoa(learners);
+      const wsDetails = XLSX.utils.aoa_to_sheet(detailsAoa);
+      wsDetails['!cols'] = calculateColWidths(detailsAoa);
+
+      XLSX.utils.book_append_sheet(wb, wsSummary, '訓練統計摘要');
+      XLSX.utils.book_append_sheet(wb, wsDetails, '學員明細清單');
+
+      return wb;
+    }
+
     function exportTrainingReport() {
       // To be implemented in Task 3
     }
