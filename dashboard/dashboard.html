@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -1693,8 +1694,86 @@
       return wb;
     }
 
+    function generateExportFileName(courseTitle, date) {
+      const rawTitle = (courseTitle !== undefined && courseTitle !== null && String(courseTitle).trim())
+        ? String(courseTitle).trim()
+        : '資訊安全教育訓練';
+      const cleanTitle = rawTitle.replace(/[\\/:*?"<>|]/g, '_').trim() || '資訊安全教育訓練';
+      const d = (date instanceof Date && !isNaN(date.getTime()))
+        ? date
+        : new Date(typeof date === 'number' ? date : String(date || '').trim());
+      const safeDate = !isNaN(d.getTime()) ? d : new Date();
+      const YYYY = safeDate.getFullYear();
+      const MM = String(safeDate.getMonth() + 1).padStart(2, '0');
+      const DD = String(safeDate.getDate()).padStart(2, '0');
+      const HH = String(safeDate.getHours()).padStart(2, '0');
+      const mm = String(safeDate.getMinutes()).padStart(2, '0');
+      const timeString = `${YYYY}${MM}${DD}_${HH}${mm}`;
+      return `教育訓練報告_${cleanTitle}_${timeString}.xlsx`;
+    }
+
     function exportTrainingReport() {
-      // To be implemented in Task 3
+      if (typeof XLSX === 'undefined') {
+        const errMsg = '未載入 XLSX 套件，無法建置匯出檔案。';
+        if (typeof Swal !== 'undefined') {
+          Swal.fire('錯誤', errMsg, 'error');
+        } else {
+          alert(errMsg);
+        }
+        return;
+      }
+
+      const learners = applyFilters(state.allLearners);
+      if (!learners || learners.length === 0) {
+        const warnMsg = '目前篩選範圍內無學員資料可供匯出，請調整篩選條件。';
+        if (typeof Swal !== 'undefined') {
+          Swal.fire('提醒', warnMsg, 'warning');
+        } else {
+          alert(warnMsg);
+        }
+        return;
+      }
+
+      const exportBtn = document.getElementById('export-report-btn');
+      const originalText = exportBtn ? exportBtn.textContent : '📊 匯出報告';
+      if (exportBtn) {
+        exportBtn.disabled = true;
+        exportBtn.textContent = '產出中...';
+      }
+
+      try {
+        const { kpis, units } = computeClientMetrics(learners);
+        const wb = buildExportWorkbook(learners, kpis, units, state);
+        const filename = generateExportFileName(state.courseTitle, new Date());
+        XLSX.writeFile(wb, filename);
+
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'success',
+            title: '已成功匯出教育訓練報告！',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true
+          });
+        } else {
+          alert('已成功匯出教育訓練報告！');
+        }
+      } catch (error) {
+        console.error('匯出報表失敗:', error);
+        const errMsg = (error && error.message) ? error.message : '匯出報表時發生未知錯誤，請重試。';
+        if (typeof Swal !== 'undefined') {
+          Swal.fire('匯出失敗', errMsg, 'error');
+        } else {
+          alert('匯出報表失敗：' + errMsg);
+        }
+      } finally {
+        if (exportBtn) {
+          exportBtn.disabled = false;
+          exportBtn.textContent = originalText;
+        }
+      }
     }
 
     function renderDashboard() {
