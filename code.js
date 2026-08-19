@@ -1991,7 +1991,7 @@ function getSimpleLearnerStatusLabel_(status) {
  */
 function buildSimpleTrainingStatsFromData_(personnelRows, trainingRows) {
   const quizByEmail = new Map();
-  let defaultCourseTitle = '資安暨個資教育訓練';
+  let defaultCourseTitle = '';
 
   if (Array.isArray(trainingRows) && trainingRows.length > 1) {
     for (let i = 1; i < trainingRows.length; i += 1) {
@@ -2077,7 +2077,7 @@ function buildSimpleTrainingStatsFromData_(personnelRows, trainingRows) {
     generatedAt: typeof Utilities !== 'undefined' && Utilities.formatDate
       ? Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss')
       : new Date().toISOString(),
-    courseTitle: defaultCourseTitle,
+    courseTitle: defaultCourseTitle || '資安暨個資教育訓練',
     summary: {
       totalEligible,
       passedCount,
