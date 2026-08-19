@@ -22,7 +22,7 @@ while ((match = scriptRegex.exec(html)) !== null) {
   }
 }
 assert(inlineScripts.length > 0, '無法於 dashboard.html 中找到內嵌 script 區塊');
-const scriptContent = inlineScripts.join('\n');
+const scriptContent = inlineScripts.join('\n').replace('const state =', 'var state =');
 
 // 建立 Mock DOM 與環境
 let alertMessages = [];
