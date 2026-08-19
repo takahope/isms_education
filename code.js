@@ -29,8 +29,17 @@ const SHEET_HEADERS = {
   觀看進度: ['使用者信箱', '課程名稱', '影片ID', '已觀看區間', '已觀看秒數', '最後播放位置', '最後更新時間', '最後同步來源版本']
 };
 
-// 1. 發佈為 Web App 時的進入點
-function doGet() {
+// 1. 發佈為 Web App 時的進入點 (支援 ?page=stats 簡易統計頁面)
+function doGet(e) {
+  const page = e && e.parameter && e.parameter.page ? String(e.parameter.page).trim().toLowerCase() : '';
+  if (page === 'stats') {
+    return HtmlService.createTemplateFromFile('stats')
+      .evaluate()
+      .setTitle('即時課程統計儀表板')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
   return HtmlService.createTemplateFromFile('index')
       .evaluate()
       .setTitle('臺灣人體生物資料庫資安暨個資教育訓練')
