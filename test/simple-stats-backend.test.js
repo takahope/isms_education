@@ -33,7 +33,8 @@ const evalContext = new Function(
       isEligiblePersonnelStatus_,
       isExcludedLocation_,
       buildSimpleTrainingStatsFromData_,
-      resolveSimpleLearnerTrainingStatus_
+      resolveSimpleLearnerTrainingStatus_,
+      getSimpleTrainingStats
     };
   }`
 );
@@ -98,5 +99,50 @@ assert.strictEqual(result.summary.completionRate, '25.0%', '完成率應為 25.0
 result.learners.forEach((learner) => {
   assert.strictEqual(learner.hasOwnProperty('score'), false, `學員 ${learner.name} 不得包含 score 欄位`);
 });
+
+// 6. 測試 getSimpleTrainingStats 在獨立試算表架構下的執行能力 (masterSS 包含 人員主檔，activeSS 包含 訓練紀錄)
+const mockMasterSheet = {
+  getDataRange: () => ({
+    getDisplayValues: () => mockPersonnelRows
+  })
+};
+
+const mockTrainingSheet = {
+  getLastRow: () => mockTrainingRows.length,
+  getDataRange: () => ({
+    getDisplayValues: () => mockTrainingRows
+  })
+};
+
+const mockMasterSS = {
+  getSheetByName: (name) => {
+    if (name === '人員主檔') return mockMasterSheet;
+    return null; // 主檔試算表刻意不包含「訓練紀錄」
+  }
+};
+
+const mockActiveSS = {
+  getSheetByName: (name) => {
+    if (name === '訓練紀錄') return mockTrainingSheet;
+    return null;
+  }
+};
+
+sandbox.ENV = {
+  MASTER_SHEET_ID: 'MOCK_MASTER_ID'
+};
+
+sandbox.SpreadsheetApp = {
+  openById: (id) => {
+    if (id === 'MOCK_MASTER_ID') return mockMasterSS;
+    throw new Error('找不到指定試算表');
+  },
+  getActiveSpreadsheet: () => mockActiveSS
+};
+
+const statsResult = evalContext(sandbox).getSimpleTrainingStats();
+assert.strictEqual(statsResult.success, true, `getSimpleTrainingStats 應成功執行: ${statsResult.message}`);
+assert.strictEqual(statsResult.summary.totalEligible, 4, '應訓總人數應為 4');
+assert.strictEqual(statsResult.summary.passedCount, 1, '已通過人數應為 1');
 
 console.log('✓ 後端資料管線與隱私防護單元測試全數通過！');

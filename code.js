@@ -2098,10 +2098,17 @@ function getSimpleTrainingStats() {
   try {
     const masterSS = getMasterSpreadsheet_();
     const personnelSheet = getRequiredSheet_(masterSS, '人員主檔');
-    const trainingSheet = getRequiredSheet_(masterSS, QUIZ_CONFIG.trainingRecordSheetName);
-
     const personnelRows = personnelSheet.getDataRange().getDisplayValues();
-    const trainingRows = trainingSheet.getDataRange().getDisplayValues();
+
+    let trainingRows = [];
+    const activeSS = SpreadsheetApp.getActiveSpreadsheet();
+    let trainingSheet = activeSS ? activeSS.getSheetByName(QUIZ_CONFIG.trainingRecordSheetName) : null;
+    if (!trainingSheet && masterSS) {
+      trainingSheet = masterSS.getSheetByName(QUIZ_CONFIG.trainingRecordSheetName);
+    }
+    if (trainingSheet && trainingSheet.getLastRow() >= 1) {
+      trainingRows = trainingSheet.getDataRange().getDisplayValues();
+    }
 
     return buildSimpleTrainingStatsFromData_(personnelRows, trainingRows);
   } catch (error) {
