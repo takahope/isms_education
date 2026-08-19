@@ -145,19 +145,29 @@
     <div class="card bg-white shadow-sm">
       <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-          <!-- Tabs -->
-          <ul class="nav nav-pills" id="stats-tabs">
-            <li class="nav-item">
-              <button class="nav-link active" id="tab-incomplete" onclick="switchTab('incomplete')">
-                <i class="fas fa-exclamation-circle me-1"></i>待完成名單 (<span id="tab-incomplete-badge">0</span>)
-              </button>
-            </li>
-            <li class="nav-item">
-              <button class="nav-link" id="tab-all" onclick="switchTab('all')">
-                <i class="fas fa-list me-1"></i>全部應訓名單 (<span id="tab-all-badge">0</span>)
-              </button>
-            </li>
-          </ul>
+          <!-- Tabs & Filters -->
+          <div class="d-flex flex-wrap align-items-center gap-3">
+            <ul class="nav nav-pills" id="stats-tabs">
+              <li class="nav-item">
+                <button class="nav-link active" id="tab-incomplete" onclick="switchTab('incomplete')">
+                  <i class="fas fa-exclamation-circle me-1"></i>待完成名單 (<span id="tab-incomplete-badge">0</span>)
+                </button>
+              </li>
+              <li class="nav-item">
+                <button class="nav-link" id="tab-all" onclick="switchTab('all')">
+                  <i class="fas fa-list me-1"></i>全部應訓名單 (<span id="tab-all-badge">0</span>)
+                </button>
+              </li>
+            </ul>
+
+            <!-- 排除育嬰假 Checkbox -->
+            <div class="form-check mb-0 d-flex align-items-center gap-2 ps-2">
+              <input class="form-check-input mt-0" type="checkbox" id="exclude-parental-leave-checkbox" onchange="handleParentalLeaveToggle()" style="cursor: pointer;">
+              <label class="form-check-label small fw-semibold text-secondary user-select-none" for="exclude-parental-leave-checkbox" style="cursor: pointer;">
+                <i class="fas fa-user-minus text-muted me-1"></i>排除育嬰假人員
+              </label>
+            </div>
+          </div>
 
           <!-- Search Box -->
           <div class="input-group" style="max-width: 280px;">
@@ -202,6 +212,7 @@
     let state = {
       currentTab: 'incomplete', // 'incomplete' | 'all'
       searchKeyword: '',
+      excludeParentalLeave: false,
       allLearners: [],
       summary: null,
       isLoading: false
@@ -220,10 +231,47 @@
       if (clockEl) clockEl.textContent = formatted;
     }
 
+    function getEffectiveLearners() {
+      if (state.excludeParentalLeave) {
+        return state.allLearners.filter(l => l.status !== '育嬰假');
+      }
+      return state.allLearners;
+    }
+
+    function updateKPIs() {
+      const effective = getEffectiveLearners();
+      const total = effective.length;
+      const passed = effective.filter(l => l.trainingStatus === 'passed').length;
+      const failed = effective.filter(l => l.trainingStatus === 'failed').length;
+      const unattempted = effective.filter(l => l.trainingStatus === 'unattempted').length;
+      const incomplete = failed + unattempted;
+      const percent = total > 0 ? Math.round((passed / total) * 1000) / 10 : 0;
+
+      document.getElementById('percentage-value').textContent = percent.toFixed(1) + '%';
+      const progressBar = document.getElementById('progress-bar');
+      progressBar.style.width = percent + '%';
+      progressBar.setAttribute('aria-valuenow', percent);
+
+      document.getElementById('total-count').textContent = total;
+      document.getElementById('passed-count').textContent = passed;
+      document.getElementById('incomplete-count').textContent = incomplete;
+
+      // 更新 Tab Badge 數字
+      document.getElementById('tab-incomplete-badge').textContent = incomplete;
+      document.getElementById('tab-all-badge').textContent = total;
+    }
+
     function switchTab(tab) {
       state.currentTab = tab;
       document.getElementById('tab-incomplete').classList.toggle('active', tab === 'incomplete');
       document.getElementById('tab-all').classList.toggle('active', tab === 'all');
+      renderTable();
+    }
+
+    function handleParentalLeaveToggle() {
+      const checkbox = document.getElementById('exclude-parental-leave-checkbox');
+      state.excludeParentalLeave = Boolean(checkbox && checkbox.checked);
+      updateKPIs();
       renderTable();
     }
 
@@ -257,24 +305,12 @@
       state.allLearners = res.learners || [];
       state.summary = res.summary || {};
 
-      // 1. 更新 KPI
-      document.getElementById('percentage-value').textContent = state.summary.completionRate || '0.0%';
-      const progressBar = document.getElementById('progress-bar');
-      const percentVal = state.summary.completionPercent || 0;
-      progressBar.style.width = percentVal + '%';
-      progressBar.setAttribute('aria-valuenow', percentVal);
-
-      document.getElementById('total-count').textContent = state.summary.totalEligible || 0;
-      document.getElementById('passed-count').textContent = state.summary.passedCount || 0;
-      document.getElementById('incomplete-count').textContent = state.summary.incompleteCount || 0;
-
-      // 2. 更新 Tab Badge 數字
-      const incompleteCount = state.allLearners.filter(l => l.trainingStatus !== 'passed').length;
-      document.getElementById('tab-incomplete-badge').textContent = incompleteCount;
-      document.getElementById('tab-all-badge').textContent = state.allLearners.length;
       document.getElementById('last-updated-time').textContent = res.generatedAt || '--';
 
-      // 3. 渲染表格
+      // 1. 更新 KPI 與 Tab Badge
+      updateKPIs();
+
+      // 2. 渲染表格
       renderTable();
     }
 
@@ -291,7 +327,7 @@
 
     function renderTable() {
       const tbody = document.getElementById('learners-table-body');
-      let filtered = state.allLearners.slice();
+      let filtered = getEffectiveLearners().slice();
 
       // Tab 過濾
       if (state.currentTab === 'incomplete') {
