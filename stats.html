@@ -194,7 +194,7 @@
     </div>
 
     <footer class="text-center text-muted small pt-4 pb-3">
-      數據每 60 秒自動更新 ｜ 最後同步時間：<span id="last-updated-time">--</span>
+      數據每 1 小時自動更新 ｜ 最後同步時間：<span id="last-updated-time">--</span>
     </footer>
   </div>
 
@@ -356,8 +356,8 @@
       updateClock();
       setInterval(updateClock, 1000);
       updateDashboard();
-      // 每 60 秒自動更新
-      setInterval(updateDashboard, 60000);
+      // 每 1 小時自動更新 (3600000 ms)
+      setInterval(updateDashboard, 60 * 60 * 1000);
     });
   </script>
 </body>
