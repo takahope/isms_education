@@ -163,7 +163,7 @@ exportTrainingReport();
 
 assert.strictEqual(writtenFiles.length, 1, '正常流程應觸發一次 XLSX.writeFile');
 assert(writtenFiles[0].filename.startsWith('教育訓練報告_測試課程_'), '匯出檔名應正確包含課程名稱');
-assert.strictEqual(writtenFiles[0].filename.endsWith('.xlsx'), '匯出檔名副檔名應為 .xlsx');
+assert(writtenFiles[0].filename.endsWith('.xlsx'), '匯出檔名副檔名應為 .xlsx');
 assert.strictEqual(mockBtn.disabled, false, '匯出完成後按鈕應恢復啟用');
 assert.strictEqual(mockBtn.textContent, '📊 匯出報告', '匯出完成後按鈕文字應恢復原狀');
 assert(
