@@ -1942,3 +1942,175 @@ function shuffleArray_(array) {
 function getAttemptCacheKey_(attemptId) {
   return `quiz_attempt_${attemptId}`;
 }
+
+/**
+ * 簡易統計頁面：在勤狀態白名單判斷
+ */
+const SIMPLE_STATS_ELIGIBLE_STATUSES = new Set(['在勤', '育嬰假']);
+
+function isEligiblePersonnelStatus_(status) {
+  return SIMPLE_STATS_ELIGIBLE_STATUSES.has(String(status || '').trim());
+}
+
+/**
+ * 簡易統計頁面：工作地點排除判斷 (排除 outside)
+ */
+function isExcludedLocation_(location) {
+  return String(location || '').trim().toLowerCase() === 'outside';
+}
+
+/**
+ * 簡易統計頁面：學員測驗狀態判定
+ */
+function resolveSimpleLearnerTrainingStatus_(hasPassed, attemptCount) {
+  if (hasPassed) return 'passed';
+  if (attemptCount > 0) return 'failed';
+  return 'unattempted';
+}
+
+function getSimpleLearnerStatusLabel_(status) {
+  const labels = {
+    passed: '通過',
+    failed: '未通過',
+    unattempted: '未受訓'
+  };
+  return labels[status] || '未受訓';
+}
+
+/**
+ * 從人員主檔與訓練紀錄陣列計算簡易統計資料（不包含任何分數欄位）
+ */
+function buildSimpleTrainingStatsFromData_(personnelRows, trainingRows) {
+  const quizByEmail = new Map();
+  let defaultCourseTitle = '資安暨個資教育訓練';
+
+  if (Array.isArray(trainingRows) && trainingRows.length > 1) {
+    for (let i = 1; i < trainingRows.length; i += 1) {
+      const email = normalizeEmail_(trainingRows[i][2]);
+      if (!email) continue;
+      const courseTitle = String(trainingRows[i][3] || '').trim();
+      const result = String(trainingRows[i][5] || '').trim();
+      if (courseTitle && !defaultCourseTitle) defaultCourseTitle = courseTitle;
+
+      if (!quizByEmail.has(email)) {
+        quizByEmail.set(email, {
+          hasPassed: false,
+          attemptCount: 0
+        });
+      }
+      const record = quizByEmail.get(email);
+      record.attemptCount += 1;
+      if (result === '通過') {
+        record.hasPassed = true;
+      }
+    }
+  }
+
+  const learners = [];
+  let totalEligible = 0;
+  let passedCount = 0;
+  let failedCount = 0;
+  let unattemptedCount = 0;
+
+  if (Array.isArray(personnelRows) && personnelRows.length > 1) {
+    for (let i = 1; i < personnelRows.length; i += 1) {
+      const email = normalizeEmail_(personnelRows[i][0]);
+      if (!email) continue;
+      const name = String(personnelRows[i][1] || '').trim();
+      const status = String(personnelRows[i][2] || '').trim();
+      const location = String(personnelRows[i][7] || '').trim();
+
+      // 篩選：C 欄為在勤/育嬰假 且 H 欄非 outside
+      if (!isEligiblePersonnelStatus_(status)) continue;
+      if (isExcludedLocation_(location)) continue;
+
+      totalEligible += 1;
+      const quiz = quizByEmail.get(email) || { hasPassed: false, attemptCount: 0 };
+      const trainingStatus = resolveSimpleLearnerTrainingStatus_(quiz.hasPassed, quiz.attemptCount);
+      const trainingStatusLabel = getSimpleLearnerStatusLabel_(trainingStatus);
+
+      if (trainingStatus === 'passed') {
+        passedCount += 1;
+      } else if (trainingStatus === 'failed') {
+        failedCount += 1;
+      } else {
+        unattemptedCount += 1;
+      }
+
+      learners.push({
+        name,
+        email,
+        status,
+        location,
+        trainingStatus,
+        trainingStatusLabel
+      });
+    }
+  }
+
+  // 排序：未完成優先 (failed -> unattempted -> passed)，同狀態依姓名排序
+  const statusSortWeight = { failed: 1, unattempted: 2, passed: 3 };
+  learners.sort((a, b) => {
+    const weightA = statusSortWeight[a.trainingStatus] || 99;
+    const weightB = statusSortWeight[b.trainingStatus] || 99;
+    if (weightA !== weightB) return weightA - weightB;
+    return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant');
+  });
+
+  const incompleteCount = failedCount + unattemptedCount;
+  const completionPercent = totalEligible > 0
+    ? Math.round((passedCount / totalEligible) * 1000) / 10
+    : 0;
+  const completionRate = `${completionPercent.toFixed(1)}%`;
+
+  return {
+    success: true,
+    generatedAt: typeof Utilities !== 'undefined' && Utilities.formatDate
+      ? Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss')
+      : new Date().toISOString(),
+    courseTitle: defaultCourseTitle,
+    summary: {
+      totalEligible,
+      passedCount,
+      failedCount,
+      unattemptedCount,
+      incompleteCount,
+      completionRate,
+      completionPercent
+    },
+    learners
+  };
+}
+
+/**
+ * 前端 API：獲取簡易教育訓練即時統計數據
+ */
+function getSimpleTrainingStats() {
+  try {
+    const masterSS = getMasterSpreadsheet_();
+    const personnelSheet = getRequiredSheet_(masterSS, '人員主檔');
+    const trainingSheet = getRequiredSheet_(masterSS, QUIZ_CONFIG.trainingRecordSheetName);
+
+    const personnelRows = personnelSheet.getDataRange().getDisplayValues();
+    const trainingRows = trainingSheet.getDataRange().getDisplayValues();
+
+    return buildSimpleTrainingStatsFromData_(personnelRows, trainingRows);
+  } catch (error) {
+    console.error('獲取簡易教育訓練統計失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : '無法載入統計數據',
+      summary: {
+        totalEligible: 0,
+        passedCount: 0,
+        failedCount: 0,
+        unattemptedCount: 0,
+        incompleteCount: 0,
+        completionRate: '0.0%',
+        completionPercent: 0
+      },
+      learners: []
+    };
+  }
+}
+
