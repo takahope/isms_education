@@ -1742,8 +1742,8 @@
       }
 
       try {
-        const { kpis, units } = computeClientMetrics(learners);
-        const wb = buildExportWorkbook(learners, kpis, units, state);
+        const { kpis, allUnits, units } = computeClientMetrics(learners);
+        const wb = buildExportWorkbook(learners, kpis, allUnits || units, state);
         const filename = generateExportFileName(state.courseTitle, new Date());
         XLSX.writeFile(wb, filename);
 
@@ -1864,15 +1864,16 @@
           .slice(0, 8)
       };
 
-      const units = Array.from(unitMap.values())
+      const allUnits = Array.from(unitMap.values())
         .map((unit) => ({
           ...unit,
           completionRate: unit.total > 0 ? Math.round((unit.completed / unit.total) * 1000) / 10 : 0
         }))
-        .sort((left, right) => right.total - left.total || left.unitName.localeCompare(right.unitName, 'zh-Hant'))
-        .slice(0, 8);
+        .sort((left, right) => right.total - left.total || left.unitName.localeCompare(right.unitName, 'zh-Hant'));
 
-      return { kpis, alerts, units };
+      const units = allUnits.slice(0, 8);
+
+      return { kpis, alerts, units, allUnits };
     }
 
     function renderKpis(kpis) {
