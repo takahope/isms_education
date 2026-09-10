@@ -323,6 +323,82 @@
       return `${parts[0]} 年 ${parseInt(parts[1], 10)} 月 ${parseInt(parts[2], 10)} 日`;
     }
 
+    // 全域除錯函式：供開發者/管理員於瀏覽器 Console (F12) 快速診斷特定長官資料
+    window.testLeader = function(targetEmail) {
+      if (!targetEmail) {
+        console.warn('請輸入欲查詢的長官信箱，例如：testLeader("director@biobank.org.tw")');
+        return;
+      }
+      const normEmail = String(targetEmail).trim();
+      console.log('%c[ISMS] 正在查詢長官 [' + normEmail + '] 的職務與信件資料...', 'color: #4f46e5; font-weight: bold;');
+
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        console.warn('非 GAS 執行環境，無法透過 RPC 查詢後端資料');
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.success) {
+            console.error('❌ 查詢失敗:', (res && res.message) ? res.message : res);
+            return;
+          }
+
+          const l = res.learner;
+          console.group('%c長官診斷報告：' + l.name + ' (' + l.email + ')', 'color: #059669; font-weight: bold;');
+
+          console.table({
+            '姓名': l.name,
+            '公務信箱': l.email,
+            '所屬單位 ({{單位}})': l.primaryAssignment.orgName,
+            '職稱 ({{職稱}})': l.primaryAssignment.title,
+            '層級1~4行政長官': l.isExecutiveAdmin ? '✅ 符合（層級1~4行政職）' : '❌ 不符合（非行政長官）',
+            '人員狀態': l.personnelStatus,
+            '受訓狀態': l.statusLabel + ' (' + l.status + ')',
+            '觀看進度': l.watchedPercent + '%',
+            '測驗最高分': l.bestScore + ' 分',
+            '影子信箱 (雙軌)': l.hasShadow ? '✅ 已綁定 (' + l.shadowEmails.join(', ') + ')' : '❌ 未綁定'
+          });
+
+          if (l.allAssignments && l.allAssignments.length > 1) {
+            console.group('📋 兼任與多重職務清單（共 ' + l.allAssignments.length + ' 筆）：');
+            console.table(l.allAssignments.map(function(a, idx) {
+              return {
+                '序號': idx === 0 ? '★ 主職' : ('兼職 ' + idx),
+                '組別代碼': a.orgCode,
+                '組別/單位名稱': a.orgName,
+                '職稱': a.title,
+                '組織類型': a.type,
+                '組織層級': a.level
+              };
+            }));
+            console.groupEnd();
+          }
+
+          console.group('📧 個人化催辦信件渲染預覽：');
+          console.log('%c【信件主旨】', 'color: #2563eb; font-weight: bold;', res.preview.subject);
+          console.log('%c【信件內文預覽】', 'color: #2563eb; font-weight: bold;');
+          console.log(
+            '稱謂: ' + l.name + ' 長官/主管 您好：\n' +
+            '所屬單位: ' + l.primaryAssignment.orgName + '\n' +
+            '職稱: ' + l.primaryAssignment.title + '\n' +
+            '目前狀態: ' + l.statusLabel + '\n' +
+            '修課期限: ' + res.preview.deadlineText
+          );
+          if (l.hasShadow && res.preview.shadowCapabilityUrl) {
+            console.log('%c【影子信箱免登入 URL】', 'color: #d97706; font-weight: bold;', res.preview.shadowCapabilityUrl);
+          }
+          console.groupEnd();
+
+          console.groupEnd();
+        })
+        .withFailureHandler(function(err) {
+          console.error('❌ RPC 呼叫發生例外:', err);
+        })
+        .debugGetLeaderProfile(normEmail);
+    };
+    window.testLeaderMention = window.testLeader;
+
     // 取得表單 Payload
     function getFormPayload() {
       const templateType = document.getElementById('mention-template-type').value;

@@ -4242,3 +4242,127 @@ function authorizeMailAppScope() {
   Logger.log('MailApp 授權成功！剩餘每日寄信額度: ' + remainingQuota);
   return remainingQuota;
 }
+
+/**
+ * 查詢與診斷特定長官主管之職務、單位與催辦信件解析樣態 (供 Console 與後端除錯使用)
+ * 穿透受訓狀態過濾 (即使長官已及格完課亦能調閱)，展示主職、所有兼職、行政資格與信件渲染預覽。
+ *
+ * @param {string} email - 長官公務信箱
+ * @param {Object} [options] - 可選設定 (供單元測試傳入 context/viewerEmail)
+ * @returns {Object}
+ */
+function debugGetLeaderProfile(email, options) {
+  try {
+    const opts = options || {};
+    const viewerEmail = opts.viewerEmail || getCurrentUserEmail();
+    if (!canAccessMention_(viewerEmail)) {
+      return {
+        success: false,
+        message: '權限不足：您未被授權執行長官資料診斷。'
+      };
+    }
+
+    const targetEmail = normalizeEmail_(email);
+    if (!targetEmail || !isValidEmail_(targetEmail)) {
+      return {
+        success: false,
+        message: '請提供有效的長官公務信箱。'
+      };
+    }
+
+    const context = (opts.context) || buildMentionContext_();
+    const learner = (context.learners || []).find((l) => normalizeEmail_(l.email) === targetEmail);
+
+    if (!learner) {
+      const hasAssignment = (context.assignments || []).some((a) => normalizeEmail_(a.email) === targetEmail);
+      return {
+        success: false,
+        message: hasAssignment
+          ? `信箱 [${targetEmail}] 雖有職務配置，但未在「人員主檔」中或已被標記為「離職」。`
+          : `在人員名單中查無此信箱 [${targetEmail}]。`
+      };
+    }
+
+    const isExecutiveAdmin = hasExecutiveAdminAssignment_(targetEmail, context);
+    const shadowEmails = resolveMentionShadowEmails_(targetEmail);
+    const hasShadow = shadowEmails.length > 0;
+
+    const courseTitle = context.courseTitle || MENTION_CONFIG.defaultCourseTitle;
+    const currentYear = new Date().getFullYear();
+    const deadlineDate = `${currentYear}-08-30`;
+    const deadlineText = formatChineseDeadlineDate_(deadlineDate);
+    const courseUrl = resolveBaseCourseUrl_('');
+
+    // 渲染個人化長官信件範本
+    const defaultIndTpl = buildLeadershipReminderIndividualTemplate_(courseTitle);
+    const renderedSubject = defaultIndTpl.subject
+      .replace(/\{\{課程名稱\}\}/g, courseTitle)
+      .replace(/\{\{修課期限\}\}/g, deadlineText);
+
+    const baseHtmlBody = defaultIndTpl.htmlBody
+      .replace(/\{\{姓名\}\}/g, escapeHtml_(learner.name))
+      .replace(/\{\{信箱\}\}/g, escapeHtml_(learner.email))
+      .replace(/\{\{單位\}\}/g, escapeHtml_(learner.assignmentOrgName || ''))
+      .replace(/\{\{職稱\}\}/g, escapeHtml_(learner.assignmentTitle || ''))
+      .replace(/\{\{課程名稱\}\}/g, escapeHtml_(courseTitle))
+      .replace(/\{\{修課期限\}\}/g, escapeHtml_(deadlineText))
+      .replace(/\{\{訓練狀態\}\}/g, escapeHtml_(learner.statusLabel || '未完成'))
+      .replace(/\{\{上課網址\}\}/g, courseUrl || '#');
+
+    let shadowCapabilityUrl = '';
+    let shadowHtmlBody = '';
+    if (hasShadow) {
+      shadowCapabilityUrl = buildLearnerCapabilityUrl_(courseUrl, courseTitle, targetEmail);
+      const noticeBanner = buildShadowForwardingNoticeHtml_(learner.name);
+      shadowHtmlBody = injectCapabilityUrlIntoHtmlBody_(baseHtmlBody, shadowCapabilityUrl, noticeBanner);
+    }
+
+    return {
+      success: true,
+      viewerEmail,
+      targetEmail,
+      learner: {
+        name: learner.name,
+        email: learner.email,
+        personnelStatus: learner.personnelStatus || '在勤',
+        location: learner.location || '',
+        status: learner.status || 'not_started',
+        statusLabel: learner.statusLabel || '未完成',
+        watchedPercent: Number(learner.watchedPercent || 0),
+        bestScore: Number(learner.bestScore || 0),
+        isExecutiveAdmin,
+        primaryAssignment: {
+          orgCode: learner.assignmentOrgCode || '',
+          orgName: learner.assignmentOrgName || '',
+          title: learner.assignmentTitle || '',
+          type: learner.assignmentOrgType || '',
+          level: Number(learner.assignmentOrgLevel || 0)
+        },
+        allAssignments: (learner.assignments || []).map((asgn) => ({
+          orgCode: asgn.orgCode || '',
+          orgName: asgn.orgName || (asgn.name || ''),
+          title: asgn.title || '',
+          type: asgn.type || '',
+          level: Number(asgn.level || 0)
+        })),
+        hasShadow,
+        shadowEmails
+      },
+      preview: {
+        courseTitle,
+        deadlineDate,
+        deadlineText,
+        subject: renderedSubject,
+        htmlBody: baseHtmlBody,
+        shadowCapabilityUrl,
+        shadowHtmlBody
+      }
+    };
+  } catch (error) {
+    console.error('長官資料診斷失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : String(error)
+    };
+  }
+}
