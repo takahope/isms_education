@@ -2385,8 +2385,8 @@ function buildNotificationLoginReminderHtml_() {
 function buildNotificationAutoReplyFooterHtml_() {
   return [
     '<p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">',
-    '※ 本信件為系統自動發送，請勿直接回覆此信件。<br>',
-    '若有課程或系統操作疑問，請洽資訊安全小組承辦人。',
+    '此為自動發送之通知信件，無需直接回覆。<br>',
+    '如有任何問題，請聯絡專案規劃組(策略組)。',
     '</p>'
   ].join('');
 }
@@ -2936,14 +2936,50 @@ function generateCapabilityToken_(courseTitle, primaryEmail) {
   }
 
   // Node.js 測試環境相容
-  if (typeof require !== 'undefined') {
-    try {
-      const crypto = require('crypto');
-      return crypto.createHmac('sha256', secret).update(payload).digest('hex');
-    } catch (e) {}
-  }
+  try {
+    const nodeCrypto = (typeof require !== 'undefined')
+      ? require('crypto')
+      : ((typeof process !== 'undefined' && process.getBuiltinModule) ? process.getBuiltinModule('crypto') : null);
+    if (nodeCrypto && nodeCrypto.createHmac) {
+      return nodeCrypto.createHmac('sha256', secret).update(payload).digest('hex');
+    }
+  } catch (e) {}
 
   return '';
+}
+
+/**
+ * 組裝學員專屬免登入 HMAC-SHA256 Capability 上課網址
+ * 自動去除 URL 原有的 query parameters (如 ?page=mention)，精準指向上課首頁
+ * @param {string} baseUrl - 基礎 Web App 網址
+ * @param {string} courseTitle - 課程名稱
+ * @param {string} primaryEmail - 學員公務主信箱
+ * @returns {string} 包含 op 與 auth 簽章的專屬網址
+ */
+function buildLearnerCapabilityUrl_(baseUrl, courseTitle, primaryEmail) {
+  const rawUrl = String(baseUrl || '').trim();
+  if (!rawUrl || rawUrl === '#') return '#';
+  const cleanUrl = rawUrl.split('?')[0];
+  const normEmail = normalizeEmail_(primaryEmail);
+  if (!normEmail) return cleanUrl;
+  const token = generateCapabilityToken_(courseTitle, normEmail);
+  if (!token) return cleanUrl;
+  return cleanUrl + '?op=' + encodeURIComponent(normEmail) + '&auth=' + encodeURIComponent(token);
+}
+
+/**
+ * 產生影子信箱專屬直達轉派提示橫幅 HTML
+ * @param {string} learnerName - 學員姓名
+ * @returns {string} HTML 提示區塊
+ */
+function buildShadowForwardingNoticeHtml_(learnerName) {
+  const safeName = escapeHtml_(learnerName || '長官/同仁');
+  return [
+    '<div style="background-color: #fef3c7; border: 1px solid #fcd34d; border-radius: 6px; padding: 12px; margin: 12px 0 16px 0; font-size: 13px; color: #92400e; line-height: 1.5; font-family: sans-serif;">',
+    '🪞 <strong>影子信箱雙軌專屬轉派通知</strong><br>',
+    '此信件為系統自動同步轉派至您的私人信箱。您可直接點擊下方「前往上課」專屬連結，使用手機或個人行動裝置直接上課與測驗，系統將自動以您的公務身分（<strong>' + safeName + '</strong>）記錄受訓進度與成績，無需登入 Google 組織帳號。',
+    '</div>'
+  ].join('');
 }
 
 /**
@@ -3626,9 +3662,10 @@ function executeMentionNotification(payload) {
     const courseTitle = context.courseTitle || MENTION_CONFIG.defaultCourseTitle;
     const deadlineDate = p.deadlineDate || `${new Date().getFullYear()}-08-30`;
     const deadlineText = formatChineseDeadlineDate_(deadlineDate);
-    const courseUrl = (typeof ScriptApp !== 'undefined' && ScriptApp.getService)
-      ? ScriptApp.getService().getUrl()
-      : '';
+    let rawCourseUrl = (p.courseUrl && String(p.courseUrl).trim())
+      ? String(p.courseUrl).trim()
+      : ((typeof ScriptApp !== 'undefined' && ScriptApp.getService) ? (ScriptApp.getService().getUrl() || '') : '');
+    const courseUrl = rawCourseUrl ? rawCourseUrl.split('?')[0] : '';
 
     const failures = [];
     let sentCount = 0;
@@ -3653,56 +3690,66 @@ function executeMentionNotification(payload) {
             .replace(/\{\{課程名稱\}\}/g, courseTitle)
             .replace(/\{\{修課期限\}\}/g, deadlineText);
 
-          const shadowEmails = resolveMentionShadowEmails_(recipient.email);
-          let actualCourseUrl = courseUrl || '#';
-          if (shadowEmails.length > 0 && courseUrl) {
-            const token = generateCapabilityToken_(courseTitle, recipient.email);
-            actualCourseUrl = courseUrl + (courseUrl.includes('?') ? '&' : '?') +
-              'op=' + encodeURIComponent(recipient.email) +
-              '&auth=' + encodeURIComponent(token);
-          }
-
           const templateBody = p.htmlBody || defaultTpl.htmlBody;
-          const htmlBody = templateBody
+          const baseHtmlBody = templateBody
             .replace(/\{\{姓名\}\}/g, escapeHtml_(recipient.name))
             .replace(/\{\{信箱\}\}/g, escapeHtml_(recipient.email))
             .replace(/\{\{單位\}\}/g, escapeHtml_(recipient.assignmentOrgName || ''))
             .replace(/\{\{職稱\}\}/g, escapeHtml_(recipient.assignmentTitle || ''))
             .replace(/\{\{課程名稱\}\}/g, escapeHtml_(courseTitle))
             .replace(/\{\{修課期限\}\}/g, escapeHtml_(deadlineText))
-            .replace(/\{\{訓練狀態\}\}/g, escapeHtml_(recipient.statusLabel || '未完成'))
-            .replace(/\{\{上課網址\}\}/g, actualCourseUrl);
+            .replace(/\{\{訓練狀態\}\}/g, escapeHtml_(recipient.statusLabel || '未完成'));
 
-          const toList = [recipient.email].concat(shadowEmails);
+          // 1. 公務信箱發送
+          const shadowEmails = resolveMentionShadowEmails_(recipient.email);
+          const hasShadow = shadowEmails.length > 0;
+          const targetUrl = hasShadow
+            ? buildLearnerCapabilityUrl_(courseUrl, courseTitle, recipient.email)
+            : (courseUrl || '#');
 
+          const officialHtmlBody = baseHtmlBody.replace(/\{\{上課網址\}\}/g, targetUrl);
           try {
             if (typeof MailApp !== 'undefined' && MailApp.sendEmail) {
               MailApp.sendEmail({
-                to: toList.join(','),
+                to: recipient.email,
                 subject,
-                htmlBody
+                htmlBody: officialHtmlBody
               });
             }
             sentCount += 1;
           } catch (err) {
             failures.push({ email: recipient.email, name: recipient.name, error: err.message });
           }
+
+          // 2. 影子副信箱（單獨寄送專屬 HMAC Capability URL 直達連結）
+          if (hasShadow) {
+            const noticeBanner = buildShadowForwardingNoticeHtml_(recipient.name);
+            const shadowHtmlBody = noticeBanner + baseHtmlBody.replace(/\{\{上課網址\}\}/g, targetUrl);
+
+            shadowEmails.forEach((shadowEmail) => {
+              try {
+                if (typeof MailApp !== 'undefined' && MailApp.sendEmail) {
+                  MailApp.sendEmail({
+                    to: shadowEmail,
+                    subject,
+                    htmlBody: shadowHtmlBody
+                  });
+                }
+              } catch (shadowErr) {
+                console.warn('長官影子信箱轉派失敗 (' + shadowEmail + '):', shadowErr);
+              }
+            });
+          }
         });
       } else {
         // single_bcc 或 direct
-        const allTo = [];
-        selection.recipients.forEach((r) => {
-          allTo.push(r.email);
-          const shadows = resolveMentionShadowEmails_(r.email);
-          if (shadows.length > 0) allTo.push(...shadows);
-        });
-
+        const allTo = selection.recipients.map((r) => r.email);
         const subject = (p.subject || defaultTpl.subject)
           .replace(/\{\{課程名稱\}\}/g, courseTitle)
           .replace(/\{\{修課期限\}\}/g, deadlineText);
 
         const templateBody = p.htmlBody || defaultTpl.htmlBody;
-        const htmlBody = templateBody
+        const officialHtmlBody = templateBody
           .replace(/\{\{課程名稱\}\}/g, escapeHtml_(courseTitle))
           .replace(/\{\{修課期限\}\}/g, escapeHtml_(deadlineText))
           .replace(/\{\{上課網址\}\}/g, courseUrl || '#');
@@ -3714,13 +3761,13 @@ function executeMentionNotification(payload) {
                 to: viewerEmail || allTo[0] || '',
                 bcc: allTo.join(','),
                 subject,
-                htmlBody
+                htmlBody: officialHtmlBody
               });
             } else {
               MailApp.sendEmail({
                 to: allTo.join(','),
                 subject,
-                htmlBody
+                htmlBody: officialHtmlBody
               });
             }
           }
@@ -3728,6 +3775,38 @@ function executeMentionNotification(payload) {
         } catch (err) {
           failures.push({ error: err.message });
         }
+
+        // 針對具影子信箱之長官個別派發專屬免登入連結
+        selection.recipients.forEach((recipient) => {
+          const shadowEmails = resolveMentionShadowEmails_(recipient.email);
+          if (shadowEmails.length > 0) {
+            const capabilityUrl = buildLearnerCapabilityUrl_(courseUrl, courseTitle, recipient.email);
+            const noticeBanner = buildShadowForwardingNoticeHtml_(recipient.name);
+            const shadowHtmlBody = noticeBanner + templateBody
+              .replace(/\{\{姓名\}\}/g, escapeHtml_(recipient.name))
+              .replace(/\{\{信箱\}\}/g, escapeHtml_(recipient.email))
+              .replace(/\{\{單位\}\}/g, escapeHtml_(recipient.assignmentOrgName || ''))
+              .replace(/\{\{職稱\}\}/g, escapeHtml_(recipient.assignmentTitle || ''))
+              .replace(/\{\{課程名稱\}\}/g, escapeHtml_(courseTitle))
+              .replace(/\{\{修課期限\}\}/g, escapeHtml_(deadlineText))
+              .replace(/\{\{訓練狀態\}\}/g, escapeHtml_(recipient.statusLabel || '未完成'))
+              .replace(/\{\{上課網址\}\}/g, capabilityUrl);
+
+            shadowEmails.forEach((shadowEmail) => {
+              try {
+                if (typeof MailApp !== 'undefined' && MailApp.sendEmail) {
+                  MailApp.sendEmail({
+                    to: shadowEmail,
+                    subject,
+                    htmlBody: shadowHtmlBody
+                  });
+                }
+              } catch (shadowErr) {
+                console.warn('長官影子信箱轉派失敗 (' + shadowEmail + '):', shadowErr);
+              }
+            });
+          }
+        });
       }
 
       appendMentionNotificationLog_({
@@ -3768,34 +3847,92 @@ function executeMentionNotification(payload) {
       }
 
       targetGroups.forEach((group) => {
-        const toEmails = [];
-        group.toMembers.forEach((m) => {
-          toEmails.push(m.email);
-          const shadows = resolveMentionShadowEmails_(m.email);
-          if (shadows.length > 0) toEmails.push(...shadows);
-        });
-
-        const ccEmails = [];
-        group.ccMembers.forEach((m) => {
-          ccEmails.push(m.email);
-          const shadows = resolveMentionShadowEmails_(m.email);
-          if (shadows.length > 0) ccEmails.push(...shadows);
-        });
+        // 1. 公務群組信件 (嚴格排除私人 Gmail，避免個資外洩)
+        const toEmails = group.toMembers.map((m) => m.email);
+        const ccEmails = group.ccMembers.map((m) => m.email);
 
         try {
           if (typeof MailApp !== 'undefined' && MailApp.sendEmail) {
-            MailApp.sendEmail({
+            const mailOptions = {
               to: toEmails.join(','),
-              cc: ccEmails.join(','),
               subject: group.subject,
               htmlBody: group.htmlBody
-            });
+            };
+            if (ccEmails.length > 0) {
+              mailOptions.cc = ccEmails.join(',');
+            }
+            MailApp.sendEmail(mailOptions);
           }
           sentCount += 1;
         } catch (err) {
           failures.push({ orgCode: group.orgCode, orgName: group.orgName, error: err.message });
         }
+
+        // 2. 影子信箱精準轉派 (專屬 HMAC-SHA256 直達免登入連結)
+        // A) 未完課同仁專屬直達轉派
+        group.toMembers.forEach((member) => {
+          const shadowEmails = resolveMentionShadowEmails_(member.email);
+          if (shadowEmails.length > 0) {
+            const capUrl = buildLearnerCapabilityUrl_(courseUrl, courseTitle, member.email);
+            const noticeBanner = buildShadowForwardingNoticeHtml_(member.name);
+            let shadowBody = group.htmlBody;
+            if (shadowBody.includes('{{上課網址}}')) {
+              shadowBody = shadowBody.replace(/\{\{上課網址\}\}/g, capUrl);
+            } else if (courseUrl && shadowBody.includes(courseUrl)) {
+              shadowBody = shadowBody.split(courseUrl).join(capUrl);
+            }
+            shadowBody = noticeBanner + shadowBody;
+
+            shadowEmails.forEach((shadowEmail) => {
+              try {
+                if (typeof MailApp !== 'undefined' && MailApp.sendEmail) {
+                  MailApp.sendEmail({
+                    to: shadowEmail,
+                    subject: group.subject,
+                    htmlBody: shadowBody
+                  });
+                }
+              } catch (shadowErr) {
+                console.warn('同仁影子信箱轉派失敗 (' + shadowEmail + '):', shadowErr);
+              }
+            });
+          }
+        });
+
+        // B) 主管督導專屬轉派 (若組長/副組長亦有影子信箱)
+        group.ccMembers.forEach((lead) => {
+          const shadowEmails = resolveMentionShadowEmails_(lead.email);
+          if (shadowEmails.length > 0) {
+            const isLeadIncomplete = group.toMembers.some((m) => normalizeEmail_(m.email) === normalizeEmail_(lead.email));
+            const capUrl = isLeadIncomplete
+              ? buildLearnerCapabilityUrl_(courseUrl, courseTitle, lead.email)
+              : (courseUrl || '#');
+            const noticeBanner = buildShadowForwardingNoticeHtml_(lead.name + ' (組長/主管)');
+            let shadowBody = group.htmlBody;
+            if (shadowBody.includes('{{上課網址}}')) {
+              shadowBody = shadowBody.replace(/\{\{上課網址\}\}/g, capUrl);
+            } else if (courseUrl && shadowBody.includes(courseUrl)) {
+              shadowBody = shadowBody.split(courseUrl).join(capUrl);
+            }
+            shadowBody = noticeBanner + shadowBody;
+
+            shadowEmails.forEach((shadowEmail) => {
+              try {
+                if (typeof MailApp !== 'undefined' && MailApp.sendEmail) {
+                  MailApp.sendEmail({
+                    to: shadowEmail,
+                    subject: group.subject,
+                    htmlBody: shadowBody
+                  });
+                }
+              } catch (shadowErr) {
+                console.warn('主管影子信箱轉派失敗 (' + shadowEmail + '):', shadowErr);
+              }
+            });
+          }
+        });
       });
+
 
       appendMentionNotificationLog_({
         operatorEmail: viewerEmail,
@@ -3808,13 +3945,17 @@ function executeMentionNotification(payload) {
         failureCount: failures.length
       });
 
+      const isAllFailed = targetGroups.length > 0 && sentCount === 0;
       return {
-        success: true,
+        success: !isAllFailed,
         mode: 'send',
         templateType,
         sentGroupsCount: sentCount,
         failureCount: failures.length,
-        failures
+        failures,
+        message: isAllFailed
+          ? `發送失敗：所選 ${targetGroups.length} 個組別皆未能成功寄出信件。${failures[0] ? failures[0].error : ''}`
+          : (failures.length > 0 ? `部分發送成功：成功 ${sentCount} 組，失敗 ${failures.length} 組。` : '全數發送成功')
       };
     }
 
@@ -3883,5 +4024,15 @@ function appendMentionNotificationLog_(entry) {
   }
 }
 
-
-
+/**
+ * 手動授權觸發函式 (僅供管理員在 Apps Script 線上編輯器手動執行一次以取得 MailApp 權限)
+ * 執行時會觸發 Google OAuth 授權流程，包含 https://www.googleapis.com/auth/script.send_mail 權限。
+ * 授權完畢後即可正常透過 Web App 發送催辦通知信。
+ *
+ * @returns {number} 當前帳號今日剩餘寄信配額
+ */
+function authorizeMailAppScope() {
+  const remainingQuota = MailApp.getRemainingDailyQuota();
+  Logger.log('MailApp 授權成功！剩餘每日寄信額度: ' + remainingQuota);
+  return remainingQuota;
+}

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>未完成催辦通知台 - 資訊安全暨個資保護教育訓練</title>
+  <title>通知管理 - 資訊安全暨個資保護教育訓練</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- SweetAlert2 CDN -->
@@ -25,7 +25,7 @@
           </svg>
         </div>
         <div>
-          <h1 class="text-lg font-bold text-slate-900 leading-tight">未完成催辦通知台</h1>
+          <h1 class="text-lg font-bold text-slate-900 leading-tight">通知管理</h1>
           <p class="text-xs text-slate-500" id="header-course-title">載入課程中...</p>
         </div>
       </div>
@@ -328,6 +328,7 @@
       const excludeVendor = document.getElementById('exclude-vendor').checked;
       const subject = document.getElementById('mention-subject').value.trim();
       const htmlBody = document.getElementById('mention-body').value.trim();
+      const courseUrl = (window.location && window.location.href) ? window.location.href.split('?')[0] : '';
 
       return {
         templateType,
@@ -338,7 +339,8 @@
         excludeEthicsCommittee,
         excludeVendor,
         subject,
-        htmlBody
+        htmlBody,
+        courseUrl
       };
     }
 
@@ -357,7 +359,7 @@
             },
             org_group_reminder: {
               subject: '【重要提醒】{{組別名稱}} - 資訊安全暨個資保護教育訓練未完成同仁催課通知',
-              htmlBody: '<p>{{組別名稱}} 各位同仁 您好：</p><p>提醒您，本年度「<strong>資訊安全暨個資保護教育訓練</strong>」目前尚有同仁未完成課程或測驗，請尚未完課之同仁儘速安排時間完成。</p><p><strong>截至目前本組尚未完課同仁清單：</strong></p>{{未完成清單}}<p><strong>修課說明：</strong><br>及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>修課期限：請於 {{修課期限}} 以前完成</p><p>※ 觀看提醒：影片觀看期間請勿切換分頁、最小化或快轉，系統會自動記錄累計有效秒數。</p><p>※ 登入提醒：若尚未登入，請以受訓帳號登入系統，以利正確統計學習紀錄。</p><p><a href="{{上課網址}}">前往上課</a></p><p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">※ 本信件為系統自動發送，請勿直接回覆此信件。<br>若有課程或系統操作疑問，請洽資訊安全小組承辦人。</p>'
+              htmlBody: '<p>{{組別名稱}} 各位同仁 您好：</p><p>提醒您，本年度「<strong>資訊安全暨個資保護教育訓練</strong>」目前尚有同仁未完成課程或測驗，請尚未完課之同仁儘速安排時間完成。</p><p><strong>截至目前本組尚未完課同仁清單：</strong></p>{{未完成清單}}<p><strong>修課說明：</strong><br>及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>修課期限：請於 {{修課期限}} 以前完成</p><p>※ 觀看提醒：影片觀看期間請勿切換分頁、最小化或快轉，系統會自動記錄累計有效秒數。</p><p>※ 登入提醒：若尚未登入，請以受訓帳號登入系統，以利正確統計學習紀錄。</p><p><a href="{{上課網址}}">前往上課</a></p><p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">此為自動發送之通知信件，無需直接回覆。<br>如有任何問題，請聯絡專案規劃組(策略組)。</p>'
             }
           },
           excludeDefaults: {
@@ -644,12 +646,13 @@
 
         google.script.run
           .withSuccessHandler(function(res) {
-            if (res && res.success) {
+            if (res && res.success && (res.sentCount > 0 || res.sentGroupsCount > 0)) {
               const countText = res.sentCount ? `${res.sentCount} 封` : `${res.sentGroupsCount} 個組別`;
               Swal.fire('發送成功！', `已成功發送催辦通知（共 ${countText}）。發送紀錄已妥善存檔於試算表「通知紀錄」。`, 'success');
               document.getElementById('preview-modal').classList.add('hidden');
             } else {
-              Swal.fire('發送失敗', res && res.message ? res.message : '發生未知錯誤', 'error');
+              const errMsg = (res && res.message) || (res && res.failures && res.failures[0] ? `${res.failures[0].orgName || ''} 寄送失敗: ${res.failures[0].error}` : '未能成功發送任何郵件');
+              Swal.fire('發送失敗', errMsg, 'error');
             }
           })
           .withFailureHandler(function(err) {
