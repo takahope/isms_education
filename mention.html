@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>未完成催辦通知台 - 資訊安全暨個資保護教育訓練</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SweetAlert2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <!-- 頂部導航列 -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-md shadow-indigo-100">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-900 leading-tight">未完成催辦通知台</h1>
+          <p class="text-xs text-slate-500" id="header-course-title">載入課程中...</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <a href="?page=index" class="text-xs sm:text-sm text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
+          回到上課首頁
+        </a>
+        <a href="?page=stats" class="text-xs sm:text-sm text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
+          查看簡易統計
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主要內容區 -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      
+      <!-- 左側/上方：催辦條件與範本設定 -->
+      <div class="lg:col-span-12 xl:col-span-8 space-y-6">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+            <div>
+              <h2 class="text-base font-bold text-slate-900">催辦通知設定</h2>
+              <p class="text-xs text-slate-500 mt-0.5">選擇欲發送的未完成通知對象與條件，並支援自訂期限與信件內容。</p>
+            </div>
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+              未完成專用
+            </span>
+          </div>
+
+          <form id="mention-form" class="space-y-6" onsubmit="event.preventDefault();">
+            <!-- 範本類型與寄送方式 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label for="mention-template-type" class="block text-xs font-semibold text-slate-700 mb-1.5">
+                  催辦範本類型 <span class="text-red-500">*</span>
+                </label>
+                <select id="mention-template-type" class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 bg-white border">
+                  <option value="leadership_reminder">長官主管未完成通知（層級 1~4 行政長官）</option>
+                  <option value="org_group_reminder">全組織各組未完成通知（組員 To，組長 CC）</option>
+                </select>
+                <p class="text-[11px] text-slate-400 mt-1" id="template-hint">針對層級 1~4 行政長官主管，主兼職認列，支援影子信箱雙軌寄送。</p>
+              </div>
+
+              <div>
+                <label for="mention-delivery-mode" class="block text-xs font-semibold text-slate-700 mb-1.5">
+                  寄送方式 <span class="text-red-500">*</span>
+                </label>
+                <select id="mention-delivery-mode" class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 bg-white border">
+                  <option value="individual">個人化信件（每位長官各自收到專屬信件）</option>
+                  <option value="single_bcc">密件副本（單封發送，收件人相互保密）</option>
+                  <option value="direct">直接發送（收件人信箱皆在 To 欄位）</option>
+                </select>
+                <p class="text-[11px] text-slate-400 mt-1" id="delivery-mode-hint">預設為個人化單獨發送，確保主管資訊獨立。</p>
+              </div>
+            </div>
+
+            <!-- 修課截止日期與多重排除設定 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+              <div>
+                <label for="mention-deadline-date" class="block text-xs font-semibold text-slate-700 mb-1.5">
+                  自訂修課截止日期 <span class="text-red-500">*</span>
+                </label>
+                <div class="relative">
+                  <input type="date" id="mention-deadline-date" class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 bg-white border">
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">信件內文將自動轉換為「<span id="chinese-deadline-preview" class="text-indigo-600 font-medium">YYYY 年 M 月 D 日</span>」。</p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1.5">
+                  篩選與排除條件（預設全勾選）
+                </label>
+                <div class="space-y-2 pt-1">
+                  <label class="flex items-center text-xs text-slate-700 cursor-pointer select-none">
+                    <input type="checkbox" id="exclude-parental-leave" checked class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4">
+                    <span class="ml-2 font-medium">排除育嬰假</span>
+                    <span class="ml-1.5 text-slate-400 text-[11px]">(狀態為育嬰假者不發信)</span>
+                  </label>
+                  <label class="flex items-center text-xs text-slate-700 cursor-pointer select-none">
+                    <input type="checkbox" id="exclude-outside" checked class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4">
+                    <span class="ml-2 font-medium">排除 outside</span>
+                    <span class="ml-1.5 text-slate-400 text-[11px]">(工作地點為 outside 者不發信)</span>
+                  </label>
+                  <label class="flex items-center text-xs text-slate-700 cursor-pointer select-none">
+                    <input type="checkbox" id="exclude-ethics-committee" checked class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4">
+                    <span class="ml-2 font-medium">排除倫理委員會</span>
+                    <span class="ml-1.5 text-slate-400 text-[11px]">(主兼職或單位為 EGC / 倫理委員者不發信)</span>
+                  </label>
+                  <label class="flex items-center text-xs text-slate-700 cursor-pointer select-none">
+                    <input type="checkbox" id="exclude-vendor" checked class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4">
+                    <span class="ml-2 font-medium">排除委外廠商</span>
+                    <span class="ml-1.5 text-slate-400 text-[11px]">(狀態為委外廠商者不發信)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- 信件主旨與內文編輯區 -->
+            <div class="pt-2 border-t border-slate-100 space-y-4">
+              <div>
+                <label for="mention-subject" class="block text-xs font-semibold text-slate-700 mb-1.5">
+                  信件主旨 <span class="text-red-500">*</span>
+                </label>
+                <input type="text" id="mention-subject" class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 bg-white border font-mono">
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label for="mention-body" class="block text-xs font-semibold text-slate-700">
+                    信件內文 (HTML 格式) <span class="text-red-500">*</span>
+                  </label>
+                  <button type="button" id="btn-reset-template" class="text-xs text-indigo-600 hover:text-indigo-800 transition">
+                    恢復預設範本
+                  </button>
+                </div>
+                <textarea id="mention-body" rows="10" class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs py-2 px-3 bg-slate-50 border font-mono"></textarea>
+                <p class="text-[11px] text-slate-400 mt-1">
+                  支援變數標籤：<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{修課期限}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{課程名稱}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{上課網址}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{組別名稱}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{姓名}}</code>
+                </p>
+              </div>
+            </div>
+
+            <!-- 操作按鈕 -->
+            <div class="pt-4 border-t border-slate-100 flex items-center justify-end space-x-3">
+              <button type="button" id="btn-preview" class="inline-flex items-center px-4 py-2 border border-indigo-600 text-indigo-600 rounded-lg text-sm font-medium hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition">
+                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                </svg>
+                預覽通知與收件名單
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- 右側：發送規則與影子信箱說明 -->
+      <div class="lg:col-span-12 xl:col-span-4 space-y-6">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-4">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center">
+            <svg class="w-4 h-4 text-indigo-600 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+            </svg>
+            催辦寄送邏輯規範
+          </h3>
+          <ul class="text-xs text-slate-600 space-y-2 leading-relaxed">
+            <li class="flex items-start">
+              <span class="text-indigo-600 font-bold mr-1.5">•</span>
+              <span><strong>長官主管範本</strong>：限定「組織架構樹」行政類型、層級 1~4 且尚未完成線上課程之長官。主兼職任一符合皆予認列。</span>
+            </li>
+            <li class="flex items-start">
+              <span class="text-indigo-600 font-bold mr-1.5">•</span>
+              <span><strong>全組織各組範本</strong>：以層級 5 之後作業組別與合作單位為主體，組員列於 To，組長列於 CC，信末附本組未完成人員表格。全組完成則自動跳過。</span>
+            </li>
+            <li class="flex items-start">
+              <span class="text-indigo-600 font-bold mr-1.5">•</span>
+              <span><strong>三大排除</strong>：預設排除育嬰假人員、outside 地點人員以及倫理委員會同仁。</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="bg-indigo-50/50 rounded-xl border border-indigo-100 p-5 space-y-3">
+          <h3 class="text-sm font-bold text-indigo-950 flex items-center">
+            <svg class="w-4 h-4 text-indigo-600 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+            </svg>
+            影子信箱架構 (EMAIL_SHADOW_MAP)
+          </h3>
+          <p class="text-xs text-indigo-800 leading-relaxed">
+            本催辦模組已內建影子信箱分派介面。若長官或同仁在 Script Properties 中設定了對應的私有或代理信箱，系統將自動納入發信目標，確保通知不漏接。
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- 預覽彈窗 Modal -->
+  <div id="preview-modal" class="fixed inset-0 z-50 overflow-y-auto hidden bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] shadow-2xl flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+          <h3 class="text-base font-bold text-slate-900">催辦通知預覽</h3>
+          <span id="preview-badge" class="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">預覽模式</span>
+        </div>
+        <button type="button" id="btn-close-modal" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 overflow-y-auto space-y-4 text-sm flex-1">
+        <!-- 群組切換選單 (全組織各組範本時顯示) -->
+        <div id="preview-group-select-container" class="bg-indigo-50/50 border border-indigo-100 rounded-lg p-3 hidden">
+          <label for="preview-group-select" class="block text-xs font-bold text-indigo-950 mb-1">
+            切換查看組別信件預覽：
+          </label>
+          <select id="preview-group-select" class="w-full text-xs rounded border-slate-300 py-1.5 px-2.5 bg-white border">
+          </select>
+        </div>
+
+        <!-- 群組自選發送清單面板 (全組織各組範本時顯示) -->
+        <div id="preview-group-checklist-container" class="bg-indigo-50/40 border border-indigo-100 rounded-lg p-3 hidden space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-bold text-indigo-950">待發送組別勾選清單：</span>
+              <span id="preview-group-selection-count" class="text-[11px] font-medium text-indigo-600 bg-indigo-100/70 px-2 py-0.5 rounded-full">已選取 0 / 0 組</span>
+            </div>
+            <div class="flex items-center space-x-1.5">
+              <button type="button" id="btn-select-all-groups" class="px-2 py-0.5 text-[11px] bg-white border border-slate-300 text-slate-700 rounded hover:bg-slate-50 transition shadow-2xs font-medium">全選</button>
+              <button type="button" id="btn-deselect-all-groups" class="px-2 py-0.5 text-[11px] bg-white border border-slate-300 text-slate-700 rounded hover:bg-slate-50 transition shadow-2xs font-medium">全取消</button>
+            </div>
+          </div>
+          <div id="preview-group-checklist" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-40 overflow-y-auto p-1 bg-white border border-indigo-100/80 rounded">
+          </div>
+        </div>
+
+        <!-- 郵件基本欄位預覽 -->
+        <div class="space-y-2 bg-slate-50 rounded-lg p-3.5 border border-slate-200/80 font-mono text-xs">
+          <div class="flex items-start">
+            <span class="text-slate-400 w-16 font-medium">主旨：</span>
+            <span id="preview-subject" class="text-slate-800 font-semibold flex-1"></span>
+          </div>
+          <div class="flex items-start">
+            <span class="text-slate-400 w-16 font-medium">收件人：</span>
+            <div id="preview-to" class="text-slate-700 flex-1 break-all"></div>
+          </div>
+          <div id="preview-cc-row" class="flex items-start">
+            <span class="text-slate-400 w-16 font-medium">副本 (CC)：</span>
+            <div id="preview-cc" class="text-slate-700 flex-1 break-all"></div>
+          </div>
+        </div>
+
+        <!-- 郵件內文 HTML 預覽 -->
+        <div>
+          <div class="text-xs font-semibold text-slate-500 mb-1.5 flex items-center justify-between">
+            <span>信件內文預覽：</span>
+            <span class="text-[11px] text-slate-400">已套用變數與樣式</span>
+          </div>
+          <div id="preview-body" class="p-5 border border-slate-200 rounded-lg bg-white overflow-x-auto text-slate-800 text-sm leading-relaxed min-h-[160px]">
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+        <div id="preview-stats-summary" class="text-xs text-slate-500"></div>
+        <div class="flex space-x-2.5">
+          <button type="button" id="btn-modal-cancel" class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-medium hover:bg-white transition">
+            關閉
+          </button>
+          <button type="button" id="btn-modal-confirm-send" class="px-5 py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 shadow-sm transition">
+            確認並發送
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // 全域變數
+    let gInitialData = null;
+    let gCurrentPreviewData = null;
+
+    // 工具函式：HTML 特殊字元跳脫防護
+    function escapeHtml_(text) {
+      return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+    const escapeHtml = escapeHtml_;
+
+    // 工具函式：格式化繁中日期
+    function formatChineseDate(dateStr) {
+      if (!dateStr) return '';
+      const parts = dateStr.split('-');
+      if (parts.length !== 3) return dateStr;
+      return `${parts[0]} 年 ${parseInt(parts[1], 10)} 月 ${parseInt(parts[2], 10)} 日`;
+    }
+
+    // 取得表單 Payload
+    function getFormPayload() {
+      const templateType = document.getElementById('mention-template-type').value;
+      const deliveryMode = document.getElementById('mention-delivery-mode').value;
+      const deadlineDate = document.getElementById('mention-deadline-date').value;
+      const excludeParentalLeave = document.getElementById('exclude-parental-leave').checked;
+      const excludeOutsideLocation = document.getElementById('exclude-outside').checked;
+      const excludeEthicsCommittee = document.getElementById('exclude-ethics-committee').checked;
+      const excludeVendor = document.getElementById('exclude-vendor').checked;
+      const subject = document.getElementById('mention-subject').value.trim();
+      const htmlBody = document.getElementById('mention-body').value.trim();
+
+      return {
+        templateType,
+        deliveryMode,
+        deadlineDate,
+        excludeParentalLeave,
+        excludeOutsideLocation,
+        excludeEthicsCommittee,
+        excludeVendor,
+        subject,
+        htmlBody
+      };
+    }
+
+    // 初始化頁面資料
+    function initPage() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        console.warn('非 GAS 執行環境，套用本地模擬預設資料');
+        gInitialData = {
+          success: true,
+          courseTitle: '資訊安全暨個資保護教育訓練',
+          defaultDeadlineDate: new Date().getFullYear() + '-08-30',
+          templates: {
+            leadership_reminder: {
+              subject: '【重要提醒】請長官、主管撥冗完成資訊安全暨個資保護教育訓練',
+              htmlBody: '<p>長官、主管們好：</p><p>提醒各位長官主管，本年度「資訊安全暨個資保護教育訓練」線上課程目前尚有長官主管未完成，敬請尚未完成的長官與主管撥冗安排時間完成影片觀看與課後測驗。</p><p><strong>修課說明：</strong><br>及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>修課期限：請於 {{修課期限}} 以前完成</p>'
+            },
+            org_group_reminder: {
+              subject: '【重要提醒】{{組別名稱}} - 資訊安全暨個資保護教育訓練未完成同仁催課通知',
+              htmlBody: '<p>{{組別名稱}} 各位同仁 您好：</p><p>提醒您，本年度「<strong>資訊安全暨個資保護教育訓練</strong>」目前尚有同仁未完成課程或測驗，請尚未完課之同仁儘速安排時間完成。</p><p><strong>截至目前本組尚未完課同仁清單：</strong></p>{{未完成清單}}<p><strong>修課說明：</strong><br>及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>修課期限：請於 {{修課期限}} 以前完成</p><p>※ 觀看提醒：影片觀看期間請勿切換分頁、最小化或快轉，系統會自動記錄累計有效秒數。</p><p>※ 登入提醒：若尚未登入，請以受訓帳號登入系統，以利正確統計學習紀錄。</p><p><a href="{{上課網址}}">前往上課</a></p><p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">※ 本信件為系統自動發送，請勿直接回覆此信件。<br>若有課程或系統操作疑問，請洽資訊安全小組承辦人。</p>'
+            }
+          },
+          excludeDefaults: {
+            excludeParentalLeave: true,
+            excludeOutsideLocation: true,
+            excludeEthicsCommittee: true,
+            excludeVendor: true
+          }
+        };
+        applyInitialData(gInitialData);
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res && res.success) {
+            gInitialData = res;
+            applyInitialData(res);
+          } else {
+            Swal.fire('載入失敗', res && res.message ? res.message : '無法取得催辦初始化資料', 'error');
+          }
+        })
+        .withFailureHandler(function(err) {
+          Swal.fire('系統錯誤', err && err.message ? err.message : String(err), 'error');
+        })
+        .getMentionInitialData();
+    }
+
+    // 套用初始資料
+    function applyInitialData(data) {
+      if (data.courseTitle) {
+        document.getElementById('header-course-title').textContent = data.courseTitle;
+      }
+      if (data.defaultDeadlineDate) {
+        const dateInput = document.getElementById('mention-deadline-date');
+        dateInput.value = data.defaultDeadlineDate;
+        updateDeadlineDatePreview(data.defaultDeadlineDate);
+      }
+      if (data.excludeDefaults) {
+        document.getElementById('exclude-parental-leave').checked = data.excludeDefaults.excludeParentalLeave !== false;
+        document.getElementById('exclude-outside').checked = data.excludeDefaults.excludeOutsideLocation !== false;
+        document.getElementById('exclude-ethics-committee').checked = data.excludeDefaults.excludeEthicsCommittee !== false;
+        if (document.getElementById('exclude-vendor')) {
+          document.getElementById('exclude-vendor').checked = data.excludeDefaults.excludeVendor !== false;
+        }
+      }
+      updateTemplateFields();
+    }
+
+    // 更新修課截止日中文預覽
+    function updateDeadlineDatePreview(val) {
+      document.getElementById('chinese-deadline-preview').textContent = formatChineseDate(val);
+    }
+
+    // 依據選擇的範本類型切換欄位與預設內容
+    function updateTemplateFields() {
+      const templateType = document.getElementById('mention-template-type').value;
+      const deliveryModeSelect = document.getElementById('mention-delivery-mode');
+      const templateHint = document.getElementById('template-hint');
+      const deliveryHint = document.getElementById('delivery-mode-hint');
+
+      if (templateType === 'leadership_reminder') {
+        deliveryModeSelect.disabled = false;
+        deliveryModeSelect.innerHTML = [
+          '<option value="individual">個人化信件（每位長官各自收到專屬信件）</option>',
+          '<option value="single_bcc">密件副本（單封發送，收件人相互保密）</option>',
+          '<option value="direct">直接發送（收件人信箱皆在 To 欄位）</option>'
+        ].join('');
+        templateHint.textContent = '針對層級 1~4 行政長官主管，主兼職認列，支援影子信箱雙軌寄送。';
+        deliveryHint.textContent = '長官主管預設使用個人化信件發送。';
+      } else if (templateType === 'org_group_reminder') {
+        deliveryModeSelect.innerHTML = '<option value="group">依組別發送（組員 To，組長 CC）</option>';
+        deliveryModeSelect.disabled = true;
+        templateHint.textContent = '針對層級 5 之後作業組別與合作單位，組員列於 To，組長列於 CC，附未完成表格。';
+        deliveryHint.textContent = '全組織各組通知強制鎖定依組別發送模式。';
+      }
+
+      resetTemplateContent();
+    }
+
+    // 重設範本為預設主旨與內文
+    function resetTemplateContent() {
+      const templateType = document.getElementById('mention-template-type').value;
+      if (!gInitialData || !gInitialData.templates || !gInitialData.templates[templateType]) return;
+
+      const tpl = gInitialData.templates[templateType];
+      document.getElementById('mention-subject').value = tpl.subject || '';
+      document.getElementById('mention-body').value = tpl.htmlBody || '';
+    }
+
+    // 取得當前勾選的組別代碼清單
+    function getSelectedGroupCodes() {
+      const checkboxes = document.querySelectorAll('.group-select-checkbox:checked');
+      return Array.from(checkboxes).map(function(cb) { return cb.value; });
+    }
+
+    // 更新組別勾選即時統計
+    function updateGroupSelectionSummary() {
+      const allCheckboxes = document.querySelectorAll('.group-select-checkbox');
+      const checkedCheckboxes = document.querySelectorAll('.group-select-checkbox:checked');
+      const countSpan = document.getElementById('preview-group-selection-count');
+      const statsSummary = document.getElementById('preview-stats-summary');
+
+      const total = allCheckboxes.length;
+      const selected = checkedCheckboxes.length;
+
+      if (countSpan) {
+        countSpan.textContent = `已選取 ${selected} / ${total} 組`;
+      }
+      if (statsSummary && gCurrentPreviewData && gCurrentPreviewData.templateType === 'org_group_reminder') {
+        const skipped = gCurrentPreviewData.skippedGroupsCount || 0;
+        const totalGroups = gCurrentPreviewData.totalGroups || total;
+        statsSummary.textContent = `共掃描 ${totalGroups} 組：目前選取 ${selected} 組進行催辦（${skipped} 組全數完課）。`;
+      }
+    }
+
+    // 渲染預覽結果
+    function renderPreview(res) {
+      Swal.close();
+      if (!res || !res.success) {
+        Swal.fire('預覽失敗', res && res.message ? res.message : '無法產出預覽內容', 'error');
+        return;
+      }
+
+      try {
+        gCurrentPreviewData = res;
+        const modal = document.getElementById('preview-modal');
+        const groupSelectContainer = document.getElementById('preview-group-select-container');
+        const groupSelect = document.getElementById('preview-group-select');
+        const groupChecklistContainer = document.getElementById('preview-group-checklist-container');
+        const groupChecklist = document.getElementById('preview-group-checklist');
+        const previewTo = document.getElementById('preview-to');
+        const previewCc = document.getElementById('preview-cc');
+        const previewCcRow = document.getElementById('preview-cc-row');
+        const previewSubject = document.getElementById('preview-subject');
+        const previewBody = document.getElementById('preview-body');
+        const statsSummary = document.getElementById('preview-stats-summary');
+
+        if (res.templateType === 'leadership_reminder') {
+          groupSelectContainer.classList.add('hidden');
+          if (groupChecklistContainer) groupChecklistContainer.classList.add('hidden');
+          previewCcRow.classList.add('hidden');
+
+          previewSubject.textContent = res.sampleSubject;
+          previewBody.innerHTML = res.sampleHtmlBody;
+
+          const recipientNames = (res.recipients || []).map(function(r) {
+            const shadowBadge = r.hasShadow
+              ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 ml-1.5" title="已設定影子副信箱，發信時將同步雙軌轉派並附帶免登入上課連結">🪞 雙軌</span>'
+              : '';
+            return `${r.name} &lt;${r.email}&gt;${shadowBadge}`;
+          }).join(', ');
+          previewTo.innerHTML = recipientNames || '<span class="text-amber-600 font-bold">查無符合條件之未完成長官主管</span>';
+
+          statsSummary.textContent = `共 ${res.recipientCount || 0} 位未完成長官主管需通知（已排除 ${res.skippedCount || 0} 位）。`;
+        } else if (res.templateType === 'org_group_reminder') {
+          groupSelectContainer.classList.remove('hidden');
+          if (groupChecklistContainer) groupChecklistContainer.classList.remove('hidden');
+          previewCcRow.classList.remove('hidden');
+
+          groupSelect.innerHTML = '';
+          if (groupChecklist) groupChecklist.innerHTML = '';
+
+          (res.groups || []).forEach(function(g, idx) {
+            const opt = document.createElement('option');
+            opt.value = idx;
+            opt.textContent = `${g.orgName} (未完成 ${g.toMembers.length} 人，組長 CC ${g.ccMembers.length} 人)`;
+            groupSelect.appendChild(opt);
+
+            if (groupChecklist) {
+              const itemLabel = document.createElement('label');
+              itemLabel.className = 'flex items-center space-x-2 text-xs text-slate-700 hover:bg-indigo-50/60 p-1.5 rounded cursor-pointer border border-transparent hover:border-indigo-100 transition';
+              itemLabel.innerHTML = `
+                <input type="checkbox" class="group-select-checkbox rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" value="${escapeHtml_(g.orgCode)}" checked>
+                <span class="flex-1 truncate font-medium">${escapeHtml_(g.orgName)} <span class="text-slate-400 text-[11px] font-normal">(未完成 ${g.toMembers.length}人)</span></span>
+              `;
+              itemLabel.addEventListener('click', function(e) {
+                if (e.target && e.target.tagName && e.target.tagName.toLowerCase() !== 'input') {
+                  groupSelect.value = idx;
+                  renderSelectedOrgGroupPreview(g);
+                }
+              });
+              groupChecklist.appendChild(itemLabel);
+            }
+          });
+
+          updateGroupSelectionSummary();
+          const checkboxes = groupChecklist ? groupChecklist.querySelectorAll('.group-select-checkbox') : [];
+          checkboxes.forEach(function(cb) {
+            cb.addEventListener('change', updateGroupSelectionSummary);
+          });
+
+          // 監聽組別切換
+          groupSelect.onchange = function() {
+            const selectedIdx = parseInt(groupSelect.value, 10);
+            const selectedGroup = res.groups[selectedIdx];
+            if (selectedGroup) {
+              renderSelectedOrgGroupPreview(selectedGroup);
+            }
+          };
+
+          if (res.groups && res.groups.length > 0) {
+            renderSelectedOrgGroupPreview(res.groups[0]);
+          } else {
+            previewSubject.textContent = '（無任何組別需要催辦）';
+            previewTo.textContent = '無';
+            previewCc.textContent = '無';
+            previewBody.innerHTML = '<p class="text-emerald-600 font-bold">全組織所有組別同仁皆已全數完課！太棒了！</p>';
+          }
+
+          statsSummary.textContent = `共掃描 ${res.totalGroups || 0} 組：${res.activeGroupsCount || 0} 組尚有同仁未完課，${res.skippedGroupsCount || 0} 組全數完課。`;
+        }
+
+        modal.classList.remove('hidden');
+      } catch (renderError) {
+        console.error('渲染預覽視窗發生未預期錯誤:', renderError);
+        Swal.fire('預覽視窗處理失敗', renderError && renderError.message ? renderError.message : String(renderError), 'error');
+      }
+    }
+
+    // 渲染單一群組預覽內容
+    function renderSelectedOrgGroupPreview(group) {
+      document.getElementById('preview-subject').textContent = group.subject || '';
+      const toNames = (group.toMembers || []).map(function(m) {
+        const shadowBadge = m.hasShadow
+          ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 ml-1" title="已設定影子副信箱，同步轉派">🪞 雙軌</span>'
+          : '';
+        return `${m.name} &lt;${m.email}&gt;${shadowBadge}`;
+      }).join(', ');
+      document.getElementById('preview-to').innerHTML = toNames || '（無）';
+
+      const ccNames = (group.ccMembers || []).map(function(m) {
+        const shadowBadge = m.hasShadow
+          ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 ml-1" title="已設定影子副信箱，同步轉派">🪞 雙軌</span>'
+          : '';
+        return `${m.name} (${m.title}) &lt;${m.email}&gt;${shadowBadge}`;
+      }).join(', ');
+      document.getElementById('preview-cc').innerHTML = ccNames || '<span class="text-slate-400">（本組未配置組長信箱）</span>';
+
+      document.getElementById('preview-body').innerHTML = group.htmlBody || '';
+    }
+
+    // 發送通知
+    function sendNotification() {
+      const payload = getFormPayload();
+
+      if (payload.templateType === 'org_group_reminder') {
+        const selectedGroupCodes = getSelectedGroupCodes();
+        if (selectedGroupCodes.length === 0) {
+          Swal.fire('請至少勾選一個組別', '您尚未選取任何要發送催辦通知的組別。', 'warning');
+          return;
+        }
+        payload.selectedGroupCodes = selectedGroupCodes;
+      }
+
+      Swal.fire({
+        title: '確認正式發送？',
+        text: '信件將直接寄送至未完成同仁或長官信箱（若有設定影子信箱亦將同步寄送）。',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#4f46e5',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: '確定發送',
+        cancelButtonText: '取消'
+      }).then(function(result) {
+        if (!result.isConfirmed) return;
+
+        Swal.fire({
+          title: '信件發送中...',
+          text: '正在逐一分派並記錄至系統，請稍候。',
+          allowOutsideClick: false,
+          didOpen: function() {
+            Swal.showLoading();
+          }
+        });
+
+        if (typeof google === 'undefined' || !google.script || !google.script.run) {
+          setTimeout(function() {
+            Swal.fire('發送完成 (模擬)', '已成功發送通知信！', 'success');
+            document.getElementById('preview-modal').classList.add('hidden');
+          }, 800);
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(res) {
+            if (res && res.success) {
+              const countText = res.sentCount ? `${res.sentCount} 封` : `${res.sentGroupsCount} 個組別`;
+              Swal.fire('發送成功！', `已成功發送催辦通知（共 ${countText}）。發送紀錄已妥善存檔於試算表「通知紀錄」。`, 'success');
+              document.getElementById('preview-modal').classList.add('hidden');
+            } else {
+              Swal.fire('發送失敗', res && res.message ? res.message : '發生未知錯誤', 'error');
+            }
+          })
+          .withFailureHandler(function(err) {
+            Swal.fire('發送失敗', err && err.message ? err.message : String(err), 'error');
+          })
+          .executeMentionNotification(payload);
+      });
+    }
+
+    // 事件綁定
+    document.addEventListener('DOMContentLoaded', function() {
+      initPage();
+
+      document.getElementById('mention-template-type').addEventListener('change', updateTemplateFields);
+      document.getElementById('mention-deadline-date').addEventListener('input', function(e) {
+        updateDeadlineDatePreview(e.target.value);
+      });
+      document.getElementById('btn-reset-template').addEventListener('click', resetTemplateContent);
+
+      document.getElementById('btn-preview').addEventListener('click', function() {
+        const payload = getFormPayload();
+        if (!payload.subject) {
+          Swal.fire('請填寫主旨', '通知信件主旨不得為空。', 'warning');
+          return;
+        }
+        if (!payload.htmlBody) {
+          Swal.fire('請填寫內文', '通知信件內文不得為空。', 'warning');
+          return;
+        }
+
+        Swal.fire({
+          title: '準備預覽中...',
+          text: '正在讀取最新訓練狀態與篩選未完成人員...',
+          allowOutsideClick: false,
+          didOpen: function() {
+            Swal.showLoading();
+          }
+        });
+
+        if (typeof google === 'undefined' || !google.script || !google.script.run) {
+          renderPreview({
+            success: true,
+            mode: 'preview',
+            templateType: payload.templateType,
+            sampleSubject: payload.subject.replace('{{修課期限}}', formatChineseDate(payload.deadlineDate)),
+            sampleHtmlBody: payload.htmlBody.replace('{{修課期限}}', formatChineseDate(payload.deadlineDate)),
+            recipientCount: 2,
+            skippedCount: 1,
+            recipients: [{ name: '測試主管', email: 'test_leader@biobank.org.tw' }],
+            groups: [
+              {
+                orgCode: 'GRP-CO',
+                orgName: '收案組',
+                subject: '[提醒] 收案組未完成通知',
+                htmlBody: '<p>收案組名單預覽</p>',
+                toMembers: [{ name: '測試組員', email: 'test_member@biobank.org.tw' }],
+                ccMembers: [{ name: '收案組長', title: '組長', email: 'leader@biobank.org.tw' }]
+              }
+            ]
+          });
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(renderPreview)
+          .withFailureHandler(function(err) {
+            Swal.fire('預覽失敗', err && err.message ? err.message : String(err), 'error');
+          })
+          .previewMentionNotification(payload);
+      });
+
+      document.getElementById('btn-modal-confirm-send').addEventListener('click', sendNotification);
+
+      document.getElementById('btn-select-all-groups').addEventListener('click', function() {
+        const checkboxes = document.querySelectorAll('.group-select-checkbox');
+        checkboxes.forEach(function(cb) { cb.checked = true; });
+        updateGroupSelectionSummary();
+      });
+
+      document.getElementById('btn-deselect-all-groups').addEventListener('click', function() {
+        const checkboxes = document.querySelectorAll('.group-select-checkbox');
+        checkboxes.forEach(function(cb) { cb.checked = false; });
+        updateGroupSelectionSummary();
+      });
+
+      document.getElementById('btn-close-modal').addEventListener('click', function() {
+        document.getElementById('preview-modal').classList.add('hidden');
+      });
+      document.getElementById('btn-modal-cancel').addEventListener('click', function() {
+        document.getElementById('preview-modal').classList.add('hidden');
+      });
+    });
+  </script>
+</body>
+</html>

@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>企業資訊安全教育訓練</title>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    window.APP_AUTH = <?!= typeof authContext !== 'undefined' ? authContext : '{"isShadowAuth":false}' ?>;
+  </script>
   <style>
     /* Design Decisions:
        - Color palette: Slate (neutral), Emerald (primary/success), Rose (error)
@@ -1881,6 +1884,14 @@
       <!-- Step 1: Welcome -->
       <div id="step-welcome" class="hidden text-center">
         <h2 class="result-title">歡迎開始教育訓練</h2>
+        <!-- Shadow Auth Banner -->
+        <div id="shadow-auth-banner" class="hidden" style="max-width: 580px; margin: 0 auto 16px auto; padding: 12px 16px; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; display: none; align-items: center; justify-content: space-between; text-align: left; color: #1e40af; font-size: 0.875rem;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.25rem;">🪞</span>
+            <span>已透過專屬認證連結登入：<strong><span id="shadow-auth-name"></span></strong> (<span id="shadow-auth-email"></span>)。您的受訓與測驗紀錄將自動認列為公務身分。</span>
+          </div>
+          <span style="display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; background-color: #dbeafe; color: #1e40af; white-space: nowrap; margin-left: 8px;">免登入模式</span>
+        </div>
         <div class="account-card" id="account-card">
           <div class="account-tools">
             <button type="button" id="website-tour-open-btn" class="tour-trigger-btn hidden" aria-label="操作導覽" title="操作導覽">
@@ -2308,7 +2319,10 @@
           .withFailureHandler(() => {
             finalizeProfileLoadFallback('目前無法讀取人員資料，請稍後重新整理頁面。');
           })
-          .getCurrentUserProfile({ videoTitle: VIDEO_TITLE });
+          .getCurrentUserProfile({
+            videoTitle: VIDEO_TITLE,
+            authContext: (typeof window !== 'undefined' && window.APP_AUTH) ? window.APP_AUTH : null
+          });
       } else {
         setTimeout(() => {
           const fallbackProfile = normalizeUserProfile(null, 'local-tester@example.com');
@@ -2421,6 +2435,18 @@
       const welcomeDescEl = document.querySelector('#step-welcome .result-desc');
 
       emailEl.textContent = profile.email;
+
+      if (typeof window !== 'undefined' && window.APP_AUTH && window.APP_AUTH.isShadowAuth) {
+        const banner = document.getElementById('shadow-auth-banner');
+        if (banner) {
+          banner.style.display = 'flex';
+          banner.classList.remove('hidden');
+          const nameSpan = document.getElementById('shadow-auth-name');
+          const emailSpan = document.getElementById('shadow-auth-email');
+          if (nameSpan) nameSpan.textContent = profile.name || window.APP_AUTH.learnerName || '';
+          if (emailSpan) emailSpan.textContent = profile.email || window.APP_AUTH.effectiveEmail || '';
+        }
+      }
 
       if (profile.name) {
         nameEl.textContent = profile.name;
@@ -4953,6 +4979,9 @@
         if (typeof payload === 'undefined') {
           runner[functionName]();
         } else {
+          if (payload && typeof payload === 'object' && !payload.authContext && typeof window !== 'undefined' && window.APP_AUTH && window.APP_AUTH.isShadowAuth) {
+            payload.authContext = window.APP_AUTH;
+          }
           runner[functionName](payload);
         }
       });
@@ -5477,7 +5506,8 @@
         attemptId: currentAttemptId,
         userEmail: currentUserEmail,
         videoTitle: VIDEO_TITLE,
-        answers
+        answers,
+        authContext: (typeof window !== 'undefined' && window.APP_AUTH) ? window.APP_AUTH : null
       };
 
       if (typeof google !== 'undefined' && google.script) {

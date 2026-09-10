@@ -25,8 +25,60 @@ const DASHBOARD_EXCLUDED_PERSONNEL_STATUSES = new Set([
   '合作單位'
 ]);
 
-function isExcludedPersonnelStatus_(status) {
-  return DASHBOARD_EXCLUDED_PERSONNEL_STATUSES.has(String(status || '').trim());
+function isExcludedPersonnelStatus_(status, options) {
+  const cleanStatus = String(status || '').trim();
+  if (options && options.includePartnerUnits && cleanStatus === '合作單位') {
+    return false;
+  }
+  return DASHBOARD_EXCLUDED_PERSONNEL_STATUSES.has(cleanStatus);
+}
+
+function isOutsideLocation_(location) {
+  return String(location || '').trim().toLowerCase() === 'outside';
+}
+
+function isEthicsCommitteeMember_(learner, context) {
+  if (!learner) return false;
+  const status = String(learner.personnelStatus || '').trim();
+  if (status === '倫理委員會' || status.includes('倫理委員會')) return true;
+
+  const orgCode = String(learner.assignmentOrgCode || '').trim().toUpperCase();
+  if (orgCode === 'EGC') return true;
+
+  const orgName = String(learner.assignmentOrgName || '').trim();
+  if (orgName.includes('倫理委員會')) return true;
+
+  const title = String(learner.assignmentTitle || '').trim();
+  if (title.includes('倫理委員會')) return true;
+
+  if (Array.isArray(learner.assignments)) {
+    for (let i = 0; i < learner.assignments.length; i += 1) {
+      const asgn = learner.assignments[i];
+      const aCode = String(asgn.orgCode || '').trim().toUpperCase();
+      const aName = String(asgn.orgName || asgn.name || '').trim();
+      const aTitle = String(asgn.title || '').trim();
+      if (aCode === 'EGC' || aName.includes('倫理委員會') || aTitle.includes('倫理委員會')) {
+        return true;
+      }
+    }
+  }
+
+  if (context && Array.isArray(context.assignments)) {
+    const normEmail = normalizeEmail_(learner.email);
+    for (let i = 0; i < context.assignments.length; i += 1) {
+      const asgn = context.assignments[i];
+      if (normalizeEmail_(asgn.email) === normEmail) {
+        const aCode = String(asgn.orgCode || '').trim().toUpperCase();
+        const aName = String(asgn.orgName || asgn.name || '').trim();
+        const aTitle = String(asgn.title || '').trim();
+        if (aCode === 'EGC' || aName.includes('倫理委員會') || aTitle.includes('倫理委員會')) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 const TRAINING_SHEET_HEADERS = {
@@ -169,15 +221,18 @@ function getTrainingNotificationBootstrap() {
     dashboardUrl: buildDashboardUrl_(),
     courseTitle: context.courseTitle,
     placeholderTokensByTemplateType: {
-      personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
-      case_staff_personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
-      parental_leave_personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
-      announcement: ['{{課程名稱}}', '{{上課網址}}'],
-      group_announcement: ['{{組別稱呼}}', '{{課程名稱}}', '{{上課網址}}'],
-      station_manager_announcement: ['{{駐站管理稱呼}}', '{{課程名稱}}', '{{上課網址}}'],
-      leadership_announcement_summary: ['{{課程名稱}}', '{{上課網址}}'],
-      leadership_announcement: ['{{課程名稱}}', '{{上課網址}}'],
-      case_staff_layered_reminder: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{駐站列表}}', '{{駐站管理員姓名}}', '{{組長姓名}}', '{{未完成人員名單}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}']
+      personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}', '{{修課期限}}'],
+      case_staff_personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}', '{{修課期限}}'],
+      parental_leave_personalized: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}', '{{修課期限}}'],
+      announcement: ['{{課程名稱}}', '{{上課網址}}', '{{修課期限}}'],
+      group_announcement: ['{{組別稱呼}}', '{{課程名稱}}', '{{上課網址}}', '{{修課期限}}'],
+      station_manager_announcement: ['{{駐站管理稱呼}}', '{{課程名稱}}', '{{上課網址}}', '{{修課期限}}'],
+      leadership_announcement_summary: ['{{課程名稱}}', '{{上課網址}}', '{{修課期限}}'],
+      leadership_announcement: ['{{課程名稱}}', '{{上課網址}}', '{{修課期限}}'],
+      leadership_reminder: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}', '{{修課期限}}'],
+      org_group_initial: ['{{組別名稱}}', '{{課程名稱}}', '{{上課網址}}', '{{修課期限}}'],
+      org_group_reminder: ['{{組別名稱}}', '{{課程名稱}}', '{{上課網址}}', '{{未完成清單}}', '{{修課期限}}'],
+      case_staff_layered_reminder: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{駐站列表}}', '{{駐站管理員姓名}}', '{{組長姓名}}', '{{未完成人員名單}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}', '{{修課期限}}']
     },
     placeholderTokensByTemplateAndDeliveryMode: buildNotificationPlaceholderTokensByTemplateAndDeliveryMode_(),
     defaultDeliveryModeByTemplateType: buildDefaultDeliveryModeByTemplateType_(),
@@ -360,7 +415,8 @@ function buildTrainingDashboardData_() {
   };
 }
 
-function buildDashboardContext_() {
+function buildDashboardContext_(options) {
+  const opts = options || {};
   const masterSS = getMasterSpreadsheet_();
   const trainingSS = getTrainingSpreadsheet_();
   const personnelSheet = getRequiredSheet_(masterSS, DASHBOARD_CONFIG.personnelSheetName);
@@ -384,7 +440,7 @@ function buildDashboardContext_() {
     if (!email) continue;
     const name = String(personnelRows[i][1] || '').trim();
     const personnelStatus = String(personnelRows[i][2] || '').trim();
-    if (isExcludedPersonnelStatus_(personnelStatus)) continue;
+    if (isExcludedPersonnelStatus_(personnelStatus, opts)) continue;
     const location = String(personnelRows[i][7] || '').trim();
     const assignment = assignmentSummaries.get(email) || createEmptyAssignmentSummary_();
     const quiz = quizByEmail.get(email) || createEmptyQuizSummary_();
@@ -851,7 +907,10 @@ function buildNotificationTemplates_(courseTitle) {
     group_announcement: buildGroupAnnouncementNotificationTemplate_(courseTitle),
     station_manager_announcement: buildStationManagerAnnouncementTemplate_(courseTitle),
     leadership_announcement_summary: buildLeadershipAnnouncementSummaryTemplate_(courseTitle),
-    leadership_announcement: buildLeadershipAnnouncementNotificationTemplate_(courseTitle)
+    leadership_announcement: buildLeadershipAnnouncementNotificationTemplate_(courseTitle),
+    leadership_reminder: buildLeadershipReminderIndividualTemplate_(courseTitle),
+    org_group_initial: buildOrgGroupInitialTemplate_(courseTitle),
+    org_group_reminder: buildOrgGroupReminderTemplate_(courseTitle)
   };
 }
 
@@ -872,6 +931,17 @@ function buildNotificationTemplatesByDeliveryMode_(courseTitle) {
     },
     case_staff_layered_reminder: {
       layered: buildCaseStaffLayeredReminderTemplateBundle_(courseTitle)
+    },
+    leadership_reminder: {
+      individual: buildLeadershipReminderIndividualTemplate_(courseTitle),
+      single_bcc: buildLeadershipReminderGenericTemplate_(courseTitle),
+      direct: buildLeadershipReminderGenericTemplate_(courseTitle)
+    },
+    org_group_initial: {
+      direct: buildOrgGroupInitialTemplate_(courseTitle)
+    },
+    org_group_reminder: {
+      direct: buildOrgGroupReminderTemplate_(courseTitle)
     }
   };
 }
@@ -879,20 +949,31 @@ function buildNotificationTemplatesByDeliveryMode_(courseTitle) {
 function buildNotificationPlaceholderTokensByTemplateAndDeliveryMode_() {
   return {
     personalized: {
-      individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
+      individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}', '{{修課期限}}'],
       direct: ['{{課程名稱}}', '{{上課網址}}']
     },
     case_staff_personalized: {
-      individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
-      single_bcc: ['{{課程名稱}}', '{{上課網址}}'],
+      individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}', '{{修課期限}}'],
+      single_bcc: ['{{課程名稱}}', '{{上課網址}}', '{{修課期限}}'],
       direct: ['{{課程名稱}}', '{{上課網址}}']
     },
     parental_leave_personalized: {
-      individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}'],
+      individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}', '{{修課期限}}'],
       direct: ['{{課程名稱}}', '{{上課網址}}']
     },
     case_staff_layered_reminder: {
-      layered: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{駐站列表}}', '{{駐站管理員姓名}}', '{{組長姓名}}', '{{未完成人員名單}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}']
+      layered: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{駐站列表}}', '{{駐站管理員姓名}}', '{{組長姓名}}', '{{未完成人員名單}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}', '{{修課期限}}']
+    },
+    leadership_reminder: {
+      individual: ['{{姓名}}', '{{信箱}}', '{{單位}}', '{{職稱}}', '{{課程名稱}}', '{{訓練狀態}}', '{{上課網址}}', '{{修課期限}}'],
+      single_bcc: ['{{課程名稱}}', '{{上課網址}}', '{{修課期限}}'],
+      direct: ['{{課程名稱}}', '{{上課網址}}', '{{修課期限}}']
+    },
+    org_group_initial: {
+      direct: ['{{組別名稱}}', '{{課程名稱}}', '{{上課網址}}', '{{修課期限}}']
+    },
+    org_group_reminder: {
+      direct: ['{{組別名稱}}', '{{課程名稱}}', '{{上課網址}}', '{{未完成清單}}', '{{修課期限}}']
     }
   };
 }
@@ -907,7 +988,10 @@ function buildDefaultDeliveryModeByTemplateType_() {
     group_announcement: 'single_bcc',
     station_manager_announcement: 'single_bcc',
     leadership_announcement_summary: 'single_bcc',
-    leadership_announcement: 'single_bcc'
+    leadership_announcement: 'single_bcc',
+    leadership_reminder: 'individual',
+    org_group_initial: 'direct',
+    org_group_reminder: 'direct'
   };
 }
 
@@ -920,7 +1004,7 @@ function buildNotificationLoginReminderHtml_() {
 }
 
 function buildNotificationAutoReplyFooterHtml_() {
-  return '<p>此為自動發送之通知信件，無需直接回覆。</p><p>如有任何問題，請聯絡專案管理組(策略組)。</p>';
+  return '<p>此為自動發送之通知信件，無需直接回覆。</p><p>如有任何問題，請聯絡專案規劃組(策略組)。</p>';
 }
 
 function buildPersonalizedNotificationTemplate_(courseTitle) {
@@ -930,7 +1014,7 @@ function buildPersonalizedNotificationTemplate_(courseTitle) {
       '<p>{{姓名}} 您好：</p>',
       '<p>提醒您，因應本次資訊安全暨個資保護教育訓練安排，請協助完成課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>',
       `<p>您目前的訓練資訊如下：<br>課程名稱：${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}教育訓練<br>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}</p>`,
-      '<p>請於 8 月 30 日前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
+      '<p>請於 {{修課期限}} 前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>',
@@ -946,7 +1030,7 @@ function buildCaseStaffIndividualNotificationTemplate_(courseTitle) {
       '<p>{{姓名}} 您好：</p>',
       '<p>提醒您，因應本次資訊安全暨個資保護教育訓練安排，您目前屬於收案相關人員通知對象，請協助完成課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>',
       `<p>您目前的訓練資訊如下：<br>課程名稱：${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}教育訓練<br>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}</p>`,
-      '<p>請於 8 月 30 日前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
+      '<p>請於 {{修課期限}} 前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>',
@@ -961,7 +1045,7 @@ function buildCaseStaffSingleBccNotificationTemplate_(courseTitle) {
     htmlBody: [
       '<p>各位收案同仁們好：</p>',
       `<p>因應本年度資訊安全暨個資保護教育訓練安排，請收案相關人員協助完成<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>`,
-      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。如已完成相關要求，請忽略此信。</p>',
+      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 {{修課期限}} 以前完成相關課程與測驗。如已完成相關要求，請忽略此信。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>',
@@ -1015,7 +1099,7 @@ function buildParentalLeavePersonalizedNotificationTemplate_(courseTitle) {
       '<p>{{姓名}} 您好：</p>',
       '<p>提醒您，因應本次資訊安全暨個資保護教育訓練安排，您目前屬於人員狀態標記為育嬰假的通知對象，請協助完成課程影片觀看與測驗。本次課程內容已提供線上課程與評量，完成後可列入相關教育訓練時數。</p>',
       `<p>您目前的訓練資訊如下：<br>課程名稱：${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}教育訓練<br>目前狀態：{{訓練狀態}}<br>所屬單位：{{單位}}<br>職稱：{{職稱}}</p>`,
-      '<p>請於 8 月 30 日前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
+      '<p>請於 {{修課期限}} 前完成課程與測驗；若您已完成相關要求，請忽略此提醒，謝謝您的配合。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>',
@@ -1030,7 +1114,7 @@ function buildAnnouncementNotificationTemplate_(courseTitle) {
     htmlBody: [
       '<p>長官、主管、組長和同仁們好：</p>',
       `<p>因應外稽單位要求，我們需對內部人員進行<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練')}</strong>教育訓練。課程內容已製作為線上課程與評量，敬請大家完成本次教育訓練時數與評量。</p>`,
-      '<p>本次課程可同時折抵資安三小時時數與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格。請於 8 月 30 日以前完成課程，感謝大家的協助。</p>',
+      '<p>本次課程可同時折抵資安三小時時數與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格。請於 {{修課期限}} 以前完成課程，感謝大家的協助。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>',
@@ -1045,7 +1129,7 @@ function buildGroupAnnouncementNotificationTemplate_(courseTitle) {
     htmlBody: [
       '<p>{{組別稱呼}}</p>',
       `<p>因應外部稽核要求，也配合《資通安全責任等級分級辦法》每年需完成至少 3 小時資通安全通識教育訓練的規定，這次已安排<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護')}</strong>教育訓練課程，想請大家撥空完成。</p>`,
-      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗，謝謝大家的配合。</p>',
+      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 {{修課期限}} 以前完成相關課程與測驗，謝謝大家的配合。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>',
@@ -1063,7 +1147,7 @@ function buildStationManagerAnnouncementTemplate_(courseTitle) {
       `<p>本次<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護')}教育訓練課程</strong>作業安排，教育訓練管理工具將自動追蹤收案人員上課情形，並依系統資料自動通知發信。教育訓練採分階段通知，系統會依照駐站管理員維護的駐站資訊，持續安排後續教育訓練通知。若資料已確認正確，後續通知將由系統接續處理，您不需要另外協助轉發信件至駐站。</p>`,
       '<p>為了讓後續通知更準確，建議您在上課前先協助確認您所管理的駐站與收案人員資訊是否正確；若資料有不一致、成員歸屬錯誤，或管理關係需要調整，也請一併協助更新。</p>',
       '<p>如需更正資料，請點擊下方上課連結，並依照頁面中的導覽說明逐步確認與修正相關資訊，再開始後續課程與測驗。</p>',
-      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。</p>',
+      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 {{修課期限}} 以前完成相關課程與測驗。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>',
@@ -1079,7 +1163,7 @@ function buildLeadershipAnnouncementNotificationTemplate_(courseTitle) {
       '<p>長官、主管們好：</p>',
      `<p>依據《資通安全責任等級分級辦法》，公務機關及特定非公務機關人員（含約聘僱）每年須完成至少 3 小時之資通安全通識教育訓練。另臺灣人體生物資料庫每年亦須通過 ISO27001 與 ISO27701 第三方國際標準驗證，須持續就資訊安全暨個人資料保護管理系統範圍內之政策、制度及作業規範進行宣導，並確保相關管理措施符合組織實際運作情形。為配合前述法規要求與制度推動，本次已安排辦理<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護')}教育訓練課程</strong>。</p>`,
      '<p>鑑於長官與主管們同時肩負資訊安全暨個人資料保護委員會召集人或委員之職責，需參與政策審議、資源協調、管理審查、稽核督導及制度推動等事項。為使召集人與委員充分了解臺灣人體生物資料庫之資訊安全與個人資料保護相關政策、管理要求及執行重點，特誠摯邀請長官撥冗參與本次課程。</p>',
-     '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。</p>',
+     '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 {{修課期限}} 以前完成相關課程與測驗。</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
      '<p><a href="{{上課網址}}">前往上課</a></p>',
@@ -1096,7 +1180,87 @@ function buildLeadershipAnnouncementSummaryTemplate_(courseTitle) {
       '<p>長官、主管們好：</p>',
       `<p>依據《資通安全責任等級分級辦法》，公務機關及特定非公務機關人員（含約聘僱）每年須完成至少 3 小時之資通安全通識教育訓練。另因臺灣人體生物資料庫每年需通過 ISO27001 與 ISO27701 第三方國際標準驗證，故已安排辦理<strong>${escapeHtml_(courseTitle || '資訊安全暨個資保護')}教育訓練課程</strong>。</p>`,
       '<p>鑑於長官與主管身為資訊安全暨個人資料保護委員會召集人或委員，需了解本庫資訊安全與個人資料保護相關政策、管理要求及制度推動重點，以利後續政策審議、管理審查與督導作業。</p>',
-      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 8 月 30 日以前完成相關課程與測驗。如已完成相關要求，請忽略此信。</p>',
+      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 {{修課期限}} 以前完成相關課程與測驗。如已完成相關要求，請忽略此信。</p>',
+      buildNotificationWatchReminderHtml_(),
+      buildNotificationLoginReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
+    ].join('')
+  };
+}
+
+function buildOrgGroupInitialTemplate_(courseTitle) {
+  const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
+  return {
+    subject: `【教育訓練通知】{{組別名稱}} - ${safeCourseTitle}線上課程開課說明`,
+    htmlBody: [
+      '<p>{{組別名稱}} 各位同仁 您好：</p>',
+      `<p>因應外部稽核與法規要求，本年度「<strong>${safeCourseTitle}</strong>」線上課程已開放觀看與測驗，請各位同仁於期限內撥冗完成相關要求。</p>`,
+      '<p><strong>課程資訊：</strong><br>',
+      `課程名稱：${safeCourseTitle}<br>`,
+      '及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>',
+      '修課期限：請於 {{修課期限}} 以前完成</p>',
+      buildNotificationWatchReminderHtml_(),
+      buildNotificationLoginReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      '<p>※ 本信件同步副本（CC）該組組主管協助宣導知悉。</p>',
+      buildNotificationAutoReplyFooterHtml_()
+    ].join('')
+  };
+}
+
+function buildOrgGroupReminderTemplate_(courseTitle) {
+  const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
+  return {
+    subject: `【重要提醒】{{組別名稱}} - ${safeCourseTitle}未完成同仁催課通知`,
+    htmlBody: [
+      '<p>{{組別名稱}} 各位同仁 您好：</p>',
+      `<p>提醒您，本年度「<strong>${safeCourseTitle}</strong>」目前尚有同仁未完成課程或測驗，請尚未完課之同仁儘速安排時間完成。</p>`,
+      '<p><strong>截至目前本組尚未完課同仁清單：</strong></p>',
+      '{{未完成清單}}',
+      '<p><strong>修課說明：</strong><br>',
+      '及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>',
+      '修課期限：請於 {{修課期限}} 以前完成</p>',
+      buildNotificationWatchReminderHtml_(),
+      buildNotificationLoginReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
+    ].join('')
+  };
+}
+
+function buildLeadershipReminderIndividualTemplate_(courseTitle) {
+  const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
+  return {
+    subject: `【重要提醒】請撥冗完成${safeCourseTitle}`,
+    htmlBody: [
+      '<p>{{姓名}} 長官/主管 您好：</p>',
+      '<p>依據《資通安全責任等級分級辦法》及第三方國際標準驗證要求，全體同仁每年均需完成資通安全通識教育訓練。</p>',
+      `<p>系統顯示您目前尚未完成<strong>${safeCourseTitle}</strong>課程與評量，特此溫馨提醒。鑑於長官主管兼負政策審議、管理審查及督導推動之重責，敬請撥冗於期限內完成相關要求。</p>`,
+      '<p>您目前的訓練資訊如下：<br>',
+      '所屬單位：{{單位}}<br>',
+      '職稱：{{職稱}}<br>',
+      '目前狀態：{{訓練狀態}}<br>',
+      '修課期限：請於 {{修課期限}} 以前完成</p>',
+      buildNotificationWatchReminderHtml_(),
+      buildNotificationLoginReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
+    ].join('')
+  };
+}
+
+function buildLeadershipReminderGenericTemplate_(courseTitle) {
+  const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
+  return {
+    subject: `【重要提醒】請長官、主管撥冗完成${safeCourseTitle}`,
+    htmlBody: [
+      '<p>長官、主管們好：</p>',
+      '<p>依據《資通安全責任等級分級辦法》及第三方國際標準驗證要求，每年需持續落實資訊安全與個資保護管理要求。</p>',
+      `<p>提醒各位長官主管，本年度「<strong>${safeCourseTitle}</strong>」線上課程目前尚有長官主管未完成，鑑於長官主管肩負管理審查與督導重任，敬請尚未完成的長官與主管撥冗安排時間完成影片觀看與課後測驗。</p>`,
+      '<p><strong>修課說明：</strong><br>',
+      '及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>',
+      '修課期限：請於 {{修課期限}} 以前完成</p>',
       buildNotificationWatchReminderHtml_(),
       buildNotificationLoginReminderHtml_(),
       '<p><a href="{{上課網址}}">前往上課</a></p>',
@@ -1117,10 +1281,13 @@ function executeTrainingNotification_(payload, options) {
 
   try {
     const normalizedPayload = normalizeNotificationPayload_(payload);
-    const context = buildDashboardContext_();
+    const context = buildDashboardContext_({ includePartnerUnits: true });
     const trainingCourseUrl = getTrainingCourseUrl_();
     if (normalizedPayload.templateType === 'case_staff_layered_reminder') {
       return executeCaseStaffLayeredNotification_(normalizedPayload, context, trainingCourseUrl, viewerEmail, dryRun);
+    }
+    if (['org_group_initial', 'org_group_reminder'].includes(normalizedPayload.templateType)) {
+      return executeOrgGroupNotification_(normalizedPayload, context, trainingCourseUrl, viewerEmail, dryRun);
     }
     const selection = selectNotificationRecipients_(context, normalizedPayload);
     const templateContext = buildNotificationTemplateContext_(context, normalizedPayload);
@@ -1323,8 +1490,16 @@ function normalizeNotificationPayload_(payload) {
   const layeredTargetRole = String(payload && payload.layeredTargetRole || 'all').trim() || 'all';
   const trainingStatus = String(payload && payload.trainingStatus || 'incomplete').trim() || 'incomplete';
   const personnelStatus = String(payload && payload.personnelStatus || '').trim();
+  const excludeParentalLeave = Boolean(payload && payload.excludeParentalLeave);
+  const excludeOutsideLocation = Boolean(payload && (payload.excludeOutsideLocation || payload.excludeOutside));
+  const excludeEthicsCommittee = typeof (payload && payload.excludeEthicsCommittee) !== 'undefined'
+    ? Boolean(payload.excludeEthicsCommittee)
+    : (typeof (payload && payload.excludeEgc) !== 'undefined' ? Boolean(payload.excludeEgc) : true);
+  const deadlineDate = String(payload && payload.deadlineDate || '').trim();
   const descendantMode = String(target.descendantMode || 'self').trim() || 'self';
-  const orgType = String(target.orgType || '').trim();
+  const isOrgGroup = ['org_group_initial', 'org_group_reminder'].includes(templateType);
+  const isLeadershipReminder = templateType === 'leadership_reminder';
+  const orgType = String(target.orgType || (isOrgGroup || isLeadershipReminder ? '行政' : '')).trim();
   const levelValue = String(typeof target.level === 'undefined' || target.level === null ? '' : target.level).trim();
   const orgLevel = levelValue === '' ? '' : Number(levelValue);
   const orgCode = String(target.orgCode || '').trim();
@@ -1332,7 +1507,20 @@ function normalizeNotificationPayload_(payload) {
   const subject = String(template.subject || '').trim();
   const htmlBody = String(template.htmlBody || '').trim();
   const cc = normalizeNotificationCcList_(payload && payload.cc, deliveryMode);
-  const allowedTemplateTypes = ['personalized', 'case_staff_personalized', 'case_staff_layered_reminder', 'parental_leave_personalized', 'announcement', 'group_announcement', 'station_manager_announcement', 'leadership_announcement_summary', 'leadership_announcement'];
+  const allowedTemplateTypes = [
+    'personalized',
+    'case_staff_personalized',
+    'case_staff_layered_reminder',
+    'parental_leave_personalized',
+    'announcement',
+    'group_announcement',
+    'station_manager_announcement',
+    'leadership_announcement_summary',
+    'leadership_announcement',
+    'leadership_reminder',
+    'org_group_initial',
+    'org_group_reminder'
+  ];
 
   if (!allowedTemplateTypes.includes(templateType)) throw new Error('通知範本類型不正確。');
   if (templateType === 'case_staff_layered_reminder') {
@@ -1355,15 +1543,19 @@ function normalizeNotificationPayload_(payload) {
     deliveryMode,
     layeredTargetRole,
     cc,
+    deadlineDate,
     target: {
       orgType,
-      level: templateType === 'case_staff_layered_reminder' ? '' : (levelValue === '' ? '' : orgLevel),
+      level: (templateType === 'case_staff_layered_reminder' || isOrgGroup || isLeadershipReminder) ? '' : (levelValue === '' ? '' : orgLevel),
       orgCode: templateType === 'case_staff_layered_reminder' ? NOTIFICATION_CASE_STAFF_VIRTUAL_ORG_CODE : orgCode,
-      descendantMode: templateType === 'case_staff_layered_reminder' ? 'self' : descendantMode,
+      descendantMode: (templateType === 'case_staff_layered_reminder' || isOrgGroup || isLeadershipReminder) ? 'self' : descendantMode,
       assignmentMatch
     },
     trainingStatus,
     personnelStatus,
+    excludeParentalLeave,
+    excludeOutsideLocation,
+    excludeEthicsCommittee,
     template: {
       subject: templateType === 'case_staff_layered_reminder' ? '收案分層提醒' : subject,
       htmlBody: templateType === 'case_staff_layered_reminder' ? '依角色套用分層範本' : htmlBody
@@ -1401,7 +1593,8 @@ function getRequiredLayeredTemplateKeys_(layeredTargetRole) {
 
 function executeCaseStaffLayeredNotification_(payload, context, trainingCourseUrl, viewerEmail, dryRun) {
   const selection = selectCaseStaffLayeredRecipients_(context, payload);
-  const sampleMessages = buildLayeredSampleMessages_(payload, selection, context.courseTitle, trainingCourseUrl);
+  const templateContext = buildNotificationTemplateContext_(context, payload);
+  const sampleMessages = buildLayeredSampleMessages_(payload, selection, context.courseTitle, trainingCourseUrl, templateContext);
   const primarySampleMessage = sampleMessages[0] || { subject: '', htmlBody: '' };
 
   if (dryRun) {
@@ -1430,8 +1623,8 @@ function executeCaseStaffLayeredNotification_(payload, context, trainingCourseUr
   let sentCount = 0;
   selection.recipients.forEach((recipient) => {
     const template = getLayeredTemplateForRole_(payload.layeredTemplates, recipient.roleKey);
-    const subject = applyLayeredNotificationTemplate_(template.subject, recipient, context.courseTitle, trainingCourseUrl);
-    const htmlBody = applyLayeredNotificationTemplate_(template.htmlBody, recipient, context.courseTitle, trainingCourseUrl);
+    const subject = applyLayeredNotificationTemplate_(template.subject, recipient, context.courseTitle, trainingCourseUrl, templateContext);
+    const htmlBody = applyLayeredNotificationTemplate_(template.htmlBody, recipient, context.courseTitle, trainingCourseUrl, templateContext);
     try {
       MailApp.sendEmail({
         to: recipient.email,
@@ -1478,11 +1671,436 @@ function executeCaseStaffLayeredNotification_(payload, context, trainingCourseUr
   };
 }
 
-function buildLayeredSampleMessages_(payload, selection, courseTitle, trainingCourseUrl) {
+function hasExecutiveAdminAssignment_(email, context) {
+  const normEmail = normalizeEmail_(email);
+  if (!normEmail || !context) return false;
+
+  // 1. 檢查 assignments：任一職務若在「組織架構樹」中為「行政」且層級 1~4，即判定為行政高層主管
+  if (Array.isArray(context.assignments)) {
+    for (let i = 0; i < context.assignments.length; i += 1) {
+      const assignment = context.assignments[i];
+      if (normalizeEmail_(assignment.email) === normEmail) {
+        const orgCode = normalizeOrgCode_(assignment.orgCode);
+        const orgNode = context.orgNodeMap ? context.orgNodeMap.get(orgCode) : null;
+        if (orgNode) {
+          const type = String(orgNode.type || '').trim();
+          const level = Number(orgNode.level || 0);
+          if (type === '行政' && level > 0 && level < 5) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  // 2. 兜底檢查 learners 主職
+  if (Array.isArray(context.learners)) {
+    const learner = context.learners.find((l) => normalizeEmail_(l.email) === normEmail);
+    if (learner) {
+      const type = String(learner.assignmentOrgType || '').trim();
+      const level = Number(learner.assignmentOrgLevel || 0);
+      if (type === '行政' && level > 0 && level < 5) {
+        return true;
+      }
+      if (Array.isArray(learner.assignments)) {
+        for (let j = 0; j < learner.assignments.length; j += 1) {
+          const asgn = learner.assignments[j];
+          const orgCode = normalizeOrgCode_(asgn.orgCode);
+          const orgNode = context.orgNodeMap ? context.orgNodeMap.get(orgCode) : null;
+          if (orgNode) {
+            const nodeType = String(orgNode.type || '').trim();
+            const nodeLevel = Number(orgNode.level || 0);
+            if (nodeType === '行政' && nodeLevel > 0 && nodeLevel < 5) return true;
+          } else if (String(asgn.type || '').trim() === '行政') {
+            const asgnLevel = Number(asgn.level || 0);
+            if (asgnLevel > 0 && asgnLevel < 5) return true;
+          }
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function resolveOrgGroupLeadRecipients_(orgCode, context) {
+  const normCode = normalizeOrgCode_(orgCode);
+  const leads = [];
+  const seenEmails = new Set();
+
+  const orgNode = context && context.orgNodeMap ? context.orgNodeMap.get(normCode) : null;
+  if (orgNode && isValidEmail_(orgNode.managerEmail)) {
+    const email = normalizeEmail_(orgNode.managerEmail);
+    if (!hasExecutiveAdminAssignment_(email, context) && !seenEmails.has(email)) {
+      seenEmails.add(email);
+      leads.push({
+        email,
+        name: orgNode.managerName || email,
+        title: '組主管',
+        source: 'org_node'
+      });
+    }
+  }
+
+  if (isCaseStaffOrgCode_(normCode) || normCode === 'GRP-CO') {
+    const caseLeads = buildCaseStaffTeamLeadRecipients_(context && context.assignments ? context.assignments : []);
+    caseLeads.forEach((lead) => {
+      const email = normalizeEmail_(lead.email);
+      if (isValidEmail_(email) && !hasExecutiveAdminAssignment_(email, context) && !seenEmails.has(email)) {
+        seenEmails.add(email);
+        leads.push({
+          email,
+          name: lead.name || email,
+          title: lead.roleLabel || lead.title || '主管',
+          source: 'case_staff_lead'
+        });
+      }
+    });
+  }
+
+  (context && context.assignments ? context.assignments : []).forEach((assignment) => {
+    if (normalizeOrgCode_(assignment.orgCode) !== normCode) return;
+    const email = normalizeEmail_(assignment.email);
+    if (!isValidEmail_(email) || hasExecutiveAdminAssignment_(email, context)) return;
+
+    const title = String(assignment.title || '').trim();
+    const isLeadTitle = /(?:組長|副組長|主任|執行長|副執行長|召集人|副召集人|^長$)/.test(title);
+    if (isLeadTitle) {
+      if (!seenEmails.has(email)) {
+        seenEmails.add(email);
+        leads.push({
+          email,
+          name: assignment.name || email,
+          title: assignment.title || '組主管',
+          source: 'assignment_title'
+        });
+      }
+    }
+  });
+
+  return leads;
+}
+
+function buildOrgGroupIncompleteListHtml_(learners) {
+  if (!learners || learners.length === 0) {
+    return '<p style="color: #64748b; font-size: 13px;">（目前本組尚無未完成人員）</p>';
+  }
+  const rowsHtml = learners.map((learner) => {
+    const statusLabel = learner.statusLabel || (learner.status === 'not_started' ? '未開始' : (learner.status === 'in_progress' ? '觀看中' : '待測驗'));
+    const watchedText = typeof learner.watchedPercent === 'number' ? `${learner.watchedPercent}%` : '0%';
+    const rawScore = learner.bestScore;
+    const numScore = (rawScore !== null && rawScore !== undefined && rawScore !== '') ? Number(rawScore) : NaN;
+    const scoreText = (!isNaN(numScore) && numScore > 0) ? `${numScore}分` : '尚未測驗';
+    return '<tr>' +
+      '<td style="padding: 6px 10px; border: 1px solid #cbd5e1;">' + escapeHtml_(learner.name) + '</td>' +
+      '<td style="padding: 6px 10px; border: 1px solid #cbd5e1;">' + escapeHtml_(learner.assignmentTitle || '-') + '</td>' +
+      '<td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: center;">' + escapeHtml_(statusLabel) + '</td>' +
+      '<td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: center;">' + escapeHtml_(watchedText) + '</td>' +
+      '<td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: center;">' + escapeHtml_(scoreText) + '</td>' +
+      '</tr>';
+  }).join('');
+
+  return '<table style="border-collapse: collapse; width: 100%; max-width: 600px; font-size: 13px; margin: 10px 0; font-family: sans-serif; border: 1px solid #cbd5e1;">' +
+    '<thead>' +
+    '<tr style="background-color: #f1f5f9; color: #334155; text-align: left;">' +
+    '<th style="padding: 8px 10px; border: 1px solid #cbd5e1;">姓名</th>' +
+    '<th style="padding: 8px 10px; border: 1px solid #cbd5e1;">職稱</th>' +
+    '<th style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center;">受訓狀態</th>' +
+    '<th style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center;">觀看進度</th>' +
+    '<th style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center;">測驗狀態</th>' +
+    '</tr>' +
+    '</thead>' +
+    '<tbody>' +
+    rowsHtml +
+    '</tbody>' +
+    '</table>';
+}
+
+function resolveLearnerLevel5OrgCode_(learner, context, level5OrgCodeSet) {
+  if (!learner || !level5OrgCodeSet || level5OrgCodeSet.size === 0) return null;
+
+  // 若該員任何一個職務在「組織架構樹」中為「行政」且層級 1~4（高層主管），直接排除
+  if (hasExecutiveAdminAssignment_(learner.email, context)) {
+    return null;
+  }
+
+  // 1. 優先檢查 learner 主職組別
+  const primaryCode = normalizeOrgCode_(learner.assignmentOrgCode);
+  if (primaryCode && level5OrgCodeSet.has(primaryCode)) {
+    return primaryCode;
+  }
+
+  // 2. 若 primaryCode 不屬於層級 5 之後（如高層 1~4），檢查 assignments 中是否有層級 5 之後的組別
+  const email = normalizeEmail_(learner.email);
+  if (!email || !context || !Array.isArray(context.assignments)) return null;
+
+  for (let i = 0; i < context.assignments.length; i += 1) {
+    const assignment = context.assignments[i];
+    if (normalizeEmail_(assignment.email) === email) {
+      const code = normalizeOrgCode_(assignment.orgCode);
+      if (level5OrgCodeSet.has(code)) {
+        return code;
+      }
+    }
+  }
+
+  return null;
+}
+
+function selectOrgGroupRecipients_(context, payload) {
+  const isReminder = payload && payload.templateType === 'org_group_reminder';
+  const groupMap = new Map();
+  const skippedLearners = [];
+  const seenEmails = new Set();
+
+  // 建立組織架構樹中「層級在 5 之後 (level >= 5)」或「組織類型為合作單位（不論層級）」的組別集合
+  const targetOrgCodeSet = new Set();
+  (context && context.orgNodes ? context.orgNodes : []).forEach((node) => {
+    const isLevel5 = Number(node.level || 0) >= 5;
+    const isPartnerUnit = String(node.type || '').trim() === '合作單位';
+    if (isLevel5 || isPartnerUnit) {
+      targetOrgCodeSet.add(normalizeOrgCode_(node.code));
+    }
+  });
+
+  if (context && context.orgNodeMap) {
+    context.orgNodeMap.forEach((node, code) => {
+      const isLevel5 = Number(node.level || 0) >= 5;
+      const isPartnerUnit = String(node.type || '').trim() === '合作單位';
+      if (isLevel5 || isPartnerUnit) {
+        targetOrgCodeSet.add(normalizeOrgCode_(code));
+      }
+    });
+  }
+
+  (context && context.learners ? context.learners : []).forEach((learner) => {
+    const email = normalizeEmail_(learner.email);
+    const reasons = [];
+    if (!email) reasons.push('缺少信箱');
+    if (!isValidEmail_(email)) reasons.push('信箱格式不正確');
+    if (seenEmails.has(email)) reasons.push('重複信箱');
+    if (hasExecutiveAdminAssignment_(learner.email, context)) reasons.push('行政高層主管排除');
+    if (payload && payload.excludeParentalLeave && String(learner.personnelStatus || '').trim() === '育嬰假') reasons.push('排除育嬰假');
+    if (payload && payload.excludeOutsideLocation && isOutsideLocation_(learner.location)) reasons.push('排除outside');
+    if (payload && payload.excludeEthicsCommittee && typeof isEthicsCommitteeMember_ === 'function' && isEthicsCommitteeMember_(learner, context)) reasons.push('排除倫理委員會');
+
+    const isPartnerPersonnel = String(learner.personnelStatus || '').trim() === '合作單位';
+    if (!isPartnerPersonnel && payload && payload.personnelStatus && String(learner.personnelStatus || '').trim() !== payload.personnelStatus) {
+      reasons.push('人員狀態不符');
+    }
+
+    // 檢查並取得該員在目標組別（層級 5 之後或合作單位）代碼（若為純高層 1~4 或行政高層主管則排除）
+    const orgCode = resolveLearnerLevel5OrgCode_(learner, context, targetOrgCodeSet);
+    if (!orgCode && !reasons.includes('行政高層主管排除')) reasons.push('非層級5之後組別');
+
+    if (reasons.length > 0) {
+      if (['缺少信箱', '信箱格式不正確', '重複信箱', '行政高層主管排除', '非層級5之後組別'].includes(reasons[0])) {
+        skippedLearners.push({ email: learner.email, name: learner.name, reason: reasons[0] });
+      }
+      return;
+    }
+
+    seenEmails.add(email);
+    if (!groupMap.has(orgCode)) {
+      const orgNode = context && context.orgNodeMap ? context.orgNodeMap.get(orgCode) : null;
+      const orgName = orgNode ? (orgNode.name || orgNode.alias || orgCode) : (learner.assignmentOrgName || orgCode);
+      groupMap.set(orgCode, {
+        orgCode,
+        orgName,
+        allMembers: [],
+        toMembers: [],
+        ccMembers: [],
+        isSkipped: false,
+        skipReason: ''
+      });
+    }
+
+    const group = groupMap.get(orgCode);
+    group.allMembers.push(learner);
+
+    if (isReminder) {
+      if (learner.status !== 'completed') {
+        group.toMembers.push(learner);
+      }
+    } else {
+      group.toMembers.push(learner);
+    }
+  });
+
+  const activeGroups = [];
+  const skippedGroups = [];
+
+  groupMap.forEach((group, orgCode) => {
+    const leads = resolveOrgGroupLeadRecipients_(orgCode, context);
+    group.ccMembers = leads;
+
+    if (group.toMembers.length === 0) {
+      group.isSkipped = true;
+      group.skipReason = isReminder ? '全組人員皆已完成' : '無有效收件人';
+      skippedGroups.push(group);
+    } else {
+      activeGroups.push(group);
+    }
+  });
+
+  return {
+    groups: activeGroups,
+    skippedGroups,
+    skippedLearners
+  };
+}
+
+function executeOrgGroupNotification_(payload, context, trainingCourseUrl, viewerEmail, dryRun) {
+  const selection = selectOrgGroupRecipients_(context, payload);
+  const sampleGroups = selection.groups.map((group) => {
+    const replacements = {
+      '{{組別名稱}}': group.orgName,
+      '{{課程名稱}}': context.courseTitle || DASHBOARD_CONFIG.defaultCourseTitle,
+      '{{上課網址}}': trainingCourseUrl || '',
+      '{{未完成清單}}': buildOrgGroupIncompleteListHtml_(group.toMembers),
+      '{{修課期限}}': formatChineseDeadlineDate_(payload.deadlineDate)
+    };
+    let subject = String(payload.template && payload.template.subject || '');
+    let htmlBody = String(payload.template && payload.template.htmlBody || '');
+    Object.keys(replacements).forEach((token) => {
+      subject = subject.split(token).join(replacements[token]);
+      htmlBody = htmlBody.split(token).join(replacements[token]);
+    });
+
+    const toEmails = Array.from(new Set(group.toMembers.map((m) => normalizeEmail_(m.email)).filter(Boolean)));
+    const ccEmails = Array.from(new Set(group.ccMembers.map((m) => normalizeEmail_(m.email)).filter(Boolean)))
+      .filter((email) => !toEmails.includes(email));
+
+    return {
+      orgCode: group.orgCode,
+      orgName: group.orgName,
+      toCount: toEmails.length,
+      ccCount: ccEmails.length,
+      toEmails,
+      ccEmails,
+      toNames: group.toMembers.map((m) => m.name).join('、'),
+      ccNames: group.ccMembers.map((m) => m.name).join('、'),
+      subject,
+      htmlBody,
+      incompleteCount: group.toMembers.length
+    };
+  });
+
+  const totalRecipients = sampleGroups.reduce((acc, g) => acc + g.toCount, 0);
+  const totalCc = sampleGroups.reduce((acc, g) => acc + g.ccCount, 0);
+  const primarySample = sampleGroups[0] || { subject: '', htmlBody: '' };
+
+  if (dryRun) {
+    const flattenedRecipients = [];
+    selection.groups.forEach((g) => {
+      g.toMembers.forEach((m) => {
+        flattenedRecipients.push({
+          email: m.email,
+          name: m.name,
+          assignmentOrgName: g.orgName,
+          assignmentTitle: m.assignmentTitle,
+          statusLabel: m.statusLabel,
+          status: m.status
+        });
+      });
+    });
+
+    const flattenedSkipped = [];
+    selection.skippedGroups.forEach((g) => {
+      flattenedSkipped.push({
+        email: g.orgCode,
+        name: g.orgName,
+        reason: g.skipReason
+      });
+    });
+    (selection.skippedLearners || []).forEach((m) => {
+      flattenedSkipped.push(m);
+    });
+
+    return {
+      success: true,
+      authorized: true,
+      viewerEmail,
+      mode: 'preview',
+      courseTitle: context.courseTitle,
+      criteriaSummary: buildNotificationCriteriaSummary_(payload),
+      templateType: payload.templateType,
+      deliveryMode: payload.deliveryMode,
+      groupCount: sampleGroups.length,
+      skippedGroupCount: selection.skippedGroups.length,
+      recipientCount: totalRecipients,
+      ccCount: totalCc,
+      groups: sampleGroups,
+      recipients: flattenedRecipients.slice(0, 200),
+      skipped: flattenedSkipped.slice(0, 200),
+      skippedGroups: selection.skippedGroups.map((g) => ({
+        orgCode: g.orgCode,
+        orgName: g.orgName,
+        reason: g.skipReason,
+        allMemberCount: g.allMembers.length
+      })),
+      sampleSubject: primarySample.subject,
+      sampleHtmlBody: primarySample.htmlBody
+    };
+  }
+
+  const failures = [];
+  let sentCount = 0;
+
+  sampleGroups.forEach((group) => {
+    try {
+      const mailOptions = {
+        to: group.toEmails.join(','),
+        subject: group.subject,
+        htmlBody: group.htmlBody
+      };
+      if (group.ccEmails.length > 0) {
+        mailOptions.cc = group.ccEmails.join(',');
+      }
+      MailApp.sendEmail(mailOptions);
+      sentCount += 1;
+    } catch (error) {
+      console.error('[sendOrgGroupNotification] 失敗 group=%s err=%s', group.orgCode, error && error.stack ? error.stack : error);
+      failures.push({
+        orgCode: group.orgCode,
+        orgName: group.orgName,
+        message: error && error.message ? error.message : String(error)
+      });
+    }
+  });
+
+  appendNotificationLog_({
+    operatorEmail: viewerEmail,
+    courseTitle: context.courseTitle,
+    payload,
+    recipientCount: totalRecipients,
+    sentCount,
+    skippedCount: selection.skippedGroups.length + failures.length
+  });
+
+  return {
+    success: true,
+    authorized: true,
+    viewerEmail,
+    mode: 'send',
+    courseTitle: context.courseTitle,
+    criteriaSummary: buildNotificationCriteriaSummary_(payload),
+    templateType: payload.templateType,
+    deliveryMode: payload.deliveryMode,
+    groupCount: sampleGroups.length,
+    sentCount,
+    skippedGroupCount: selection.skippedGroups.length,
+    failureCount: failures.length,
+    recipientCount: totalRecipients,
+    failures
+  };
+}
+
+function buildLayeredSampleMessages_(payload, selection, courseTitle, trainingCourseUrl, templateContext) {
   const roleOrder = [
     { roleKey: 'case_staff', roleLabel: '收案人員' },
     { roleKey: 'station_manager', roleLabel: '駐站管理員' },
-    { roleKey: 'team_lead', roleLabel: '收案組組長' }
+    { roleKey: 'team_lead', roleLabel: '收案組主管' }
   ];
 
   return roleOrder
@@ -1493,10 +2111,10 @@ function buildLayeredSampleMessages_(payload, selection, courseTitle, trainingCo
       const template = getLayeredTemplateForRole_(payload.layeredTemplates, role.roleKey);
       return {
         roleKey: role.roleKey,
-        roleLabel: role.roleLabel,
+        roleLabel: recipient.roleLabel || role.roleLabel,
         recipientName: recipient.name || recipient.email || '',
-        subject: applyLayeredNotificationTemplate_(template.subject, recipient, courseTitle, trainingCourseUrl),
-        htmlBody: applyLayeredNotificationTemplate_(template.htmlBody, recipient, courseTitle, trainingCourseUrl)
+        subject: applyLayeredNotificationTemplate_(template.subject, recipient, courseTitle, trainingCourseUrl, templateContext),
+        htmlBody: applyLayeredNotificationTemplate_(template.htmlBody, recipient, courseTitle, trainingCourseUrl, templateContext)
       };
     })
     .filter(Boolean);
@@ -1516,9 +2134,50 @@ function selectCaseStaffLayeredRecipients_(context, payload) {
   const teamLeads = buildCaseStaffTeamLeadRecipients_(context.assignments || []);
   const caseStaffRecipients = [];
   const stationManagerMap = new Map();
-  const teamLeadMap = new Map();
   const skipped = [];
   const seenCaseStaffEmails = new Set();
+
+  if (includeTeamLead && Array.isArray(teamLeads.invalidLeads) && teamLeads.invalidLeads.length > 0) {
+    teamLeads.invalidLeads.forEach((invalidLead) => {
+      skipped.push({
+        email: invalidLead.email,
+        name: invalidLead.name,
+        roleLabel: invalidLead.roleLabel,
+        reason: invalidLead.reason
+      });
+    });
+  }
+
+  let sharedTeamLeadSummary = null;
+  if (includeTeamLead && teamLeads.length > 0) {
+    const isMultiLead = teamLeads.length > 1;
+    const hasLeader = teamLeads.some((item) => item.roleType === 'leader');
+    const hasDeputy = teamLeads.some((item) => item.roleType === 'deputy');
+    let combinedRoleLabel = '收案組組長';
+    if (hasLeader && hasDeputy) {
+      combinedRoleLabel = '收案組組長、副組長';
+    } else if (hasDeputy) {
+      combinedRoleLabel = '收案組副組長';
+    }
+    const combinedEmails = teamLeads.map((item) => item.email).join(', ');
+    const combinedNames = isMultiLead
+      ? teamLeads.map((item) => `${item.name}（${item.roleLabel.replace('收案組', '')}）`).join('、')
+      : (teamLeads[0].name || teamLeads[0].email);
+    const combinedTitle = (hasLeader && hasDeputy)
+      ? '收案組主管彙總'
+      : `${combinedRoleLabel}彙總`;
+
+    sharedTeamLeadSummary = {
+      roleKey: 'team_lead',
+      roleLabel: combinedRoleLabel,
+      email: combinedEmails,
+      name: combinedNames,
+      assignmentTitle: combinedTitle,
+      leadMembers: teamLeads,
+      members: [],
+      memberKeySet: new Set()
+    };
+  }
 
   (context.learners || []).forEach((learner) => {
     const email = normalizeEmail_(learner.email);
@@ -1530,6 +2189,9 @@ function selectCaseStaffLayeredRecipients_(context, payload) {
     if (stationAssignments.length === 0) reasons.push('不在收案人員範圍');
     if (!matchesNotificationStatusFilter_(learner.status, payload.trainingStatus)) reasons.push('訓練狀態不符');
     if (payload.personnelStatus && String(learner.personnelStatus || '').trim() !== payload.personnelStatus) reasons.push('人員狀態不符');
+    if (payload.excludeParentalLeave && String(learner.personnelStatus || '').trim() === '育嬰假') reasons.push('排除育嬰假');
+    if (payload.excludeOutsideLocation && isOutsideLocation_(learner.location)) reasons.push('排除outside');
+    if (payload.excludeEthicsCommittee && typeof isEthicsCommitteeMember_ === 'function' && isEthicsCommitteeMember_(learner, context)) reasons.push('排除倫理委員會');
 
     if (reasons.length > 0) {
       if (['缺少信箱', '信箱格式不正確', '重複信箱'].includes(reasons[0])) {
@@ -1588,21 +2250,9 @@ function selectCaseStaffLayeredRecipients_(context, payload) {
       appendLayeredMember_(stationManagerMap.get(managerEmail), learner, stationAssignment);
     });
 
-    if (includeTeamLead) {
-      teamLeads.forEach((lead) => {
-        if (!teamLeadMap.has(lead.email)) {
-          teamLeadMap.set(lead.email, {
-            roleKey: 'team_lead',
-            roleLabel: '收案組組長',
-            email: lead.email,
-            name: lead.name,
-            members: [],
-            memberKeySet: new Set()
-          });
-        }
-        stationAssignments.forEach((stationAssignment) => {
-          appendLayeredMember_(teamLeadMap.get(lead.email), learner, stationAssignment);
-        });
+    if (includeTeamLead && sharedTeamLeadSummary) {
+      stationAssignments.forEach((stationAssignment) => {
+        appendLayeredMember_(sharedTeamLeadSummary, learner, stationAssignment);
       });
     }
   });
@@ -1610,14 +2260,16 @@ function selectCaseStaffLayeredRecipients_(context, payload) {
   if (includeTeamLead && teamLeads.length === 0) {
     skipped.push({
       email: '',
-      name: '收案組組長',
-      roleLabel: '收案組組長',
-      reason: '找不到 GRP-CO 職稱含「組長」的人員'
+      name: '收案組主管',
+      roleLabel: '收案組組長/副組長',
+      reason: '找不到 GRP-CO 職稱含「組長」或「副組長」的人員'
     });
   }
 
   const stationManagerRecipients = Array.from(stationManagerMap.values()).map(finalizeLayeredSummaryRecipient_);
-  const teamLeadRecipients = Array.from(teamLeadMap.values()).map(finalizeLayeredSummaryRecipient_);
+  const teamLeadRecipients = sharedTeamLeadSummary
+    ? [finalizeLayeredSummaryRecipient_(sharedTeamLeadSummary)]
+    : [];
   const recipients = caseStaffRecipients.concat(stationManagerRecipients, teamLeadRecipients);
 
   return {
@@ -1650,20 +2302,71 @@ function buildCaseStaffStationAssignmentsByEmail_(assignments, orgNodeMap) {
   return grouped;
 }
 
+function classifyCaseStaffLeadRole_(title) {
+  const cleanTitle = String(title || '').trim();
+  if (/副組長|副長/.test(cleanTitle)) {
+    return {
+      roleType: 'deputy',
+      roleLabel: '收案組副組長',
+      rank: 2
+    };
+  }
+  if (/組長|長/.test(cleanTitle)) {
+    return {
+      roleType: 'leader',
+      roleLabel: '收案組組長',
+      rank: 1
+    };
+  }
+  return null;
+}
+
 function buildCaseStaffTeamLeadRecipients_(assignments) {
   const leadsByEmail = new Map();
+  const invalidLeads = [];
   (assignments || []).forEach((assignment) => {
     const email = normalizeEmail_(assignment.email);
     if (normalizeOrgCode_(assignment.orgCode) !== 'GRP-CO') return;
-    if (!titleContainsLeaderKeyword_(assignment.title)) return;
-    if (!email || !isValidEmail_(email)) return;
-    if (leadsByEmail.has(email)) return;
+    const roleInfo = classifyCaseStaffLeadRole_(assignment.title);
+    if (!roleInfo) return;
+    if (!email || !isValidEmail_(email)) {
+      invalidLeads.push({
+        email: assignment.email || '',
+        name: String(assignment.name || '未命名').trim(),
+        roleLabel: roleInfo.roleLabel,
+        reason: '信箱無效或缺少信箱'
+      });
+      return;
+    }
+    if (leadsByEmail.has(email)) {
+      const existing = leadsByEmail.get(email);
+      if (roleInfo.rank < existing.rank) {
+        leadsByEmail.set(email, {
+          email,
+          name: String(assignment.name || email).trim(),
+          title: String(assignment.title || '').trim(),
+          roleType: roleInfo.roleType,
+          roleLabel: roleInfo.roleLabel,
+          rank: roleInfo.rank
+        });
+      }
+      return;
+    }
     leadsByEmail.set(email, {
       email,
-      name: String(assignment.name || email).trim()
+      name: String(assignment.name || email).trim(),
+      title: String(assignment.title || '').trim(),
+      roleType: roleInfo.roleType,
+      roleLabel: roleInfo.roleLabel,
+      rank: roleInfo.rank
     });
   });
-  return Array.from(leadsByEmail.values()).sort((a, b) => String(a.name || a.email).localeCompare(String(b.name || b.email), 'zh-Hant'));
+  const validLeads = Array.from(leadsByEmail.values()).sort((a, b) => {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    return String(a.name || a.email).localeCompare(String(b.name || b.email), 'zh-Hant');
+  });
+  validLeads.invalidLeads = invalidLeads;
+  return validLeads;
 }
 
 function appendLayeredMember_(recipient, learner, stationAssignment) {
@@ -1693,11 +2396,12 @@ function finalizeLayeredSummaryRecipient_(recipient) {
     roleLabel: recipient.roleLabel,
     email: recipient.email,
     name: recipient.name,
+    leadMembers: recipient.leadMembers || null,
     members,
     memberCount: members.length,
     memberListHtml: buildLayeredMemberListHtml_(members),
     assignmentOrgName: '',
-    assignmentTitle: `${recipient.roleLabel}彙總`
+    assignmentTitle: recipient.assignmentTitle || `${recipient.roleLabel}彙總`
   };
 }
 
@@ -1721,7 +2425,23 @@ function getLayeredTemplateForRole_(templates, roleKey) {
   return templates.caseStaff;
 }
 
-function applyLayeredNotificationTemplate_(template, recipient, courseTitle, trainingCourseUrl) {
+function applyLayeredNotificationTemplate_(template, recipient, courseTitle, trainingCourseUrl, templateContext) {
+  let leaderGreeting = recipient.name || '';
+  if (recipient.roleKey === 'team_lead') {
+    const leadMembers = Array.isArray(recipient.leadMembers) ? recipient.leadMembers : [];
+    const hasLeader = leadMembers.some((item) => item.roleType === 'leader');
+    const hasDeputy = leadMembers.some((item) => item.roleType === 'deputy');
+    if (hasLeader && hasDeputy) {
+      leaderGreeting = '收案組組長、副組長';
+    } else if (hasDeputy) {
+      leaderGreeting = '收案組副組長';
+    } else if (hasLeader) {
+      leaderGreeting = '收案組組長';
+    } else {
+      leaderGreeting = recipient.roleLabel || recipient.name || '收案組組長';
+    }
+  }
+
   const replacements = {
     '{{姓名}}': recipient.name || '',
     '{{信箱}}': recipient.email || '',
@@ -1729,11 +2449,12 @@ function applyLayeredNotificationTemplate_(template, recipient, courseTitle, tra
     '{{職稱}}': recipient.assignmentTitle || '',
     '{{駐站列表}}': recipient.stationList || recipient.assignmentOrgName || '',
     '{{駐站管理員姓名}}': recipient.name || '',
-    '{{組長姓名}}': recipient.name || '',
+    '{{組長姓名}}': leaderGreeting,
     '{{未完成人員名單}}': recipient.memberListHtml || '',
     '{{課程名稱}}': courseTitle || DASHBOARD_CONFIG.defaultCourseTitle,
     '{{訓練狀態}}': recipient.statusLabel || '',
-    '{{上課網址}}': trainingCourseUrl || ''
+    '{{上課網址}}': trainingCourseUrl || '',
+    '{{修課期限}}': typeof formatChineseDeadlineDate_ === 'function' ? formatChineseDeadlineDate_(templateContext && templateContext.deadlineDate) : ''
   };
 
   let output = String(template || '');
@@ -1744,7 +2465,8 @@ function applyLayeredNotificationTemplate_(template, recipient, courseTitle, tra
 }
 
 function selectNotificationRecipients_(context, payload) {
-  const orgCodes = resolveNotificationTargetOrgCodes_(context.orgNodes, payload.target);
+  const isLeadershipReminder = payload.templateType === 'leadership_reminder';
+  const orgCodes = isLeadershipReminder ? [] : resolveNotificationTargetOrgCodes_(context.orgNodes, payload.target);
   const orgCodeSet = new Set(orgCodes.map((item) => normalizeOrgCode_(item)));
   const isCaseStaffVirtualTarget = isCaseStaffVirtualTarget_(payload.target.orgCode);
   const dedupe = new Set();
@@ -1754,21 +2476,28 @@ function selectNotificationRecipients_(context, payload) {
   context.learners.forEach((learner) => {
     const reasons = [];
     if (!learner.email) reasons.push('缺少信箱');
-    if (learner.assignmentType && learner.assignmentType !== '主職') reasons.push('非主職');
-    if (isCaseStaffVirtualTarget) {
+    if (!isLeadershipReminder && learner.assignmentType && learner.assignmentType !== '主職') reasons.push('非主職');
+    if (isLeadershipReminder) {
+      if (!hasExecutiveAdminAssignment_(learner.email, context)) reasons.push('非層級1~4行政長官主管');
+    } else if (isCaseStaffVirtualTarget) {
       if (!isCaseStaffOrgCode_(learner.assignmentOrgCode)) reasons.push('不在收案人員範圍');
     } else {
       if (learner.assignmentOrgType !== payload.target.orgType) reasons.push('組織類型不符');
       if (payload.target.level !== '' && Number(learner.assignmentOrgLevel || 0) !== Number(payload.target.level)) reasons.push('層級不符');
       if (orgCodeSet.size > 0 && !orgCodeSet.has(normalizeOrgCode_(learner.assignmentOrgCode))) reasons.push('不在目標組織');
     }
-    if (!matchesNotificationStatusFilter_(learner.status, payload.trainingStatus)) reasons.push('訓練狀態不符');
+    const targetStatus = isLeadershipReminder ? 'incomplete' : payload.trainingStatus;
+    if (!matchesNotificationStatusFilter_(learner.status, targetStatus)) reasons.push('訓練狀態不符');
     if (payload.personnelStatus && String(learner.personnelStatus || '').trim() !== payload.personnelStatus) reasons.push('人員狀態不符');
+    if (payload.excludeParentalLeave && String(learner.personnelStatus || '').trim() === '育嬰假') reasons.push('排除育嬰假');
+    if (payload.excludeOutsideLocation && isOutsideLocation_(learner.location)) reasons.push('排除outside');
+    if (payload.excludeEthicsCommittee && typeof isEthicsCommitteeMember_ === 'function' && isEthicsCommitteeMember_(learner, context)) reasons.push('排除倫理委員會');
     if (!isValidEmail_(learner.email)) reasons.push('信箱格式不正確');
     if (dedupe.has(learner.email)) reasons.push('重複信箱');
 
     if (reasons.length > 0) {
-      if (reasons[0] === '缺少信箱' || reasons[0] === '信箱格式不正確' || reasons[0] === '重複信箱') {
+      const isTargetLeader = isLeadershipReminder && !reasons.includes('非層級1~4行政長官主管');
+      if (reasons[0] === '缺少信箱' || reasons[0] === '信箱格式不正確' || reasons[0] === '重複信箱' || isTargetLeader) {
         skipped.push({
           email: learner.email,
           name: learner.name,
@@ -1855,6 +2584,22 @@ function matchesNotificationStatusFilter_(learnerStatus, filterValue) {
   return learnerStatus === filterValue;
 }
 
+function formatChineseDeadlineDate_(dateStr) {
+  const currentYear = new Date().getFullYear();
+  if (!dateStr) {
+    return `${currentYear} 年 8 月 30 日`;
+  }
+  const str = String(dateStr).trim();
+  const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (match) {
+    const y = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    const d = parseInt(match[3], 10);
+    return `${y} 年 ${m} 月 ${d} 日`;
+  }
+  return str;
+}
+
 function applyNotificationTemplate_(template, recipient, courseTitle, trainingCourseUrl, templateContext) {
   const replacements = {
     '{{姓名}}': recipient.name || '',
@@ -1865,7 +2610,8 @@ function applyNotificationTemplate_(template, recipient, courseTitle, trainingCo
     '{{訓練狀態}}': recipient.statusLabel || '',
     '{{上課網址}}': trainingCourseUrl || '',
     '{{組別稱呼}}': templateContext && templateContext.groupGreeting || '',
-    '{{駐站管理稱呼}}': templateContext && templateContext.stationManagerGreeting || ''
+    '{{駐站管理稱呼}}': templateContext && templateContext.stationManagerGreeting || '',
+    '{{修課期限}}': typeof formatChineseDeadlineDate_ === 'function' ? formatChineseDeadlineDate_(templateContext && templateContext.deadlineDate) : ''
   };
 
   let output = String(template || '');
@@ -1881,7 +2627,8 @@ function applyGenericNotificationTemplate_(template, courseTitle, trainingCourse
     '{{課程名稱}}': courseTitle || DASHBOARD_CONFIG.defaultCourseTitle,
     '{{上課網址}}': trainingCourseUrl || '',
     '{{組別稱呼}}': templateContext && templateContext.groupGreeting || '',
-    '{{駐站管理稱呼}}': templateContext && templateContext.stationManagerGreeting || ''
+    '{{駐站管理稱呼}}': templateContext && templateContext.stationManagerGreeting || '',
+    '{{修課期限}}': typeof formatChineseDeadlineDate_ === 'function' ? formatChineseDeadlineDate_(templateContext && templateContext.deadlineDate) : ''
   };
   Object.keys(replacements).forEach((token) => {
     output = output.split(token).join(String(replacements[token]));
@@ -1892,7 +2639,8 @@ function applyGenericNotificationTemplate_(template, courseTitle, trainingCourse
 function buildNotificationTemplateContext_(context, payload) {
   return {
     groupGreeting: resolveNotificationGroupGreeting_(context, payload),
-    stationManagerGreeting: resolveNotificationStationManagerGreeting_(context, payload)
+    stationManagerGreeting: resolveNotificationStationManagerGreeting_(context, payload),
+    deadlineDate: payload && payload.deadlineDate ? payload.deadlineDate : ''
   };
 }
 
@@ -1937,7 +2685,8 @@ function buildNotificationCriteriaSummary_(payload) {
     descendantMode: isCaseStaffVirtualTarget ? 'self' : payload.target.descendantMode,
     trainingStatus: payload.trainingStatus,
     personnelStatus: payload.personnelStatus,
-    assignmentMatch: payload.target.assignmentMatch
+    assignmentMatch: payload.target.assignmentMatch,
+    deadlineDate: payload.deadlineDate || ''
   };
 }
 
@@ -1962,13 +2711,23 @@ function appendNotificationLog_(entry) {
     getNotificationTargetOrgLabel_(entry.payload.target.orgCode),
     getNotificationDescendantModeLabel_(entry.payload.target.descendantMode),
     entry.payload.trainingStatus || '',
-    entry.payload.personnelStatus || '',
+    formatNotificationPersonnelStatusLog_(entry.payload),
     entry.payload.template.subject || '',
     Number(entry.recipientCount || 0),
     Number(entry.sentCount || 0),
     Number(entry.skippedCount || 0)
   ]);
   SpreadsheetApp.flush();
+}
+
+function formatNotificationPersonnelStatusLog_(payload) {
+  const baseStatus = String(payload && payload.personnelStatus || '').trim();
+  const exclusions = [];
+  if (payload && payload.excludeParentalLeave) exclusions.push('排除育嬰假');
+  if (payload && payload.excludeOutsideLocation) exclusions.push('排除outside');
+  if (payload && payload.excludeEthicsCommittee) exclusions.push('排除倫理委員會');
+  const suffix = exclusions.length > 0 ? `（${exclusions.join('、')}）` : '';
+  return baseStatus ? `${baseStatus}${suffix}` : (suffix ? `全部${suffix}` : '');
 }
 
 function getNotificationTemplateLabel_(templateType) {
@@ -1981,7 +2740,9 @@ function getNotificationTemplateLabel_(templateType) {
     group_announcement: '組別版',
     station_manager_announcement: '駐站管理員版',
     leadership_announcement_summary: '長官主管摘要版',
-    leadership_announcement: '長官主管完整版'
+    leadership_announcement: '長官主管完整版',
+    org_group_initial: '全組織各組初次通知',
+    org_group_reminder: '全組織各組未完成通知'
   };
   return labels[String(templateType || '').trim()] || '個人化版';
 }
@@ -1998,6 +2759,7 @@ function getNotificationDeliveryModeLabel_(deliveryMode) {
 
 function getNotificationTargetOrgLabel_(orgCode) {
   if (isCaseStaffVirtualTarget_(orgCode)) return '收案人員';
+  if (orgCode === 'ALL_ORG_GROUPS' || !orgCode) return '全組織所有組別';
   return String(orgCode || '').trim();
 }
 

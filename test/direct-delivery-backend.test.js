@@ -25,6 +25,10 @@ function buildCaseStaffIndividualNotificationTemplate_(title) { return { title, 
 function buildCaseStaffSingleBccNotificationTemplate_(title) { return { title, id: 'case_bcc' }; }
 function buildParentalLeavePersonalizedNotificationTemplate_(title) { return { title, id: 'parental' }; }
 function buildCaseStaffLayeredReminderTemplateBundle_(title) { return { title, id: 'case_layer' }; }
+function buildOrgGroupInitialTemplate_(title) { return { title, id: 'org_init' }; }
+function buildOrgGroupReminderTemplate_(title) { return { title, id: 'org_rem' }; }
+function buildLeadershipReminderIndividualTemplate_(title) { return { title, id: 'lead_ind' }; }
+function buildLeadershipReminderGenericTemplate_(title) { return { title, id: 'lead_gen' }; }
 `;
 const getTemplatesByMode = new Function(mockBuildTemplateFunctions + templatesByModeMatch[0] + '; return buildNotificationTemplatesByDeliveryMode_;')();
 const templates = getTemplatesByMode('資安教育訓練');
