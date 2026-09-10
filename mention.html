@@ -30,6 +30,12 @@
         </div>
       </div>
       <div class="flex items-center space-x-3">
+        <span id="viewer-email-badge" class="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+          <svg class="w-3.5 h-3.5 mr-1 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+          </svg>
+          <span id="viewer-email-display">管理人員</span>
+        </span>
         <a href="?page=index" class="text-xs sm:text-sm text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
           回到上課首頁
         </a>
@@ -381,7 +387,14 @@
             gInitialData = res;
             applyInitialData(res);
           } else {
-            Swal.fire('載入失敗', res && res.message ? res.message : '無法取得催辦初始化資料', 'error');
+            const isAuthError = res && res.message && res.message.includes('權限不足');
+            Swal.fire({
+              icon: 'error',
+              title: isAuthError ? '存取權限不足' : '載入失敗',
+              text: res && res.message ? res.message : '無法取得催辦初始化資料',
+              allowOutsideClick: false,
+              confirmButtonText: '確定'
+            });
           }
         })
         .withFailureHandler(function(err) {
@@ -392,6 +405,12 @@
 
     // 套用初始資料
     function applyInitialData(data) {
+      if (data.viewerEmail) {
+        const badge = document.getElementById('viewer-email-badge');
+        const display = document.getElementById('viewer-email-display');
+        if (display) display.textContent = data.viewerEmail;
+        if (badge) badge.classList.remove('hidden');
+      }
       if (data.courseTitle) {
         document.getElementById('header-course-title').textContent = data.courseTitle;
       }

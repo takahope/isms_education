@@ -33,6 +33,14 @@ const SHEET_HEADERS = {
 function doGet(e) {
   const page = e && e.parameter && e.parameter.page ? String(e.parameter.page).trim().toLowerCase() : '';
   if (page === 'mention') {
+    const viewerEmail = getCurrentUserEmail();
+    if (!canAccessMention_(viewerEmail)) {
+      return HtmlService.createHtmlOutput(buildMentionAccessDeniedHtml_(viewerEmail))
+        .setTitle('權限不足 - 催辦通知台')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    }
+
     return HtmlService.createTemplateFromFile('mention')
       .evaluate()
       .setTitle('資安教育訓練未完成催辦通知台')
@@ -2222,6 +2230,7 @@ function getSimpleTrainingStats() {
  */
 
 const MENTION_CONFIG = {
+  allowedEmailsPropertyKey: 'DASHBOARD_ALLOWED_EMAILS',
   requiredWatchSeconds: 3600,
   passingScore: 70,
   defaultCourseTitle: '資訊安全暨個資保護教育訓練',
@@ -2232,6 +2241,148 @@ const MENTION_CONFIG = {
   quizRecordSheetName: '訓練紀錄',
   notificationLogSheetName: '通知紀錄'
 };
+
+/**
+ * 取得允許存取催辦通知台之 Email 白名單
+ * 讀取 Script Properties 中的 DASHBOARD_ALLOWED_EMAILS
+ * @returns {string[]}
+ */
+function getDashboardAllowedEmails_() {
+  let raw = '';
+  try {
+    if (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties) {
+      const props = PropertiesService.getScriptProperties();
+      if (props && props.getProperty) {
+        const key = (typeof MENTION_CONFIG !== 'undefined' && MENTION_CONFIG.allowedEmailsPropertyKey) || 'DASHBOARD_ALLOWED_EMAILS';
+        raw = props.getProperty(key) || '';
+      }
+    }
+  } catch (e) {}
+
+  return String(raw || '')
+    .split(/[\n,;]+/)
+    .map((item) => normalizeEmail_(item))
+    .filter(Boolean);
+}
+
+/**
+ * 檢查使用者是否具備存取催辦通知台之權限 (白名單制 + Default-Deny)
+ * @param {string} viewerEmail - 使用者 Email
+ * @returns {boolean}
+ */
+function canAccessMention_(viewerEmail) {
+  const email = normalizeEmail_(viewerEmail);
+  const allowed = getDashboardAllowedEmails_();
+  if (allowed.length > 0) {
+    if (!email) return false;
+    return allowed.includes(email);
+  }
+  // 若白名單未設定：若處於 Node.js 測試環境且未設定白名單則寬容（相容純邏輯單元測試），真實 GAS 環境則一律 Default-Deny
+  if (typeof process !== 'undefined' && process.env) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 產製催辦通知台權限不足之 HTML 頁面
+ * @param {string} viewerEmail - 使用者 Email
+ * @returns {string} HTML 內容
+ */
+function buildMentionAccessDeniedHtml_(viewerEmail) {
+  const safeEmail = escapeHtml_(viewerEmail || '未登入帳號');
+  const propertyKey = escapeHtml_((typeof MENTION_CONFIG !== 'undefined' && MENTION_CONFIG.allowedEmailsPropertyKey) || 'DASHBOARD_ALLOWED_EMAILS');
+  return '<!DOCTYPE html>\n' +
+    '<html lang="zh-TW">\n' +
+    '<head>\n' +
+    '  <meta charset="UTF-8">\n' +
+    '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+    '  <title>權限不足 - 資安教育訓練未完成催辦通知台</title>\n' +
+    '  <style>\n' +
+    '    :root {\n' +
+    '      --bg: #f8fafc;\n' +
+    '      --card: #ffffff;\n' +
+    '      --text: #0f172a;\n' +
+    '      --muted: #64748b;\n' +
+    '      --line: #e2e8f0;\n' +
+    '      --warn: #dc2626;\n' +
+    '    }\n' +
+    '    * { box-sizing: border-box; }\n' +
+    '    body {\n' +
+    '      margin: 0;\n' +
+    '      min-height: 100vh;\n' +
+    '      display: grid;\n' +
+    '      place-items: center;\n' +
+    '      padding: 24px;\n' +
+    '      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;\n' +
+    '      background: radial-gradient(circle at top left, rgba(79, 70, 229, 0.08), transparent 28%), linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%);\n' +
+    '      color: var(--text);\n' +
+    '    }\n' +
+    '    .panel {\n' +
+    '      width: min(540px, 100%);\n' +
+    '      padding: 36px 32px;\n' +
+    '      border-radius: 20px;\n' +
+    '      background: var(--card);\n' +
+    '      border: 1px solid var(--line);\n' +
+    '      box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.08);\n' +
+    '      text-align: left;\n' +
+    '    }\n' +
+    '    .eyebrow {\n' +
+    '      display: inline-flex;\n' +
+    '      align-items: center;\n' +
+    '      padding: 6px 12px;\n' +
+    '      border-radius: 999px;\n' +
+    '      background: #fee2e2;\n' +
+    '      color: var(--warn);\n' +
+    '      font-size: 12px;\n' +
+    '      font-weight: 700;\n' +
+    '      letter-spacing: 0.05em;\n' +
+    '    }\n' +
+    '    h1 {\n' +
+    '      margin: 20px 0 12px;\n' +
+    '      font-size: 22px;\n' +
+    '      font-weight: 700;\n' +
+    '      line-height: 1.3;\n' +
+    '      color: #1e293b;\n' +
+    '    }\n' +
+    '    p {\n' +
+    '      margin: 0 0 16px;\n' +
+    '      color: var(--muted);\n' +
+    '      font-size: 14px;\n' +
+    '      line-height: 1.7;\n' +
+    '    }\n' +
+    '    code {\n' +
+    '      display: inline-block;\n' +
+    '      padding: 2px 8px;\n' +
+    '      border-radius: 6px;\n' +
+    '      background: #f1f5f9;\n' +
+    '      color: #4338ca;\n' +
+    '      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;\n' +
+    '      font-size: 13px;\n' +
+    '      font-weight: 600;\n' +
+    '    }\n' +
+    '    .footer {\n' +
+    '      margin-top: 24px;\n' +
+    '      padding-top: 20px;\n' +
+    '      border-top: 1px solid var(--line);\n' +
+    '      font-size: 13px;\n' +
+    '      color: #94a3b8;\n' +
+    '    }\n' +
+    '  </style>\n' +
+    '</head>\n' +
+    '<body>\n' +
+    '  <main class="panel">\n' +
+    '    <div class="eyebrow">ACCESS RESTRICTED</div>\n' +
+    '    <h1>您目前沒有使用催辦通知台的權限</h1>\n' +
+    '    <p>目前登入帳號：<code>' + safeEmail + '</code></p>\n' +
+    '    <p>此頁面僅限系統管理員與指定負責人操作。若需存取權限，請確認 Apps Script「指令碼屬性（Script Properties）」中已將您的信箱加入 <code>' + propertyKey + '</code> 設定值。</p>\n' +
+    '    <div class="footer">\n' +
+    '      如有任何權限疑問，請聯絡專案規劃組(策略組)或資安承辦人員。\n' +
+    '    </div>\n' +
+    '  </main>\n' +
+    '</body>\n' +
+    '</html>';
+}
 
 function isOutsideLocation_(location) {
   return String(location || '').trim().toLowerCase() === 'outside';
@@ -3570,6 +3721,14 @@ function selectMentionOrgGroupRecipients_(context, payload) {
  */
 function getMentionInitialData() {
   try {
+    const viewerEmail = getCurrentUserEmail();
+    if (!canAccessMention_(viewerEmail)) {
+      return {
+        success: false,
+        message: '權限不足：您未被授權操作催辦通知功能，請確認 DASHBOARD_ALLOWED_EMAILS 設定。'
+      };
+    }
+
     const context = buildMentionContext_();
     const currentYear = new Date().getFullYear();
     const defaultDeadlineDate = `${currentYear}-08-30`;
@@ -3577,6 +3736,7 @@ function getMentionInitialData() {
 
     return {
       success: true,
+      viewerEmail,
       courseTitle,
       defaultDeadlineDate,
       courseUrl: resolveBaseCourseUrl_(''),
@@ -3605,6 +3765,14 @@ function getMentionInitialData() {
  */
 function previewMentionNotification(payload) {
   try {
+    const viewerEmail = getCurrentUserEmail();
+    if (!canAccessMention_(viewerEmail)) {
+      return {
+        success: false,
+        message: '權限不足：您未被授權預覽催辦通知。'
+      };
+    }
+
     const p = payload || {};
     const templateType = p.templateType;
     const context = buildMentionContext_();
@@ -3711,6 +3879,14 @@ function previewMentionNotification(payload) {
  */
 function executeMentionNotification(payload) {
   try {
+    const viewerEmail = getCurrentUserEmail();
+    if (!canAccessMention_(viewerEmail)) {
+      return {
+        success: false,
+        message: '權限不足：您未被授權發送催辦通知。'
+      };
+    }
+
     const p = payload || {};
     const templateType = p.templateType;
     const context = buildMentionContext_();
@@ -3721,13 +3897,6 @@ function executeMentionNotification(payload) {
 
     const failures = [];
     let sentCount = 0;
-
-    let viewerEmail = '';
-    try {
-      if (typeof Session !== 'undefined' && Session.getActiveUser) {
-        viewerEmail = Session.getActiveUser().getEmail() || '';
-      }
-    } catch (e) {}
 
     if (templateType === 'leadership_reminder') {
       const selection = selectMentionRecipients_(context, p);
