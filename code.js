@@ -2983,6 +2983,62 @@ function buildShadowForwardingNoticeHtml_(learnerName) {
 }
 
 /**
+ * 解析最權威之 Web App 基礎網址 (優先採用伺服端 ScriptApp.getService().getUrl())
+ * 嚴格防範 Google iframe 沙盒網址 (*.googleusercontent.com) 污染對外發信連結
+ * @param {string} [fallbackUrl] - 備用 URL
+ * @returns {string} 乾淨之 Web App 進入點網址
+ */
+function resolveBaseCourseUrl_(fallbackUrl) {
+  let url = '';
+  try {
+    if (typeof ScriptApp !== 'undefined' && ScriptApp.getService) {
+      url = ScriptApp.getService().getUrl() || '';
+    }
+  } catch (e) {}
+
+  // 伺服端無值時（如無部署狀態或本機測試），檢查 fallbackUrl
+  if (!url && fallbackUrl) {
+    const raw = String(fallbackUrl).trim();
+    // 排除 googleusercontent 沙盒域名
+    if (raw && !raw.includes('googleusercontent.com')) {
+      url = raw;
+    }
+  }
+
+  // 剝除任何 query string (如 ?page=mention)
+  if (url && url.includes('?')) {
+    url = url.split('?')[0];
+  }
+
+  return url || '#';
+}
+
+/**
+ * 將專屬 Capability URL 強制且精準地注入信件 HTML 內文
+ * 支援替換 {{上課網址}} 佔位符，以及已固化之任意前往上課 <a> 標籤連結，並在頂部附加影子轉派橫幅
+ * @param {string} htmlBody - 原始信件 HTML
+ * @param {string} capUrl - 學員/長官專屬免登入 URL
+ * @param {string} [noticeBanner] - 影子專屬提示橫幅 HTML
+ * @returns {string} 注入後的完整 HTML
+ */
+function injectCapabilityUrlIntoHtmlBody_(htmlBody, capUrl, noticeBanner) {
+  let body = String(htmlBody || '');
+  if (body.includes('{{上課網址}}')) {
+    body = body.replace(/\{\{上課網址\}\}/g, capUrl);
+  } else {
+    // 匹配包含「前往上課」文字的 <a> 標籤，將其 href 強制替換為 capUrl
+    const regex = /<a\s+([^>]*?)href=["'][^"']*?["']([^>]*?)>(\s*前往上課\s*)<\/a>/gi;
+    if (regex.test(body)) {
+      body = body.replace(regex, '<a $1href="' + capUrl + '"$2>$3</a>');
+    } else {
+      // 若連「前往上課」文字都找不到，附加至最末尾作為獨立上課按鈕
+      body += '<p style="margin-top: 16px;"><a href="' + capUrl + '" style="display: inline-block; padding: 10px 18px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: bold;">專屬免登入前往上課</a></p>';
+    }
+  }
+  return (noticeBanner || '') + body;
+}
+
+/**
  * 驗證長官免登入專屬上課 HMAC-SHA256 簽章
  * @param {string} courseTitle - 課程名稱
  * @param {string} opEmail - 操作者信箱 (主信箱或副信箱)
@@ -3523,6 +3579,7 @@ function getMentionInitialData() {
       success: true,
       courseTitle,
       defaultDeadlineDate,
+      courseUrl: resolveBaseCourseUrl_(''),
       templates: {
         leadership_reminder: buildLeadershipReminderGenericTemplate_(courseTitle),
         org_group_reminder: buildOrgGroupReminderTemplate_(courseTitle)
@@ -3554,9 +3611,7 @@ function previewMentionNotification(payload) {
     const courseTitle = context.courseTitle || MENTION_CONFIG.defaultCourseTitle;
     const deadlineDate = p.deadlineDate || `${new Date().getFullYear()}-08-30`;
     const deadlineText = formatChineseDeadlineDate_(deadlineDate);
-    const courseUrl = (typeof ScriptApp !== 'undefined' && ScriptApp.getService)
-      ? ScriptApp.getService().getUrl()
-      : '';
+    const courseUrl = resolveBaseCourseUrl_(p.courseUrl);
 
     if (templateType === 'leadership_reminder') {
       const selection = selectMentionRecipients_(context, p);
@@ -3662,10 +3717,7 @@ function executeMentionNotification(payload) {
     const courseTitle = context.courseTitle || MENTION_CONFIG.defaultCourseTitle;
     const deadlineDate = p.deadlineDate || `${new Date().getFullYear()}-08-30`;
     const deadlineText = formatChineseDeadlineDate_(deadlineDate);
-    let rawCourseUrl = (p.courseUrl && String(p.courseUrl).trim())
-      ? String(p.courseUrl).trim()
-      : ((typeof ScriptApp !== 'undefined' && ScriptApp.getService) ? (ScriptApp.getService().getUrl() || '') : '');
-    const courseUrl = rawCourseUrl ? rawCourseUrl.split('?')[0] : '';
+    const courseUrl = resolveBaseCourseUrl_(p.courseUrl);
 
     const failures = [];
     let sentCount = 0;
@@ -3724,7 +3776,7 @@ function executeMentionNotification(payload) {
           // 2. 影子副信箱（單獨寄送專屬 HMAC Capability URL 直達連結）
           if (hasShadow) {
             const noticeBanner = buildShadowForwardingNoticeHtml_(recipient.name);
-            const shadowHtmlBody = noticeBanner + baseHtmlBody.replace(/\{\{上課網址\}\}/g, targetUrl);
+            const shadowHtmlBody = injectCapabilityUrlIntoHtmlBody_(baseHtmlBody, targetUrl, noticeBanner);
 
             shadowEmails.forEach((shadowEmail) => {
               try {
@@ -3782,15 +3834,15 @@ function executeMentionNotification(payload) {
           if (shadowEmails.length > 0) {
             const capabilityUrl = buildLearnerCapabilityUrl_(courseUrl, courseTitle, recipient.email);
             const noticeBanner = buildShadowForwardingNoticeHtml_(recipient.name);
-            const shadowHtmlBody = noticeBanner + templateBody
+            const baseTpl = templateBody
               .replace(/\{\{姓名\}\}/g, escapeHtml_(recipient.name))
               .replace(/\{\{信箱\}\}/g, escapeHtml_(recipient.email))
               .replace(/\{\{單位\}\}/g, escapeHtml_(recipient.assignmentOrgName || ''))
               .replace(/\{\{職稱\}\}/g, escapeHtml_(recipient.assignmentTitle || ''))
               .replace(/\{\{課程名稱\}\}/g, escapeHtml_(courseTitle))
               .replace(/\{\{修課期限\}\}/g, escapeHtml_(deadlineText))
-              .replace(/\{\{訓練狀態\}\}/g, escapeHtml_(recipient.statusLabel || '未完成'))
-              .replace(/\{\{上課網址\}\}/g, capabilityUrl);
+              .replace(/\{\{訓練狀態\}\}/g, escapeHtml_(recipient.statusLabel || '未完成'));
+            const shadowHtmlBody = injectCapabilityUrlIntoHtmlBody_(baseTpl, capabilityUrl, noticeBanner);
 
             shadowEmails.forEach((shadowEmail) => {
               try {
@@ -3875,13 +3927,7 @@ function executeMentionNotification(payload) {
           if (shadowEmails.length > 0) {
             const capUrl = buildLearnerCapabilityUrl_(courseUrl, courseTitle, member.email);
             const noticeBanner = buildShadowForwardingNoticeHtml_(member.name);
-            let shadowBody = group.htmlBody;
-            if (shadowBody.includes('{{上課網址}}')) {
-              shadowBody = shadowBody.replace(/\{\{上課網址\}\}/g, capUrl);
-            } else if (courseUrl && shadowBody.includes(courseUrl)) {
-              shadowBody = shadowBody.split(courseUrl).join(capUrl);
-            }
-            shadowBody = noticeBanner + shadowBody;
+            const shadowBody = injectCapabilityUrlIntoHtmlBody_(group.htmlBody, capUrl, noticeBanner);
 
             shadowEmails.forEach((shadowEmail) => {
               try {
@@ -3899,22 +3945,13 @@ function executeMentionNotification(payload) {
           }
         });
 
-        // B) 主管督導專屬轉派 (若組長/副組長亦有影子信箱)
+        // B) 主管督導專屬轉派 (若組長/副組長亦有影子信箱，無論完課與否皆配發其專屬連結)
         group.ccMembers.forEach((lead) => {
           const shadowEmails = resolveMentionShadowEmails_(lead.email);
           if (shadowEmails.length > 0) {
-            const isLeadIncomplete = group.toMembers.some((m) => normalizeEmail_(m.email) === normalizeEmail_(lead.email));
-            const capUrl = isLeadIncomplete
-              ? buildLearnerCapabilityUrl_(courseUrl, courseTitle, lead.email)
-              : (courseUrl || '#');
+            const capUrl = buildLearnerCapabilityUrl_(courseUrl, courseTitle, lead.email);
             const noticeBanner = buildShadowForwardingNoticeHtml_(lead.name + ' (組長/主管)');
-            let shadowBody = group.htmlBody;
-            if (shadowBody.includes('{{上課網址}}')) {
-              shadowBody = shadowBody.replace(/\{\{上課網址\}\}/g, capUrl);
-            } else if (courseUrl && shadowBody.includes(courseUrl)) {
-              shadowBody = shadowBody.split(courseUrl).join(capUrl);
-            }
-            shadowBody = noticeBanner + shadowBody;
+            const shadowBody = injectCapabilityUrlIntoHtmlBody_(group.htmlBody, capUrl, noticeBanner);
 
             shadowEmails.forEach((shadowEmail) => {
               try {

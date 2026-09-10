@@ -328,7 +328,9 @@
       const excludeVendor = document.getElementById('exclude-vendor').checked;
       const subject = document.getElementById('mention-subject').value.trim();
       const htmlBody = document.getElementById('mention-body').value.trim();
-      const courseUrl = (window.location && window.location.href) ? window.location.href.split('?')[0] : '';
+      const rawLoc = (window.location && window.location.href) ? window.location.href.split('?')[0] : '';
+      const fallbackUrl = (rawLoc && !rawLoc.includes('googleusercontent.com')) ? rawLoc : '';
+      const courseUrl = (gInitialData && gInitialData.courseUrl) ? gInitialData.courseUrl : fallbackUrl;
 
       return {
         templateType,
