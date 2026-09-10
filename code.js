@@ -2861,7 +2861,7 @@ function resolveOrgGroupLeadRecipients_(groupOrCode, context, groupMembers) {
 function buildLeadershipReminderIndividualTemplate_(courseTitle) {
   const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
   return {
-    subject: `【重要提醒】請撥冗完成${safeCourseTitle}`,
+    subject: `【重要提醒】請撥冗完成${safeCourseTitle}教育訓練`,
     htmlBody: [
       '<p>{{姓名}} 長官/主管 您好：</p>',
       '<p>依據《資通安全責任等級分級辦法》及第三方國際標準驗證要求，全體同仁每年均需完成資通安全通識教育訓練。</p>',
@@ -2882,7 +2882,7 @@ function buildLeadershipReminderIndividualTemplate_(courseTitle) {
 function buildLeadershipReminderGenericTemplate_(courseTitle) {
   const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
   return {
-    subject: `【重要提醒】請長官、主管撥冗完成${safeCourseTitle}`,
+    subject: `【重要提醒】請長官、主管撥冗完成${safeCourseTitle}教育訓練`,
     htmlBody: [
       '<p>長官、主管們好：</p>',
       '<p>依據《資通安全責任等級分級辦法》及第三方國際標準驗證要求，每年需持續落實資訊安全與個資保護管理要求。</p>',
@@ -2901,7 +2901,7 @@ function buildLeadershipReminderGenericTemplate_(courseTitle) {
 function buildOrgGroupReminderTemplate_(courseTitle) {
   const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
   return {
-    subject: `【重要提醒】{{組別名稱}} - ${safeCourseTitle}未完成同仁催課通知`,
+    subject: `【重要提醒】{{組別名稱}} - ${safeCourseTitle}未完成同仁上課通知`,
     htmlBody: [
       '<p>{{組別名稱}} 各位同仁 您好：</p>',
       `<p>提醒您，本年度「<strong>${safeCourseTitle}</strong>」目前尚有同仁未完成課程或測驗，請尚未完課之同仁儘速安排時間完成。</p>`,
