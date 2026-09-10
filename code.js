@@ -29,21 +29,21 @@ const SHEET_HEADERS = {
   觀看進度: ['使用者信箱', '課程名稱', '影片ID', '已觀看區間', '已觀看秒數', '最後播放位置', '最後更新時間', '最後同步來源版本']
 };
 
-// 1. 發佈為 Web App 時的進入點 (支援 ?page=stats 簡易統計頁面, ?page=mention 催辦通知頁面, ?op=...&auth=... 免登入專屬連結)
+// 1. 發佈為 Web App 時的進入點 (支援 ?page=stats 簡易統計頁面, ?page=mention 通知頁面, ?op=...&auth=... 免登入專屬連結)
 function doGet(e) {
   const page = e && e.parameter && e.parameter.page ? String(e.parameter.page).trim().toLowerCase() : '';
   if (page === 'mention') {
     const viewerEmail = getCurrentUserEmail();
     if (!canAccessMention_(viewerEmail)) {
       return HtmlService.createHtmlOutput(buildMentionAccessDeniedHtml_(viewerEmail))
-        .setTitle('權限不足 - 催辦通知台')
+        .setTitle('權限不足 - 通知台')
         .addMetaTag('viewport', 'width=device-width, initial-scale=1')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
 
     return HtmlService.createTemplateFromFile('mention')
       .evaluate()
-      .setTitle('資安教育訓練未完成催辦通知台')
+      .setTitle('資安教育訓練未完成通知台')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
@@ -2225,7 +2225,7 @@ function getSimpleTrainingStats() {
 
 /**
  * =========================================================
- * 未完成催辦通知台模組 (Mention Notification Module)
+ * 未完成通知台模組 (Mention Notification Module)
  * =========================================================
  */
 
@@ -2243,7 +2243,7 @@ const MENTION_CONFIG = {
 };
 
 /**
- * 取得允許存取催辦通知台之 Email 白名單
+ * 取得允許存取通知台之 Email 白名單
  * 讀取 Script Properties 中的 DASHBOARD_ALLOWED_EMAILS
  * @returns {string[]}
  */
@@ -2266,7 +2266,7 @@ function getDashboardAllowedEmails_() {
 }
 
 /**
- * 檢查使用者是否具備存取催辦通知台之權限 (白名單制 + Default-Deny)
+ * 檢查使用者是否具備存取通知台之權限 (白名單制 + Default-Deny)
  * @param {string} viewerEmail - 使用者 Email
  * @returns {boolean}
  */
@@ -2285,7 +2285,7 @@ function canAccessMention_(viewerEmail) {
 }
 
 /**
- * 產製催辦通知台權限不足之 HTML 頁面
+ * 產製通知台權限不足之 HTML 頁面
  * @param {string} viewerEmail - 使用者 Email
  * @returns {string} HTML 內容
  */
@@ -2297,7 +2297,7 @@ function buildMentionAccessDeniedHtml_(viewerEmail) {
     '<head>\n' +
     '  <meta charset="UTF-8">\n' +
     '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
-    '  <title>權限不足 - 資安教育訓練未完成催辦通知台</title>\n' +
+    '  <title>權限不足 - 資安教育訓練未完成通知台</title>\n' +
     '  <style>\n' +
     '    :root {\n' +
     '      --bg: #f8fafc;\n' +
@@ -2373,7 +2373,7 @@ function buildMentionAccessDeniedHtml_(viewerEmail) {
     '<body>\n' +
     '  <main class="panel">\n' +
     '    <div class="eyebrow">ACCESS RESTRICTED</div>\n' +
-    '    <h1>您目前沒有使用催辦通知台的權限</h1>\n' +
+    '    <h1>您目前沒有使用通知台的權限</h1>\n' +
     '    <p>目前登入帳號：<code>' + safeEmail + '</code></p>\n' +
     '    <p>此頁面僅限系統管理員與指定負責人操作。若需存取權限，請確認 Apps Script「指令碼屬性（Script Properties）」中已將您的信箱加入 <code>' + propertyKey + '</code> 設定值。</p>\n' +
     '    <div class="footer">\n' +
@@ -3127,8 +3127,8 @@ function buildShadowForwardingNoticeHtml_(learnerName) {
   const safeName = escapeHtml_(learnerName || '長官/同仁');
   return [
     '<div style="background-color: #fef3c7; border: 1px solid #fcd34d; border-radius: 6px; padding: 12px; margin: 12px 0 16px 0; font-size: 13px; color: #92400e; line-height: 1.5; font-family: sans-serif;">',
-    '🪞 <strong>影子信箱雙軌專屬轉派通知</strong><br>',
-    '此信件為系統自動同步轉派至您的私人信箱。您可直接點擊下方「前往上課」專屬連結，使用手機或個人行動裝置直接上課與測驗，系統將自動以您的公務身分（<strong>' + safeName + '</strong>）記錄受訓進度與成績，無需登入 Google 組織帳號。',
+    '🪞 <strong>非公務信箱專屬轉派通知</strong><br>',
+    '此信件為系統自動同步轉派至您的私人信箱。您可直接點擊下方「前往上課」專屬連結，使用手機或個人行動裝置直接上課與測驗，系統將自動以您的公務身分（<strong>' + safeName + '</strong>）記錄上課進度與測驗成績，無需登入 Google 組織帳號。',
     '</div>'
   ].join('');
 }
@@ -3293,7 +3293,7 @@ function resolveAuthenticatedUser_(payload, courseTitle, options) {
 }
 
 /**
- * 建立催辦通知所需的資料上下文
+ * 建立通知所需的資料上下文
  */
 function buildMentionContext_(options) {
   const opts = options || {};
@@ -3717,7 +3717,7 @@ function selectMentionOrgGroupRecipients_(context, payload) {
 }
 
 /**
- * 取得催辦通知頁面初始資料
+ * 取得通知頁面初始資料
  */
 function getMentionInitialData() {
   try {
@@ -3725,7 +3725,7 @@ function getMentionInitialData() {
     if (!canAccessMention_(viewerEmail)) {
       return {
         success: false,
-        message: '權限不足：您未被授權操作催辦通知功能，請確認 DASHBOARD_ALLOWED_EMAILS 設定。'
+        message: '權限不足：您未被授權操作通知功能，請確認 DASHBOARD_ALLOWED_EMAILS 設定。'
       };
     }
 
@@ -3752,7 +3752,7 @@ function getMentionInitialData() {
       }
     };
   } catch (error) {
-    console.error('取得催辦初始資料失敗:', error);
+    console.error('取得初始資料失敗:', error);
     return {
       success: false,
       message: error && error.message ? error.message : String(error)
@@ -3761,7 +3761,7 @@ function getMentionInitialData() {
 }
 
 /**
- * 預覽催辦通知信件內容
+ * 預覽通知信件內容
  */
 function previewMentionNotification(payload) {
   try {
@@ -3769,7 +3769,7 @@ function previewMentionNotification(payload) {
     if (!canAccessMention_(viewerEmail)) {
       return {
         success: false,
-        message: '權限不足：您未被授權預覽催辦通知。'
+        message: '權限不足：您未被授權預覽通知。'
       };
     }
 
@@ -3864,9 +3864,9 @@ function previewMentionNotification(payload) {
       };
     }
 
-    throw new Error('不支援的催辦範本類型: ' + templateType);
+    throw new Error('不支援的範本類型: ' + templateType);
   } catch (error) {
-    console.error('催辦通知預覽失敗:', error);
+    console.error('通知預覽失敗:', error);
     return {
       success: false,
       message: error && error.message ? error.message : String(error)
@@ -3875,7 +3875,7 @@ function previewMentionNotification(payload) {
 }
 
 /**
- * 執行發送催辦通知信件
+ * 執行發送通知信件
  */
 function executeMentionNotification(payload) {
   try {
@@ -3883,7 +3883,7 @@ function executeMentionNotification(payload) {
     if (!canAccessMention_(viewerEmail)) {
       return {
         success: false,
-        message: '權限不足：您未被授權發送催辦通知。'
+        message: '權限不足：您未被授權發送通知。'
       };
     }
 
@@ -4063,7 +4063,7 @@ function executeMentionNotification(payload) {
         const selectedSet = new Set(p.selectedGroupCodes.map((c) => String(c).trim()));
         targetGroups = targetGroups.filter((g) => selectedSet.has(String(g.orgCode).trim()));
         if (targetGroups.length === 0) {
-          throw new Error('所選取的組別皆無待催辦人員或不存在，沒有可發送的組別');
+          throw new Error('所選取的組別皆無待通知人員或不存在，沒有可發送的組別');
         }
       }
 
@@ -4165,9 +4165,9 @@ function executeMentionNotification(payload) {
       };
     }
 
-    throw new Error('不支援的催辦範本類型: ' + templateType);
+    throw new Error('不支援的範本類型: ' + templateType);
   } catch (error) {
-    console.error('執行發送催辦通知失敗:', error);
+    console.error('執行發送通知失敗:', error);
     return {
       success: false,
       message: error && error.message ? error.message : String(error)
@@ -4176,7 +4176,7 @@ function executeMentionNotification(payload) {
 }
 
 /**
- * 寫入催辦通知紀錄至試算表
+ * 寫入通知紀錄至試算表
  */
 function appendMentionNotificationLog_(entry) {
   try {
@@ -4233,7 +4233,7 @@ function appendMentionNotificationLog_(entry) {
 /**
  * 手動授權觸發函式 (僅供管理員在 Apps Script 線上編輯器手動執行一次以取得 MailApp 權限)
  * 執行時會觸發 Google OAuth 授權流程，包含 https://www.googleapis.com/auth/script.send_mail 權限。
- * 授權完畢後即可正常透過 Web App 發送催辦通知信。
+ * 授權完畢後即可正常透過 Web App 發送通知信。
  *
  * @returns {number} 當前帳號今日剩餘寄信配額
  */
@@ -4244,7 +4244,7 @@ function authorizeMailAppScope() {
 }
 
 /**
- * 查詢與診斷特定長官主管之職務、單位與催辦信件解析樣態 (供 Console 與後端除錯使用)
+ * 查詢與診斷特定長官主管之職務、單位與信件解析樣態 (供 Console 與後端除錯使用)
  * 穿透受訓狀態過濾 (即使長官已及格完課亦能調閱)，展示主職、所有兼職、行政資格與信件渲染預覽。
  *
  * @param {string} email - 長官公務信箱

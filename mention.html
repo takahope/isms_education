@@ -50,12 +50,12 @@
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
       
-      <!-- 左側/上方：催辦條件與範本設定 -->
+      <!-- 左側/上方：條件與範本設定 -->
       <div class="lg:col-span-12 xl:col-span-8 space-y-6">
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
             <div>
-              <h2 class="text-base font-bold text-slate-900">催辦通知設定</h2>
+              <h2 class="text-base font-bold text-slate-900">通知設定</h2>
               <p class="text-xs text-slate-500 mt-0.5">選擇欲發送的未完成通知對象與條件，並支援自訂期限與信件內容。</p>
             </div>
             <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
@@ -68,7 +68,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label for="mention-template-type" class="block text-xs font-semibold text-slate-700 mb-1.5">
-                  催辦範本類型 <span class="text-red-500">*</span>
+                  範本類型 <span class="text-red-500">*</span>
                 </label>
                 <select id="mention-template-type" class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 bg-white border">
                   <option value="leadership_reminder">長官主管未完成通知（層級 1~4 行政長官）</option>
@@ -151,7 +151,7 @@
                 </div>
                 <textarea id="mention-body" rows="10" class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs py-2 px-3 bg-slate-50 border font-mono"></textarea>
                 <p class="text-[11px] text-slate-400 mt-1">
-                  支援變數標籤：<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{修課期限}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{課程名稱}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{上課網址}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{組別名稱}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{姓名}}</code>
+                  支援變數標籤：<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{修課期限}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{課程名稱}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{上課網址}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{組別名稱}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{姓名}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{單位}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{職稱}}</code>、<code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{{訓練狀態}}</code>
                 </p>
               </div>
             </div>
@@ -177,7 +177,7 @@
             <svg class="w-4 h-4 text-indigo-600 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
               <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
             </svg>
-            催辦寄送邏輯規範
+            寄送邏輯規範
           </h3>
           <ul class="text-xs text-slate-600 space-y-2 leading-relaxed">
             <li class="flex items-start">
@@ -203,7 +203,7 @@
             影子信箱架構 (EMAIL_SHADOW_MAP)
           </h3>
           <p class="text-xs text-indigo-800 leading-relaxed">
-            本催辦模組已內建影子信箱分派介面。若長官或同仁在 Script Properties 中設定了對應的私有或代理信箱，系統將自動納入發信目標，確保通知不漏接。
+            本模組已內建影子信箱分派介面。若長官或同仁在 Script Properties 中設定了對應的私有或代理信箱，系統將自動納入發信目標，確保通知不漏接。
           </p>
         </div>
       </div>
@@ -219,7 +219,7 @@
       <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
         <div class="flex items-center space-x-2">
           <span class="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
-          <h3 class="text-base font-bold text-slate-900">催辦通知預覽</h3>
+          <h3 class="text-base font-bold text-slate-900">通知預覽</h3>
           <span id="preview-badge" class="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">預覽模式</span>
         </div>
         <button type="button" id="btn-close-modal" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition">
@@ -375,7 +375,7 @@
             console.groupEnd();
           }
 
-          console.group('📧 個人化催辦信件渲染預覽：');
+          console.group('📧 個人化信件渲染預覽：');
           console.log('%c【信件主旨】', 'color: #2563eb; font-weight: bold;', res.preview.subject);
           console.log('%c【信件內文預覽】', 'color: #2563eb; font-weight: bold;');
           console.log(
@@ -439,11 +439,11 @@
           templates: {
             leadership_reminder: {
               subject: '【重要提醒】請長官、主管撥冗完成資訊安全暨個資保護教育訓練',
-              htmlBody: '<p>長官、主管們好：</p><p>提醒各位長官主管，本年度「資訊安全暨個資保護教育訓練」線上課程目前尚有長官主管未完成，敬請尚未完成的長官與主管撥冗安排時間完成影片觀看與課後測驗。</p><p><strong>修課說明：</strong><br>及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>修課期限：請於 {{修課期限}} 以前完成</p>'
+              htmlBody: '<p>長官、主管們好：</p><p>依據《資通安全責任等級分級辦法》及第三方國際標準驗證要求，每年需持續落實資訊安全與個資保護管理要求。</p><p>提醒各位長官主管，本年度「<strong>資訊安全暨個資保護教育訓練</strong>」線上課程目前尚有長官主管未完成，鑑於長官主管肩負管理審查與督導重任，敬請尚未完成的長官與主管撥冗安排時間完成影片觀看與課後測驗。</p><p><strong>修課說明：</strong><br>及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>修課期限：請於 {{修課期限}} 以前完成</p><p>※ 觀看提醒：<br>1. 觀看時請勿快轉或頻繁切換視窗，系統將定期確認在座狀態。<br>2. 需完整觀看達規定時數，課後評量始算有效。</p><p>※ 登入提醒：<br>點擊上方連結進入後，請以公務 Google 帳號登入系統，學習紀錄將自動為您保存與同步。</p><p><a href="{{上課網址}}">前往上課</a></p><p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">此為自動發送之通知信件，無需直接回覆。<br>如有任何問題，請聯絡專案規劃組(策略組)。</p>'
             },
             org_group_reminder: {
-              subject: '【重要提醒】{{組別名稱}} - 資訊安全暨個資保護教育訓練未完成同仁催課通知',
-              htmlBody: '<p>{{組別名稱}} 各位同仁 您好：</p><p>提醒您，本年度「<strong>資訊安全暨個資保護教育訓練</strong>」目前尚有同仁未完成課程或測驗，請尚未完課之同仁儘速安排時間完成。</p><p><strong>截至目前本組尚未完課同仁清單：</strong></p>{{未完成清單}}<p><strong>修課說明：</strong><br>及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>修課期限：請於 {{修課期限}} 以前完成</p><p>※ 觀看提醒：影片觀看期間請勿切換分頁、最小化或快轉，系統會自動記錄累計有效秒數。</p><p>※ 登入提醒：若尚未登入，請以受訓帳號登入系統，以利正確統計學習紀錄。</p><p><a href="{{上課網址}}">前往上課</a></p><p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">此為自動發送之通知信件，無需直接回覆。<br>如有任何問題，請聯絡專案規劃組(策略組)。</p>'
+              subject: '【重要提醒】{{組別名稱}} - 資訊安全暨個資保護教育訓練未完成同仁上課通知',
+              htmlBody: '<p>{{組別名稱}} 各位同仁 您好：</p><p>提醒您，本年度「<strong>資訊安全暨個資保護教育訓練</strong>」目前尚有同仁未完成課程或測驗，請尚未完課之同仁儘速安排時間完成。</p><p><strong>截至目前本組尚未完課同仁清單：</strong></p>{{未完成清單}}<p><strong>修課說明：</strong><br>及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>修課期限：請於 {{修課期限}} 以前完成</p><p>※ 觀看提醒：<br>1. 觀看時請勿快轉或頻繁切換視窗，系統將定期確認在座狀態。<br>2. 需完整觀看達規定時數，課後評量始算有效。</p><p>※ 登入提醒：<br>點擊上方連結進入後，請以公務 Google 帳號登入系統，學習紀錄將自動為您保存與同步。</p><p><a href="{{上課網址}}">前往上課</a></p><p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">此為自動發送之通知信件，無需直接回覆。<br>如有任何問題，請聯絡專案規劃組(策略組)。</p>'
             }
           },
           excludeDefaults: {
@@ -467,7 +467,7 @@
             Swal.fire({
               icon: 'error',
               title: isAuthError ? '存取權限不足' : '載入失敗',
-              text: res && res.message ? res.message : '無法取得催辦初始化資料',
+              text: res && res.message ? res.message : '無法取得初始化資料',
               allowOutsideClick: false,
               confirmButtonText: '確定'
             });
@@ -569,7 +569,7 @@
       if (statsSummary && gCurrentPreviewData && gCurrentPreviewData.templateType === 'org_group_reminder') {
         const skipped = gCurrentPreviewData.skippedGroupsCount || 0;
         const totalGroups = gCurrentPreviewData.totalGroups || total;
-        statsSummary.textContent = `共掃描 ${totalGroups} 組：目前選取 ${selected} 組進行催辦（${skipped} 組全數完課）。`;
+        statsSummary.textContent = `共掃描 ${totalGroups} 組：目前選取 ${selected} 組進行通知（${skipped} 組全數完課）。`;
       }
     }
 
@@ -661,7 +661,7 @@
           if (res.groups && res.groups.length > 0) {
             renderSelectedOrgGroupPreview(res.groups[0]);
           } else {
-            previewSubject.textContent = '（無任何組別需要催辦）';
+            previewSubject.textContent = '（無任何組別需要通知）';
             previewTo.textContent = '無';
             previewCc.textContent = '無';
             previewBody.innerHTML = '<p class="text-emerald-600 font-bold">全組織所有組別同仁皆已全數完課！太棒了！</p>';
@@ -706,7 +706,7 @@
       if (payload.templateType === 'org_group_reminder') {
         const selectedGroupCodes = getSelectedGroupCodes();
         if (selectedGroupCodes.length === 0) {
-          Swal.fire('請至少勾選一個組別', '您尚未選取任何要發送催辦通知的組別。', 'warning');
+          Swal.fire('請至少勾選一個組別', '您尚未選取任何要發送通知的組別。', 'warning');
           return;
         }
         payload.selectedGroupCodes = selectedGroupCodes;
@@ -745,7 +745,7 @@
           .withSuccessHandler(function(res) {
             if (res && res.success && (res.sentCount > 0 || res.sentGroupsCount > 0)) {
               const countText = res.sentCount ? `${res.sentCount} 封` : `${res.sentGroupsCount} 個組別`;
-              Swal.fire('發送成功！', `已成功發送催辦通知（共 ${countText}）。發送紀錄已妥善存檔於試算表「通知紀錄」。`, 'success');
+              Swal.fire('發送成功！', `已成功發送通知（共 ${countText}）。發送紀錄已妥善存檔於試算表「通知紀錄」。`, 'success');
               document.getElementById('preview-modal').classList.add('hidden');
             } else {
               const errMsg = (res && res.message) || (res && res.failures && res.failures[0] ? `${res.failures[0].orgName || ''} 寄送失敗: ${res.failures[0].error}` : '未能成功發送任何郵件');
