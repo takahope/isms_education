@@ -52,8 +52,10 @@
 4. 設定 `DASHBOARD_ALLOWED_EMAILS` 為所有獲准操作催辦與教育訓練匯入功能的帳號（多個 Email 以逗號或換行分隔）。
 5. 確認固定收件者，以及 `DASHBOARD_ALLOWED_EMAILS` 中的**每一位操作者**，都能在 `人員主檔` A:B 欄解析到中文姓名（A 欄 Email、B 欄中文姓名）；不可只設定部署帳號。
 6. 將範本檔案以 Viewer 權限分享給 Web App 的執行帳號。
-7. 重新部署 Web App，並核准新增的唯讀 Drive 授權範圍。
-8. 先執行一筆測試寄送，開啟產生的 `importtemplate_vYYYYMMDD.xlsx`，再匯入目標系統，確認空白 `certNo` 也能被接受。
+7. 在 Apps Script 編輯器上方的函式選單選擇 `authorizeDriveAppScope` 並手動執行一次；依畫面選擇 Web App 的部署帳號並核准 Drive 唯讀權限。執行成功時，執行記錄會顯示可讀取的範本檔名。此函式只讀取範本名稱，不會寄信或修改 Drive 檔案。
+8. 若部署帳號尚未核准寄信權限，同樣在編輯器手動執行一次 `authorizeMailAppScope`。
+9. 重新部署 Web App，讓目前部署版本套用 `appsscript.json` 的 OAuth 範圍與最新程式碼。
+10. 先執行一筆測試寄送，開啟產生的 `importtemplate_vYYYYMMDD.xlsx`，再匯入目標系統，確認空白 `certNo` 也能被接受。
 
 ### 「準備寄送」人工對帳
 

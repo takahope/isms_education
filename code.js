@@ -4397,6 +4397,36 @@ function authorizeMailAppScope() {
 }
 
 /**
+ * 手動觸發 Drive 唯讀授權，並確認教育訓練匯入範本可由部署帳號讀取。
+ *
+ * Web App 的 RPC 無法替管理員開啟 OAuth 同意畫面，因此新增 Drive scope 或更換
+ * 部署帳號後，應由管理員在 Apps Script 編輯器手動執行一次此函式。
+ *
+ * @returns {{success: boolean, fileName: string, message: string}} 授權與範本讀取結果
+ * @throws {Error} 未設定範本檔案 ID，或部署帳號無法讀取該檔案時拋出
+ */
+function authorizeDriveAppScope() {
+  const propertyKey = MENTION_CONFIG.trainingImportTemplatePropertyKey;
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const templateFileId = String(scriptProperties.getProperty(propertyKey) || '').trim();
+
+  if (!templateFileId) {
+    throw new Error('缺少 Script Property：' + propertyKey + '。請先設定範本 Drive 檔案 ID。');
+  }
+
+  const templateFile = DriveApp.getFileById(templateFileId);
+  const fileName = String(templateFile.getName() || '').trim();
+  const message = 'Drive 唯讀權限已授權，且可讀取教育訓練匯入範本：' + fileName;
+  Logger.log(message);
+
+  return {
+    success: true,
+    fileName,
+    message
+  };
+}
+
+/**
  * 查詢與診斷特定長官主管之職務、單位與信件解析樣態 (供 Console 與後端除錯使用)
  * 穿透受訓狀態過濾 (即使長官已及格完課亦能調閱)，展示主職、所有兼職、行政資格與信件渲染預覽。
  *
