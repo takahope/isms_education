@@ -2240,7 +2240,12 @@ const MENTION_CONFIG = {
   assignmentSheetName: '人員職務配置',
   progressSheetName: '觀看進度',
   quizRecordSheetName: '訓練紀錄',
-  notificationLogSheetName: '通知紀錄'
+  notificationLogSheetName: '通知紀錄',
+  trainingImportRecipientPropertyKey: 'TRAINING_IMPORT_RECIPIENT_EMAIL',
+  trainingImportTemplatePropertyKey: 'TRAINING_IMPORT_TEMPLATE_FILE_ID',
+  trainingImportLogSheetName: '訓練匯出紀錄',
+  trainingImportMaxRows: 999,
+  trainingImportMaxAttachmentBytes: 20 * 1024 * 1024
 };
 
 /**
@@ -5410,5 +5415,279 @@ function verifyTrainingImportWorkbookBlob_(blob, expectedRows) {
     if (values.some((value) => String(value || '') !== '')) {
       throw new Error('教育訓練匯入資料筆數與預期列數不符');
     }
+  }
+}
+
+/**
+ * 讀取伺服器端匯入設定，避免瀏覽器覆寫固定收件人或 Drive 範本。
+ *
+ * @returns {{recipientEmail: string, templateFileId: string}} 正規化後的必要設定
+ * @throws {Error} Script Property 缺漏或收件人格式錯誤時拋出
+ */
+function getTrainingImportConfig_() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const recipientKey = MENTION_CONFIG.trainingImportRecipientPropertyKey;
+  const templateKey = MENTION_CONFIG.trainingImportTemplatePropertyKey;
+  const recipientEmail = normalizeEmail_(scriptProperties.getProperty(recipientKey));
+  const templateFileId = String(scriptProperties.getProperty(templateKey) || '').trim();
+
+  if (!recipientEmail) {
+    throw new Error('缺少 Script Property：' + recipientKey);
+  }
+  if (!isValidEmail_(recipientEmail)) {
+    throw new Error('Script Property ' + recipientKey + ' 的 Email 格式錯誤');
+  }
+  if (!templateFileId) {
+    throw new Error('缺少 Script Property：' + templateKey);
+  }
+
+  return { recipientEmail, templateFileId };
+}
+
+function readTrainingImportSheetRows_(spreadsheetCandidates, sheetName) {
+  for (let index = 0; index < spreadsheetCandidates.length; index += 1) {
+    const spreadsheet = spreadsheetCandidates[index];
+    if (!spreadsheet || typeof spreadsheet.getSheetByName !== 'function') continue;
+    const sheet = spreadsheet.getSheetByName(sheetName);
+    if (!sheet) continue;
+    const rows = sheet.getLastRow() >= 1
+      ? sheet.getDataRange().getDisplayValues()
+      : [];
+    return { spreadsheet, rows };
+  }
+  return { spreadsheet: null, rows: [] };
+}
+
+/**
+ * 一次建立匯入預覽所需的 Sheet 快照，並保留訓練紀錄所在試算表供後續台帳寫入。
+ *
+ * @returns {Object} 試算表、六類顯示值資料列及通知領域上下文
+ */
+function readTrainingImportSource_() {
+  let masterSpreadsheet = null;
+  let activeSpreadsheet = null;
+
+  try {
+    masterSpreadsheet = getMasterSpreadsheet_();
+  } catch (error) {
+    console.warn('讀取教育訓練匯入主檔失敗:', error && error.message ? error.message : error);
+  }
+  try {
+    activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  } catch (error) {
+    console.warn('讀取教育訓練匯入作用中試算表失敗:', error && error.message ? error.message : error);
+  }
+
+  const spreadsheetCandidates = [];
+  [masterSpreadsheet, activeSpreadsheet].forEach((spreadsheet) => {
+    if (spreadsheet && !spreadsheetCandidates.includes(spreadsheet)) {
+      spreadsheetCandidates.push(spreadsheet);
+    }
+  });
+  if (spreadsheetCandidates.length === 0) {
+    throw new Error('找不到教育訓練資料來源試算表');
+  }
+
+  const personnelSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.personnelSheetName);
+  const assignmentSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.assignmentSheetName);
+  const orgSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.orgSheetName);
+  const trainingSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.quizRecordSheetName);
+  const progressSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.progressSheetName);
+  const trainingSpreadsheet = trainingSource.spreadsheet || activeSpreadsheet || masterSpreadsheet;
+  const logCandidates = [trainingSpreadsheet].concat(spreadsheetCandidates.filter(
+    (spreadsheet) => spreadsheet !== trainingSpreadsheet
+  ));
+  const logSource = readTrainingImportSheetRows_(logCandidates, MENTION_CONFIG.trainingImportLogSheetName);
+
+  return {
+    spreadsheet: trainingSpreadsheet,
+    personnelRows: personnelSource.rows,
+    assignmentRows: assignmentSource.rows,
+    orgRows: orgSource.rows,
+    trainingRows: trainingSource.rows,
+    progressRows: progressSource.rows,
+    logRows: logSource.rows,
+    context: buildMentionContext_()
+  };
+}
+
+/**
+ * 雜湊僅涵蓋會影響收件人、稱呼及附件列的權威欄位，供寄送前偵測預覽漂移。
+ *
+ * @param {Object} snapshot - 伺服器重建的匯入預覽
+ * @returns {string} 小寫 SHA-256 十六進位字串
+ */
+function buildTrainingImportPreviewHash_(snapshot) {
+  const hashInput = JSON.stringify([
+    snapshot.courseTitle,
+    snapshot.recipientEmail,
+    snapshot.attachmentName,
+    snapshot.rows,
+    snapshot.recipientGivenName,
+    snapshot.senderGivenName
+  ]);
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    hashInput,
+    Utilities.Charset.UTF_8
+  );
+  return digest.map((byte) => ('0' + ((byte + 256) % 256).toString(16)).slice(-2)).join('');
+}
+
+function getTrainingImportBlobSize_(blob) {
+  if (!blob || typeof blob.getBytes !== 'function') {
+    throw new Error('教育訓練匯入範本無法讀取檔案大小');
+  }
+  return blob.getBytes().length;
+}
+
+function assertTrainingImportAttachmentSize_(size, label) {
+  if (!Number.isFinite(Number(size)) || Number(size) < 0) {
+    throw new Error(label + '大小無法判定');
+  }
+  if (Number(size) > MENTION_CONFIG.trainingImportMaxAttachmentBytes) {
+    throw new Error(label + '大小超過 20 MiB 限制');
+  }
+}
+
+function getTrainingImportTemplateBlob_(templateFileId) {
+  const templateFile = DriveApp.getFileById(templateFileId);
+  const mimeType = String(templateFile.getMimeType() || '').trim();
+  const xlsxMimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (mimeType !== xlsxMimeType) {
+    throw new Error('教育訓練匯入範本必須為 XLSX 檔案');
+  }
+  if (typeof templateFile.getSize === 'function') {
+    assertTrainingImportAttachmentSize_(templateFile.getSize(), '教育訓練匯入來源範本');
+  }
+  const templateBlob = templateFile.getBlob();
+  assertTrainingImportAttachmentSize_(getTrainingImportBlobSize_(templateBlob), '教育訓練匯入來源範本');
+  validateTrainingImportTemplateParts_(Utilities.unzip(templateBlob));
+  return templateBlob;
+}
+
+function assertTrainingImportDatasetCanSend_(dataset) {
+  if (dataset.errors.length > 0) {
+    const messages = dataset.errors.map((error) => error.message).filter(Boolean);
+    throw new Error('教育訓練匯入資料錯誤：' + messages.join('；'));
+  }
+  if (dataset.rows.length === 0) {
+    throw new Error('此課程目前沒有新增待寄資料');
+  }
+  if (dataset.rows.length > MENTION_CONFIG.trainingImportMaxRows) {
+    throw new Error('教育訓練匯入範本單次最多可寄送 999 筆資料');
+  }
+  validateTrainingImportRows_(dataset.rows);
+}
+
+/**
+ * 每次由 Sheet、Script Properties 與 Drive 重建完整快照，供預覽及寄送共用同一信任邊界。
+ *
+ * @param {string} courseTitle - 後端課程清單中的完整課程名稱
+ * @returns {Object} 含伺服器內部引用的權威預覽快照
+ */
+function buildAuthoritativeTrainingImportPreview_(courseTitle) {
+  const normalizedCourseTitle = String(courseTitle || '').trim();
+  if (!normalizedCourseTitle) throw new Error('請選擇要匯出的課程');
+
+  const source = readTrainingImportSource_();
+  const courseOptions = buildTrainingImportCourseOptions_(source.trainingRows, source.progressRows);
+  if (!courseOptions.some((course) => course.courseTitle === normalizedCourseTitle)) {
+    throw new Error('所選課程不在目前可匯出的課程清單中');
+  }
+
+  const config = getTrainingImportConfig_();
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+  const dataset = buildTrainingImportDataset_({
+    courseTitle: normalizedCourseTitle,
+    personnelRows: source.personnelRows,
+    trainingRows: source.trainingRows,
+    progressRows: source.progressRows,
+    logRows: source.logRows,
+    context: source.context,
+    recipientEmail: config.recipientEmail,
+    viewerEmail
+  });
+  assertTrainingImportDatasetCanSend_(dataset);
+
+  const templateBlob = getTrainingImportTemplateBlob_(config.templateFileId);
+  const generatedWorkbook = buildTrainingImportWorkbookBlob_(
+    templateBlob,
+    dataset.rows,
+    dataset.attachmentName
+  );
+  assertTrainingImportAttachmentSize_(
+    getTrainingImportBlobSize_(generatedWorkbook),
+    '教育訓練匯入產出附件'
+  );
+  verifyTrainingImportWorkbookBlob_(generatedWorkbook, dataset.rows);
+
+  const snapshot = Object.assign({}, dataset, {
+    recipientEmail: config.recipientEmail,
+    viewerEmail,
+    pendingCount: dataset.pendingLearners.length,
+    alreadySentCount: dataset.alreadySent.length,
+    preparingCount: dataset.preparing.length,
+    retryableFailureCount: dataset.retryableFailures.length,
+    errorCount: dataset.errors.length,
+    headers: TRAINING_IMPORT_HEADERS.slice(),
+    canSend: true,
+    source,
+    context: source.context,
+    templateBlob
+  });
+  snapshot.previewHash = buildTrainingImportPreviewHash_(snapshot);
+  return snapshot;
+}
+
+/**
+ * 公開課程清單僅由目前伺服器資料推導，避免接受瀏覽器自行宣告的課程。
+ *
+ * @returns {{success: boolean, courses?: Array<Object>, message?: string}} GAS 可序列化結果
+ */
+function listTrainingImportCourses() {
+  try {
+    const viewerEmail = getCurrentUserEmail();
+    if (!canAccessMention_(viewerEmail)) {
+      throw new Error('權限不足：您無法使用教育訓練匯入功能');
+    }
+    const source = readTrainingImportSource_();
+    return {
+      success: true,
+      courses: buildTrainingImportCourseOptions_(source.trainingRows, source.progressRows)
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error && error.message ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * 公開預覽只揭露純資料，Blob、試算表及含 Map 的上下文留在伺服器端。
+ *
+ * @param {Object} payload - 僅採用 courseTitle，其餘欄位一律忽略
+ * @returns {Object} GAS 可序列化預覽或錯誤結果
+ */
+function previewTrainingImportEmail(payload) {
+  try {
+    const viewerEmail = getCurrentUserEmail();
+    if (!canAccessMention_(viewerEmail)) {
+      throw new Error('權限不足：您無法使用教育訓練匯入功能');
+    }
+    const courseTitle = String(payload && payload.courseTitle || '').trim();
+    const snapshot = buildAuthoritativeTrainingImportPreview_(courseTitle);
+    const publicPreview = { success: true };
+    Object.keys(snapshot).forEach((key) => {
+      if (key === 'source' || key === 'context' || key === 'templateBlob') return;
+      publicPreview[key] = snapshot[key];
+    });
+    return publicPreview;
+  } catch (error) {
+    return {
+      success: false,
+      message: error && error.message ? error.message : String(error)
+    };
   }
 }
