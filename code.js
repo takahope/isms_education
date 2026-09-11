@@ -41,8 +41,9 @@ function doGet(e) {
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     }
 
-    return HtmlService.createTemplateFromFile('mention')
-      .evaluate()
+    const template = HtmlService.createTemplateFromFile('mention');
+    template.webAppUrl = resolveBaseCourseUrl_('');
+    return template.evaluate()
       .setTitle('資安教育訓練未完成通知台')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -2549,6 +2550,44 @@ function buildNotificationAutoReplyFooterHtml_() {
   ].join('');
 }
 
+/**
+ * 產生預設寄件者顯示名稱 (Sender Name)
+ * 預設格式：臺灣人體生物資料庫資安暨個資教育訓練(專案規劃組/策略組-操作者姓名)
+ * 若查無操作者姓名則以「ＸＸＸ」替代
+ * @param {string} viewerEmail - 操作者公務信箱
+ * @param {Object} [context] - 上下文 (可選，優先從中查詢姓名減少試算表讀取)
+ * @returns {string} 寄件者顯示名稱
+ */
+function resolveDefaultMentionSenderName_(viewerEmail, context) {
+  let operatorName = 'ＸＸＸ';
+  try {
+    const norm = normalizeEmail_(viewerEmail);
+    if (context && norm) {
+      if (Array.isArray(context.learners)) {
+        const found = context.learners.find((l) => normalizeEmail_(l.email) === norm);
+        if (found && found.name && String(found.name).trim()) {
+          operatorName = String(found.name).trim();
+        }
+      }
+      if (operatorName === 'ＸＸＸ' && Array.isArray(context.assignments)) {
+        const foundA = context.assignments.find((a) => normalizeEmail_(a.email) === norm);
+        if (foundA && foundA.name && String(foundA.name).trim()) {
+          operatorName = String(foundA.name).trim();
+        }
+      }
+    }
+    if (operatorName === 'ＸＸＸ' && typeof getUserNameByEmail === 'function' && typeof ENV !== 'undefined' && ENV && ENV.MASTER_SHEET_ID) {
+      const name = getUserNameByEmail(viewerEmail);
+      if (name && String(name).trim()) {
+        operatorName = String(name).trim();
+      }
+    }
+  } catch (e) {
+    // 降級使用預設 ＸＸＸ
+  }
+  return `臺灣人體生物資料庫資安暨個資教育訓練(專案規劃組/策略組-${operatorName})`;
+}
+
 function hasExecutiveAdminAssignment_(email, context) {
   const normEmail = normalizeEmail_(email);
   if (!normEmail || !context) return false;
@@ -3748,10 +3787,12 @@ function getMentionInitialData() {
     const currentYear = new Date().getFullYear();
     const defaultDeadlineDate = `${currentYear}-08-30`;
     const courseTitle = context.courseTitle || MENTION_CONFIG.defaultCourseTitle;
+    const defaultSenderName = resolveDefaultMentionSenderName_(viewerEmail, context);
 
     return {
       success: true,
       viewerEmail,
+      defaultSenderName,
       courseTitle,
       defaultDeadlineDate,
       courseUrl: resolveBaseCourseUrl_(''),
@@ -3795,6 +3836,9 @@ function previewMentionNotification(payload) {
     const deadlineDate = p.deadlineDate || `${new Date().getFullYear()}-08-30`;
     const deadlineText = formatChineseDeadlineDate_(deadlineDate);
     const courseUrl = resolveBaseCourseUrl_(p.courseUrl);
+    const senderName = (p.senderName && String(p.senderName).trim())
+      ? String(p.senderName).trim()
+      : resolveDefaultMentionSenderName_(viewerEmail, context);
 
     if (templateType === 'leadership_reminder') {
       const selection = selectMentionRecipients_(context, p);
@@ -3829,6 +3873,7 @@ function previewMentionNotification(payload) {
         mode: 'preview',
         templateType,
         courseTitle,
+        senderName,
         recipientCount: selection.recipients.length,
         skippedCount: selection.skipped.length,
         recipients: selection.recipients,
@@ -3870,6 +3915,7 @@ function previewMentionNotification(payload) {
         mode: 'preview',
         templateType,
         courseTitle,
+        senderName,
         totalGroups: groups.length + selection.skippedGroups.length,
         activeGroupsCount: groups.length,
         skippedGroupsCount: selection.skippedGroups.length,
@@ -3909,6 +3955,9 @@ function executeMentionNotification(payload) {
     const deadlineDate = p.deadlineDate || `${new Date().getFullYear()}-08-30`;
     const deadlineText = formatChineseDeadlineDate_(deadlineDate);
     const courseUrl = resolveBaseCourseUrl_(p.courseUrl);
+    const senderName = (p.senderName && String(p.senderName).trim())
+      ? String(p.senderName).trim()
+      : resolveDefaultMentionSenderName_(viewerEmail, context);
 
     const failures = [];
     let sentCount = 0;
@@ -3949,7 +3998,8 @@ function executeMentionNotification(payload) {
               MailApp.sendEmail({
                 to: recipient.email,
                 subject,
-                htmlBody: officialHtmlBody
+                htmlBody: officialHtmlBody,
+                name: senderName
               });
             }
             sentCount += 1;
@@ -3968,7 +4018,8 @@ function executeMentionNotification(payload) {
                   MailApp.sendEmail({
                     to: shadowEmail,
                     subject,
-                    htmlBody: shadowHtmlBody
+                    htmlBody: shadowHtmlBody,
+                    name: senderName
                   });
                 }
               } catch (shadowErr) {
@@ -3997,13 +4048,15 @@ function executeMentionNotification(payload) {
                 to: viewerEmail || allTo[0] || '',
                 bcc: allTo.join(','),
                 subject,
-                htmlBody: officialHtmlBody
+                htmlBody: officialHtmlBody,
+                name: senderName
               });
             } else {
               MailApp.sendEmail({
                 to: allTo.join(','),
                 subject,
-                htmlBody: officialHtmlBody
+                htmlBody: officialHtmlBody,
+                name: senderName
               });
             }
           }
@@ -4034,7 +4087,8 @@ function executeMentionNotification(payload) {
                   MailApp.sendEmail({
                     to: shadowEmail,
                     subject,
-                    htmlBody: shadowHtmlBody
+                    htmlBody: shadowHtmlBody,
+                    name: senderName
                   });
                 }
               } catch (shadowErr) {
@@ -4092,7 +4146,8 @@ function executeMentionNotification(payload) {
             const mailOptions = {
               to: toEmails.join(','),
               subject: group.subject,
-              htmlBody: group.htmlBody
+              htmlBody: group.htmlBody,
+              name: senderName
             };
             if (ccEmails.length > 0) {
               mailOptions.cc = ccEmails.join(',');
@@ -4119,7 +4174,8 @@ function executeMentionNotification(payload) {
                   MailApp.sendEmail({
                     to: shadowEmail,
                     subject: group.subject,
-                    htmlBody: shadowBody
+                    htmlBody: shadowBody,
+                    name: senderName
                   });
                 }
               } catch (shadowErr) {
@@ -4143,7 +4199,8 @@ function executeMentionNotification(payload) {
                   MailApp.sendEmail({
                     to: shadowEmail,
                     subject: group.subject,
-                    htmlBody: shadowBody
+                    htmlBody: shadowBody,
+                    name: senderName
                   });
                 }
               } catch (shadowErr) {

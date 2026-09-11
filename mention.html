@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
+  <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>通知管理 - 資訊安全暨個資保護教育訓練</title>
@@ -36,10 +37,10 @@
           </svg>
           <span id="viewer-email-display">管理人員</span>
         </span>
-        <a href="?page=index" class="text-xs sm:text-sm text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
+        <a href="<?= webAppUrl ?>" target="_top" class="text-xs sm:text-sm text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
           回到上課首頁
         </a>
-        <a href="?page=stats" class="text-xs sm:text-sm text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
+        <a href="<?= webAppUrl ?>?page=stats" target="_top" class="text-xs sm:text-sm text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
           查看簡易統計
         </a>
       </div>
@@ -133,6 +134,14 @@
 
             <!-- 信件主旨與內文編輯區 -->
             <div class="pt-2 border-t border-slate-100 space-y-4">
+              <div>
+                <label for="mention-sender-name" class="block text-xs font-semibold text-slate-700 mb-1.5">
+                  寄件者顯示名稱
+                </label>
+                <input type="text" id="mention-sender-name" class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 bg-white border" placeholder="臺灣人體生物資料庫資安暨個資教育訓練(專案規劃組/策略組-ＸＸＸ)">
+                <p class="text-[11px] text-slate-400 mt-1">收件者收信時將顯示此寄件人名稱（郵件地址仍為您的公務帳號）。</p>
+              </div>
+
               <div>
                 <label for="mention-subject" class="block text-xs font-semibold text-slate-700 mb-1.5">
                   信件主旨 <span class="text-red-500">*</span>
@@ -258,6 +267,10 @@
 
         <!-- 郵件基本欄位預覽 -->
         <div class="space-y-2 bg-slate-50 rounded-lg p-3.5 border border-slate-200/80 font-mono text-xs">
+          <div class="flex items-start">
+            <span class="text-slate-400 w-16 font-medium">寄件人：</span>
+            <span id="preview-sender" class="text-slate-800 font-semibold flex-1 break-all"></span>
+          </div>
           <div class="flex items-start">
             <span class="text-slate-400 w-16 font-medium">主旨：</span>
             <span id="preview-subject" class="text-slate-800 font-semibold flex-1"></span>
@@ -408,6 +421,9 @@
       const excludeOutsideLocation = document.getElementById('exclude-outside').checked;
       const excludeEthicsCommittee = document.getElementById('exclude-ethics-committee').checked;
       const excludeVendor = document.getElementById('exclude-vendor').checked;
+      const senderName = document.getElementById('mention-sender-name')
+        ? document.getElementById('mention-sender-name').value.trim()
+        : '';
       const subject = document.getElementById('mention-subject').value.trim();
       const htmlBody = document.getElementById('mention-body').value.trim();
       const rawLoc = (window.location && window.location.href) ? window.location.href.split('?')[0] : '';
@@ -422,6 +438,7 @@
         excludeOutsideLocation,
         excludeEthicsCommittee,
         excludeVendor,
+        senderName,
         subject,
         htmlBody,
         courseUrl
@@ -436,6 +453,7 @@
           success: true,
           courseTitle: '資訊安全暨個資保護教育訓練',
           defaultDeadlineDate: new Date().getFullYear() + '-08-30',
+          defaultSenderName: '臺灣人體生物資料庫資安暨個資教育訓練(專案規劃組/策略組-林專員)',
           templates: {
             leadership_reminder: {
               subject: '【重要提醒】請長官、主管撥冗完成資訊安全暨個資保護教育訓練',
@@ -494,6 +512,10 @@
         const dateInput = document.getElementById('mention-deadline-date');
         dateInput.value = data.defaultDeadlineDate;
         updateDeadlineDatePreview(data.defaultDeadlineDate);
+      }
+      if (data.defaultSenderName) {
+        const senderInput = document.getElementById('mention-sender-name');
+        if (senderInput) senderInput.value = data.defaultSenderName;
       }
       if (data.excludeDefaults) {
         document.getElementById('exclude-parental-leave').checked = data.excludeDefaults.excludeParentalLeave !== false;
@@ -594,6 +616,13 @@
         const previewSubject = document.getElementById('preview-subject');
         const previewBody = document.getElementById('preview-body');
         const statsSummary = document.getElementById('preview-stats-summary');
+        const previewSender = document.getElementById('preview-sender');
+
+        if (previewSender) {
+          const sName = res.senderName || (document.getElementById('mention-sender-name') ? document.getElementById('mention-sender-name').value.trim() : '') || '臺灣人體生物資料庫資安暨個資教育訓練(專案規劃組/策略組-ＸＸＸ)';
+          const vEmail = (gInitialData && gInitialData.viewerEmail) ? gInitialData.viewerEmail : '';
+          previewSender.textContent = vEmail ? `${sName} <${vEmail}>` : sName;
+        }
 
         if (res.templateType === 'leadership_reminder') {
           groupSelectContainer.classList.add('hidden');
