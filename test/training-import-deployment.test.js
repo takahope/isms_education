@@ -12,6 +12,14 @@ assert(docs.includes('TRAINING_IMPORT_RECIPIENT_EMAIL'));
 assert(docs.includes('TRAINING_IMPORT_TEMPLATE_FILE_ID'));
 assert(docs.includes('importtemplate_vYYYYMMDD.xlsx'));
 assert(docs.includes('不需要轉換成 Google Sheet'));
+assert(docs.includes('DASHBOARD_ALLOWED_EMAILS'));
+assert(docs.includes('每一位操作者'));
+assert(docs.includes('預設 70 分'));
+assert(!docs.includes('預設 80 分'));
+assert(docs.includes('### 「準備寄送」人工對帳'));
+assert(docs.includes('實際投遞狀態一律視為未知'));
+assert(docs.includes('將該批**全部**列改為「已寄出」'));
+assert(docs.includes('將該批**全部**列改為「寄送失敗」'));
 
 const deploymentGuide = docs.split('### 教育訓練匯入信件設定')[0];
 assert(deploymentGuide.includes('根目錄的 `code.js`'));

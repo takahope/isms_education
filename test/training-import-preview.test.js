@@ -9,6 +9,11 @@ const importHeaders = [
   'certified_hour', 'certified_date', 'year', 'sso', 'tel', 'title',
   'mail', 'typez', 'certNo'
 ];
+const logHeaders = [
+  '批次ID', '唯一鍵', '課程名稱', '姓名', '使用者信箱', '完成日期',
+  '收件人信箱', '附件檔名', '狀態', '操作者', '建立時間', '寄送時間',
+  '最後更新時間', '錯誤訊息'
+];
 const partNames = [
   'xl/comments1.xml',
   'xl/_rels/comments1.xml.rels',
@@ -109,26 +114,37 @@ const validTemplateParts = partNames.map((name) => new MockBlob(
   name
 ));
 
-function createSheet(rows) {
+function createSheet(fixture, readKey) {
+  const values = Array.isArray(fixture) ? fixture : fixture.values;
+  const displayValues = Array.isArray(fixture)
+    ? fixture
+    : (fixture.displayValues || fixture.values);
   return {
     getLastRow() {
-      return rows.length;
+      return values.length;
     },
     getDataRange() {
+      sandbox.sheetReadCounts[readKey] = (sandbox.sheetReadCounts[readKey] || 0) + 1;
       return {
         getDisplayValues() {
-          return rows.map((row) => row.slice());
+          return displayValues.map((row) => row.slice());
+        },
+        getValues() {
+          return values.map((row) => row.slice());
         }
       };
     }
   };
 }
 
-function createSpreadsheet(sheetRowsByName) {
+function createSpreadsheet(sheetRowsByName, spreadsheetId) {
   return {
+    getId() {
+      return spreadsheetId;
+    },
     getSheetByName(name) {
       const rows = sheetRowsByName[name];
-      return rows ? createSheet(rows) : null;
+      return rows ? createSheet(rows, spreadsheetId + ':' + name) : null;
     }
   };
 }
@@ -141,7 +157,10 @@ const sandbox = {
   templateMimeType: XLSX_MIME,
   templateSize: templateByteLength,
   generatedSize: templateByteLength,
-  invalidTemplate: false
+  invalidTemplate: false,
+  masterSpreadsheetId: 'master-sheet-id',
+  activeSpreadsheetId: 'active-sheet-id',
+  sheetReadCounts: {}
 };
 
 function qualifiedRows(emails) {
@@ -206,6 +225,9 @@ function resetFixtures() {
   sandbox.templateSize = templateByteLength;
   sandbox.generatedSize = templateByteLength;
   sandbox.invalidTemplate = false;
+  sandbox.masterSpreadsheetId = 'master-sheet-id';
+  sandbox.activeSpreadsheetId = 'active-sheet-id';
+  sandbox.sheetReadCounts = {};
 }
 
 class FixedDate extends Date {
@@ -237,10 +259,10 @@ const PropertiesService = {
 
 const SpreadsheetApp = {
   openById() {
-    return createSpreadsheet(sandbox.masterSheets);
+    return createSpreadsheet(sandbox.masterSheets, sandbox.masterSpreadsheetId);
   },
   getActiveSpreadsheet() {
-    return createSpreadsheet(sandbox.activeSheets);
+    return createSpreadsheet(sandbox.activeSheets, sandbox.activeSpreadsheetId);
   }
 };
 
@@ -343,12 +365,17 @@ sandbox.currentEmail = 'admin@example.org';
 const courses = api.listTrainingImportCourses();
 assert.strictEqual(courses.success, true);
 assert.deepStrictEqual(courses.courses.map((item) => item.courseTitle), ['課程甲']);
+assert.deepStrictEqual(Object.keys(sandbox.sheetReadCounts).sort(), [
+  'active-sheet-id:觀看進度',
+  'active-sheet-id:訓練紀錄'
+]);
 
 const config = api.getTrainingImportConfig_();
 assert.deepStrictEqual(config, {
   recipientEmail: 'receiver@example.org',
   templateFileId: 'template-file-id'
 });
+sandbox.sheetReadCounts = {};
 const source = api.readTrainingImportSource_();
 assert.strictEqual(source.spreadsheet.getSheetByName('訓練紀錄') !== null, true);
 assert.strictEqual(source.personnelRows.length, 7);
@@ -358,7 +385,51 @@ assert.strictEqual(source.trainingRows.length, 6);
 assert.strictEqual(source.progressRows.length, 6);
 assert.deepStrictEqual(source.logRows, []);
 assert(source.context && Array.isArray(source.context.learners));
+[
+  'master-sheet-id:人員主檔',
+  'active-sheet-id:人員職務配置',
+  'master-sheet-id:組織架構樹',
+  'active-sheet-id:訓練紀錄',
+  'active-sheet-id:觀看進度'
+].forEach((readKey) => {
+  assert.strictEqual(sandbox.sheetReadCounts[readKey], 1, readKey + ' 應只讀取一次');
+});
 
+resetFixtures();
+sandbox.currentEmail = 'admin@example.org';
+const typedTrainingValues = sandbox.activeSheets.訓練紀錄.map((row) => row.slice());
+const typedTrainingDisplay = sandbox.activeSheets.訓練紀錄.map((row) => row.slice());
+typedTrainingValues[1][0] = new FixedDate('2026-09-09T15:30:00.000Z');
+typedTrainingDisplay[1][0] = '2026/09/12 下午 11:30:00';
+sandbox.activeSheets.訓練紀錄 = {
+  values: typedTrainingValues,
+  displayValues: typedTrainingDisplay
+};
+const typedProgressValues = sandbox.activeSheets.觀看進度.map((row) => row.slice());
+const typedProgressDisplay = sandbox.activeSheets.觀看進度.map((row) => row.slice());
+typedProgressValues[1][6] = new FixedDate('2026-09-09T16:30:00.000Z');
+typedProgressDisplay[1][6] = '2026/09/13 上午 12:30:00';
+sandbox.activeSheets.觀看進度 = {
+  values: typedProgressValues,
+  displayValues: typedProgressDisplay
+};
+const typedSource = api.readTrainingImportSource_();
+assert(typedSource.trainingRows[1][0] instanceof FixedDate);
+assert(typedSource.progressRows[1][6] instanceof FixedDate);
+const typedContextLearner = typedSource.context.learners.find(
+  (learner) => learner.email === 'learner1@example.org'
+);
+assert(typedContextLearner);
+assert(!String(typedContextLearner.lastActivityAt || '').includes('2026/09/13'));
+const typedPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(typedPreview.success, true);
+assert.strictEqual(
+  typedPreview.rows.find((row) => row[11] === 'learner1@example.org')[6],
+  '2026-09-10'
+);
+
+resetFixtures();
+sandbox.currentEmail = 'admin@example.org';
 delete sandbox.properties.TRAINING_IMPORT_RECIPIENT_EMAIL;
 const missingRecipient = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
 assert.strictEqual(missingRecipient.success, false);
@@ -390,20 +461,102 @@ assert.strictEqual(preview.canSend, true);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(preview, 'source'), false);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(preview, 'context'), false);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(preview, 'templateBlob'), false);
+const allowedPublicPreviewKeys = new Set([
+  'success', 'canSend', 'courseTitle', 'headers', 'rows', 'recipientEmail',
+  'subject', 'htmlBody', 'attachmentName', 'previewHash', 'pendingCount',
+  'alreadySentCount', 'preparingCount', 'retryableFailureCount', 'errorCount',
+  'errors', 'message'
+]);
+Object.keys(preview).forEach((key) => {
+  assert(allowedPublicPreviewKeys.has(key), '公開預覽不應泄漏內部欄位：' + key);
+});
+[
+  'pendingLearners', 'alreadySent', 'preparing', 'retryableFailures',
+  'recipientGivenName', 'senderGivenName', 'viewerEmail', 'importCourseTitle',
+  'textBody'
+].forEach((key) => {
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(preview, key), false, key);
+});
 assert.doesNotThrow(() => JSON.stringify(preview));
 const expectedHash = crypto.createHash('sha256').update(JSON.stringify([
   preview.courseTitle,
   preview.recipientEmail,
   preview.attachmentName,
   preview.rows,
-  preview.recipientGivenName,
-  preview.senderGivenName
+  '承辦',
+  '管理'
 ]), 'utf8').digest('hex');
 assert.strictEqual(preview.previewHash, expectedHash);
 assert.strictEqual(api.previewTrainingImportEmail({ courseTitle: '課程甲' }).previewHash, preview.previewHash);
 const internalPreview = api.buildAuthoritativeTrainingImportPreview_('課程甲');
 assert(internalPreview.source && internalPreview.context && internalPreview.templateBlob);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(internalPreview, 'templateFileId'), false);
+
+const ledgerSentRow = [
+  'legacy-sent', '課程甲\nlearner1@example.org', '課程甲', '張學員甲',
+  'learner1@example.org', '2026-09-01', 'receiver@example.org', 'old.xlsx',
+  '已寄出', 'legacy@example.org', '2026/09/01 10:00:00', '2026/09/01 10:00:00',
+  '2026/09/01 10:00:00', ''
+];
+
+resetFixtures();
+sandbox.currentEmail = 'admin@example.org';
+sandbox.activeSheets.訓練匯出紀錄 = [
+  ['錯誤批次欄位'].concat(logHeaders.slice(1)),
+  ledgerSentRow
+];
+const malformedLedgerPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(malformedLedgerPreview.success, false);
+assert.match(malformedLedgerPreview.message, /台帳.*表頭|表頭.*不符|欄位.*不符/);
+
+resetFixtures();
+sandbox.currentEmail = 'admin@example.org';
+sandbox.activeSheets.訓練匯出紀錄 = [
+  logHeaders.map((header, index) => index === 0 ? header + ' ' : header),
+  ledgerSentRow
+];
+const whitespaceLedgerHeaderPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(whitespaceLedgerHeaderPreview.success, false);
+assert.match(whitespaceLedgerHeaderPreview.message, /台帳.*表頭|表頭.*不符|欄位.*不符/);
+
+resetFixtures();
+sandbox.currentEmail = 'admin@example.org';
+sandbox.activeSheets.訓練匯出紀錄 = [];
+sandbox.masterSheets.訓練匯出紀錄 = [logHeaders, ledgerSentRow];
+const emptyAndHistoryPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(emptyAndHistoryPreview.success, true);
+assert.strictEqual(emptyAndHistoryPreview.rows.length, 3);
+assert.strictEqual(emptyAndHistoryPreview.alreadySentCount, 1);
+assert.strictEqual(
+  api.buildAuthoritativeTrainingImportPreview_('課程甲').source.logSpreadsheet.getId(),
+  'master-sheet-id'
+);
+
+resetFixtures();
+sandbox.currentEmail = 'admin@example.org';
+sandbox.activeSheets.訓練匯出紀錄 = [logHeaders, ledgerSentRow];
+sandbox.masterSheets.訓練匯出紀錄 = [
+  logHeaders,
+  ledgerSentRow.map((value, index) => index === 0
+    ? 'other-history'
+    : (index === 1 ? '課程甲\nlearner2@example.org' : value))
+];
+const dualHistoryPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(dualHistoryPreview.success, false);
+assert.match(dualHistoryPreview.message, /多個.*台帳|台帳.*多個|對帳/);
+
+resetFixtures();
+sandbox.currentEmail = 'admin@example.org';
+sandbox.masterSpreadsheetId = 'shared-sheet-id';
+sandbox.activeSpreadsheetId = 'shared-sheet-id';
+const sharedSheets = Object.assign({}, sandbox.masterSheets, sandbox.activeSheets, {
+  訓練匯出紀錄: [logHeaders, ledgerSentRow]
+});
+sandbox.masterSheets = sharedSheets;
+sandbox.activeSheets = sharedSheets;
+const duplicateSpreadsheetCandidatePreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(duplicateSpreadsheetCandidatePreview.success, true);
+assert.strictEqual(duplicateSpreadsheetCandidatePreview.alreadySentCount, 1);
 
 assert.strictEqual(api.previewTrainingImportEmail({ courseTitle: '未列出的課程' }).success, false);
 assert.match(api.previewTrainingImportEmail({ courseTitle: '未列出的課程' }).message, /課程|清單/);
@@ -436,16 +589,51 @@ assert.match(api.previewTrainingImportEmail({ courseTitle: '課程甲' }).messag
 resetFixtures();
 sandbox.currentEmail = 'admin@example.org';
 sandbox.masterSheets.人員主檔.find((row) => row[0] === 'learner1@example.org')[1] = '';
-assert.match(api.previewTrainingImportEmail({ courseTitle: '課程甲' }).message, /資料錯誤|中文姓名/);
+const invalidLearnerPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(invalidLearnerPreview.success, true);
+assert.strictEqual(invalidLearnerPreview.canSend, false);
+assert.strictEqual(invalidLearnerPreview.rows.length, 3);
+assert.strictEqual(invalidLearnerPreview.pendingCount, 3);
+assert.strictEqual(invalidLearnerPreview.errorCount, 1);
+assert.deepStrictEqual(invalidLearnerPreview.errors, [{
+  email: 'learner1@example.org',
+  name: '',
+  message: '缺少中文姓名'
+}]);
+assert.strictEqual(invalidLearnerPreview.previewHash, '');
 
 resetFixtures();
 sandbox.currentEmail = 'admin@example.org';
-const logHeader = new Array(14).fill('');
-sandbox.activeSheets.訓練匯出紀錄 = [logHeader].concat(
+sandbox.activeSheets.訓練匯出紀錄 = [logHeaders].concat(
   ['learner1@example.org', 'learner2@example.org', 'learner3@example.org', 'learner4@example.org']
     .map((email) => ['', `課程甲\n${email}`, '', '', '', '', '', '', '已寄出', '', '', '', '', ''])
 );
-assert.match(api.previewTrainingImportEmail({ courseTitle: '課程甲' }).message, /待寄|新增|資料/);
+const noPendingPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(noPendingPreview.success, true);
+assert.strictEqual(noPendingPreview.canSend, false);
+assert.strictEqual(noPendingPreview.pendingCount, 0);
+assert.strictEqual(noPendingPreview.alreadySentCount, 4);
+assert.strictEqual(noPendingPreview.rows.length, 0);
+assert.strictEqual(noPendingPreview.previewHash, '');
+assert(noPendingPreview.errors.every((error) => (
+  typeof error.email === 'string'
+  && typeof error.name === 'string'
+  && typeof error.message === 'string'
+)));
+assert.match(noPendingPreview.errors[0].message, /沒有新增|已寄出/);
+
+resetFixtures();
+sandbox.currentEmail = 'admin@example.org';
+sandbox.activeSheets.訓練匯出紀錄 = [logHeaders].concat(
+  ['learner1@example.org', 'learner2@example.org', 'learner3@example.org', 'learner4@example.org']
+    .map((email) => ['', `課程甲\n${email}`, '', '', '', '', '', '', '準備寄送', '', '', '', '', ''])
+);
+const allPreparingPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(allPreparingPreview.success, true);
+assert.strictEqual(allPreparingPreview.canSend, false);
+assert.strictEqual(allPreparingPreview.preparingCount, 4);
+assert.strictEqual(allPreparingPreview.pendingCount, 0);
+assert.match(allPreparingPreview.errors[0].message, /人工確認|準備寄送/);
 
 resetFixtures();
 sandbox.currentEmail = 'admin@example.org';
@@ -456,7 +644,11 @@ sandbox.masterSheets.人員主檔 = sandbox.masterSheets.人員主檔.slice(0, 3
 );
 sandbox.activeSheets.訓練紀錄 = thousandQualified.trainingRows;
 sandbox.activeSheets.觀看進度 = thousandQualified.progressRows;
-assert.match(api.previewTrainingImportEmail({ courseTitle: '課程甲' }).message, /999|筆/);
+const oversizedDatasetPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(oversizedDatasetPreview.success, true);
+assert.strictEqual(oversizedDatasetPreview.canSend, false);
+assert.strictEqual(oversizedDatasetPreview.rows.length, 1000);
+assert.match(oversizedDatasetPreview.errors[0].message, /999|筆/);
 
 resetFixtures();
 sandbox.currentEmail = 'admin@example.org';

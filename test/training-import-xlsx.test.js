@@ -262,6 +262,66 @@ assert.throws(
 );
 
 const originalRow2 = originalXml.match(/<row\b[^>]*\br="2"[^>]*>[\s\S]*?<\/row>/)[0];
+
+const duplicateRowNumberXml = originalXml.replace(originalRow2, originalRow2 + originalRow2);
+assert.throws(
+  () => api.populateTrainingImportSheetXml_(duplicateRowNumberXml, rows),
+  /重複.*2|2.*重複/
+);
+assert.throws(
+  () => api.validateTrainingImportTemplateParts_(replacePart(
+    templateParts,
+    'xl/worksheets/sheet1.xml',
+    () => duplicateRowNumberXml
+  )),
+  /重複.*2|2.*重複/
+);
+
+const duplicateRowIndexAttributeXml = originalXml.replace('<row r="2"', '<row r="2" r="3"');
+assert.throws(
+  () => api.populateTrainingImportSheetXml_(duplicateRowIndexAttributeXml, rows),
+  /列索引|r 屬性|重複/
+);
+
+const unindexedRowXml = originalXml.replace('<row r="2"', '<row');
+assert.throws(
+  () => api.populateTrainingImportSheetXml_(unindexedRowXml, rows),
+  /列索引|缺少第 2 列/
+);
+
+const hiddenRowXml = originalXml.replace(
+  '</sheetData>',
+  '<row r="1001"><c r="A1001" t="inlineStr"><is><t>hidden learner</t></is></c></row></sheetData>'
+);
+assert.throws(
+  () => api.populateTrainingImportSheetXml_(hiddenRowXml, rows),
+  /1001|A1001|範圍/
+);
+assert.throws(
+  () => api.validateTrainingImportTemplateParts_(replacePart(
+    templateParts,
+    'xl/worksheets/sheet1.xml',
+    () => hiddenRowXml
+  )),
+  /1001|A1001|範圍/
+);
+
+const hiddenOutOfRangeCellXml = originalXml.replace(
+  '</row></sheetData>',
+  '<c r="A1001" t="inlineStr"><is><t>hidden learner</t></is></c></row></sheetData>'
+);
+assert.throws(
+  () => api.populateTrainingImportSheetXml_(hiddenOutOfRangeCellXml, rows),
+  /1001|A1001|範圍/
+);
+
+const emptyTrailingRowXml = originalXml.replace(
+  '</sheetData>',
+  '<row r="1001"><c r="A1001" s="1"/></row></sheetData>'
+);
+const populatedWithEmptyTrailingRow = api.populateTrainingImportSheetXml_(emptyTrailingRowXml, rows);
+assert(populatedWithEmptyTrailingRow.includes('<row r="1001"><c r="A1001" s="1"/></row>'));
+
 const row2WithAuxiliaryCell = originalRow2.replace(
   '</row>',
   '<c r="AA2" s="42" t="inlineStr"><is><t>auxiliary</t></is></c></row>'

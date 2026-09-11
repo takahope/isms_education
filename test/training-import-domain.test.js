@@ -6,6 +6,7 @@ const load = new Function(`${code}; return {
   buildTrainingImportCourseOptions_,
   extractTrainingImportGivenName_,
   buildTrainingImportUniqueKey_,
+  parseTrainingImportTaipeiTimestampMs_,
   buildTrainingImportDataset_
 };`);
 const api = load();
@@ -213,6 +214,57 @@ assert.strictEqual(
 assert.strictEqual(
   qualificationDataset.rows.find((row) => row[11] === 'timing@example.org')[6],
   '2026-09-08'
+);
+
+assert.strictEqual(
+  api.parseTrainingImportTaipeiTimestampMs_(new Date('2026-09-09T16:30:45.123Z')),
+  new Date('2026-09-09T16:30:45.123Z').getTime()
+);
+assert.strictEqual(
+  api.parseTrainingImportTaipeiTimestampMs_('2026/09/10 上午 12:30:00'),
+  Date.UTC(2026, 8, 9, 16, 30, 0)
+);
+assert.strictEqual(
+  api.parseTrainingImportTaipeiTimestampMs_('2026/09/10 下午 11:30:00'),
+  Date.UTC(2026, 8, 10, 15, 30, 0)
+);
+assert.strictEqual(
+  api.parseTrainingImportTaipeiTimestampMs_('2026/09/10 11:30:00 PM'),
+  Date.UTC(2026, 8, 10, 15, 30, 0)
+);
+
+const timestampDataset = api.buildTrainingImportDataset_({
+  courseTitle: '課程時間',
+  personnelRows: [
+    personnelRows[0],
+    ['recipient@example.org', '李小華', '在勤', '', '', '', '', ''],
+    ['operator@example.org', '王小明', '在勤', '', '', '', '', ''],
+    ['typed@example.org', '陳小美', '在勤', '', '', '', '', ''],
+    ['localized@example.org', '林小安', '在勤', '', '', '', '', '']
+  ],
+  trainingRows: [
+    trainingRows[0],
+    [new Date('2026-09-08T15:00:00.000Z'), '', 'typed@example.org', '課程時間', '80', '通過'],
+    ['2026/09/09 下午 11:30:00', '', 'localized@example.org', '課程時間', '80', '通過']
+  ],
+  progressRows: [
+    progressRows[0],
+    ['typed@example.org', '課程時間', 'video-1', '', '3600', '', new Date('2026-09-09T16:30:00.000Z')],
+    ['localized@example.org', '課程時間', 'video-1', '', '3600', '', '2026/09/10 上午 12:30:00']
+  ],
+  logRows: [],
+  context: { learners: [], assignments: [], orgNodes: [], orgNodeMap: new Map() },
+  recipientEmail: 'recipient@example.org',
+  viewerEmail: 'operator@example.org',
+  now: new Date('2026-09-11T08:00:00+08:00')
+});
+assert.strictEqual(
+  timestampDataset.rows.find((row) => row[11] === 'typed@example.org')[6],
+  '2026-09-10'
+);
+assert.strictEqual(
+  timestampDataset.rows.find((row) => row[11] === 'localized@example.org')[6],
+  '2026-09-10'
 );
 
 console.log('Training import domain tests passed.');

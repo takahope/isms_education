@@ -3380,55 +3380,68 @@ function buildMentionContext_(options) {
   const opts = options || {};
   if (opts.context) return opts.context;
 
-  let masterSS = null;
-  let activeSS = null;
-  try {
-    if (typeof getMasterSpreadsheet_ === 'function') {
-      masterSS = getMasterSpreadsheet_();
+  const capturedRows = opts.sourceRows || null;
+  let personnelRows = capturedRows && Array.isArray(capturedRows.personnelRows)
+    ? capturedRows.personnelRows
+    : [];
+  let assignmentRows = capturedRows && Array.isArray(capturedRows.assignmentRows)
+    ? capturedRows.assignmentRows
+    : [];
+  let orgRows = capturedRows && Array.isArray(capturedRows.orgRows)
+    ? capturedRows.orgRows
+    : [];
+  let trainingRows = capturedRows && Array.isArray(capturedRows.trainingRows)
+    ? capturedRows.trainingRows
+    : [];
+  let progressRows = capturedRows && Array.isArray(capturedRows.progressRows)
+    ? capturedRows.progressRows
+    : [];
+
+  if (!capturedRows) {
+    let masterSS = null;
+    let activeSS = null;
+    try {
+      if (typeof getMasterSpreadsheet_ === 'function') {
+        masterSS = getMasterSpreadsheet_();
+      }
+    } catch (e) {
+      console.warn('讀取 masterSS 失敗:', e && e.message ? e.message : e);
     }
-  } catch (e) {
-    console.warn('讀取 masterSS 失敗:', e && e.message ? e.message : e);
+
+    try {
+      if (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet) {
+        activeSS = SpreadsheetApp.getActiveSpreadsheet();
+      }
+    } catch (e) {
+      console.warn('讀取 activeSS 失敗:', e && e.message ? e.message : e);
+    }
+
+    const primaryMasterSS = masterSS || activeSS;
+    const primaryTrainingSS = activeSS || masterSS;
+
+    const getSheetSafe = (sheetName) => {
+      let sheet = primaryMasterSS ? primaryMasterSS.getSheetByName(sheetName) : null;
+      if (!sheet && primaryTrainingSS) {
+        sheet = primaryTrainingSS.getSheetByName(sheetName);
+      }
+      return sheet;
+    };
+
+    const pSheet = getSheetSafe(MENTION_CONFIG.personnelSheetName);
+    if (pSheet && pSheet.getLastRow() >= 1) personnelRows = pSheet.getDataRange().getDisplayValues();
+
+    const aSheet = getSheetSafe(MENTION_CONFIG.assignmentSheetName);
+    if (aSheet && aSheet.getLastRow() >= 1) assignmentRows = aSheet.getDataRange().getDisplayValues();
+
+    const oSheet = getSheetSafe(MENTION_CONFIG.orgSheetName);
+    if (oSheet && oSheet.getLastRow() >= 1) orgRows = oSheet.getDataRange().getDisplayValues();
+
+    const qSheet = getSheetSafe(MENTION_CONFIG.quizRecordSheetName);
+    if (qSheet && qSheet.getLastRow() >= 1) trainingRows = qSheet.getDataRange().getDisplayValues();
+
+    const prSheet = getSheetSafe(MENTION_CONFIG.progressSheetName);
+    if (prSheet && prSheet.getLastRow() >= 1) progressRows = prSheet.getDataRange().getDisplayValues();
   }
-
-  try {
-    if (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet) {
-      activeSS = SpreadsheetApp.getActiveSpreadsheet();
-    }
-  } catch (e) {
-    console.warn('讀取 activeSS 失敗:', e && e.message ? e.message : e);
-  }
-
-  const primaryMasterSS = masterSS || activeSS;
-  const primaryTrainingSS = activeSS || masterSS;
-
-  let personnelRows = [];
-  let assignmentRows = [];
-  let orgRows = [];
-  let trainingRows = [];
-  let progressRows = [];
-
-  const getSheetSafe = (sheetName) => {
-    let sheet = primaryMasterSS ? primaryMasterSS.getSheetByName(sheetName) : null;
-    if (!sheet && primaryTrainingSS) {
-      sheet = primaryTrainingSS.getSheetByName(sheetName);
-    }
-    return sheet;
-  };
-
-  const pSheet = getSheetSafe(MENTION_CONFIG.personnelSheetName);
-  if (pSheet && pSheet.getLastRow() >= 1) personnelRows = pSheet.getDataRange().getDisplayValues();
-
-  const aSheet = getSheetSafe(MENTION_CONFIG.assignmentSheetName);
-  if (aSheet && aSheet.getLastRow() >= 1) assignmentRows = aSheet.getDataRange().getDisplayValues();
-
-  const oSheet = getSheetSafe(MENTION_CONFIG.orgSheetName);
-  if (oSheet && oSheet.getLastRow() >= 1) orgRows = oSheet.getDataRange().getDisplayValues();
-
-  const qSheet = getSheetSafe(MENTION_CONFIG.quizRecordSheetName);
-  if (qSheet && qSheet.getLastRow() >= 1) trainingRows = qSheet.getDataRange().getDisplayValues();
-
-  const prSheet = getSheetSafe(MENTION_CONFIG.progressSheetName);
-  if (prSheet && prSheet.getLastRow() >= 1) progressRows = prSheet.getDataRange().getDisplayValues();
 
   const orgNodes = [];
   const orgNodeMap = new Map();
@@ -4663,6 +4676,73 @@ function buildTrainingImportUniqueKey_(courseTitle, email) {
   return String(courseTitle || '').trim() + '\n' + normalizeEmail_(email);
 }
 
+/**
+ * 將試算表 Date 或舊版文字時間明確視為台北時間，避免執行環境語系改變完訓日期。
+ *
+ * @param {*} value - getValues() 的 Date 或舊版顯示文字
+ * @returns {number} Unix milliseconds；無法解析時為 0
+ */
+function parseTrainingImportTaipeiTimestampMs_(value) {
+  if (value instanceof Date || Object.prototype.toString.call(value) === '[object Date]') {
+    const dateTime = value.getTime();
+    return Number.isNaN(dateTime) ? 0 : dateTime;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+  const raw = String(value === null || value === undefined ? '' : value)
+    .replace(/\u00a0/g, ' ')
+    .trim();
+  if (!raw) return 0;
+
+  const normalized = raw
+    .replace(/年/g, '/')
+    .replace(/月/g, '/')
+    .replace(/日/g, ' ')
+    .replace(/時/g, ':')
+    .replace(/分/g, ':')
+    .replace(/秒/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const match = normalized.match(
+    /^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})(?:[ T]+(?:(上午|下午|A\.?M\.?|P\.?M\.?)\s*)?(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2})(?:\.(\d{1,3}))?)?(?:\s*(上午|下午|A\.?M\.?|P\.?M\.?))?)?$/i
+  );
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const prefixMeridiem = String(match[4] || '').replace(/\./g, '').toUpperCase();
+    const suffixMeridiem = String(match[9] || '').replace(/\./g, '').toUpperCase();
+    if (prefixMeridiem && suffixMeridiem && prefixMeridiem !== suffixMeridiem) return 0;
+    const meridiem = prefixMeridiem || suffixMeridiem;
+    let hour = Number(match[5] || 0);
+    const minute = Number(match[6] || 0);
+    const second = Number(match[7] || 0);
+    const millisecond = Number(String(match[8] || '').padEnd(3, '0'));
+    if (meridiem && (hour < 1 || hour > 12)) return 0;
+    if ((meridiem === '上午' || meridiem === 'AM') && hour === 12) hour = 0;
+    if ((meridiem === '下午' || meridiem === 'PM') && hour < 12) hour += 12;
+
+    const localParts = new Date(Date.UTC(year, month - 1, day, hour, minute, second, millisecond));
+    const valid = month >= 1 && month <= 12
+      && day >= 1 && day <= 31
+      && hour >= 0 && hour <= 23
+      && minute >= 0 && minute <= 59
+      && second >= 0 && second <= 59
+      && localParts.getUTCFullYear() === year
+      && localParts.getUTCMonth() === month - 1
+      && localParts.getUTCDate() === day;
+    if (!valid) return 0;
+    return Date.UTC(year, month - 1, day, hour - 8, minute, second, millisecond);
+  }
+
+  if (/[zZ]$|[+\-]\d{2}:?\d{2}$/.test(normalized)) {
+    const explicitZoneDate = new Date(normalized);
+    const explicitZoneTime = explicitZoneDate.getTime();
+    return Number.isNaN(explicitZoneTime) ? 0 : explicitZoneTime;
+  }
+  return 0;
+}
+
 function buildTrainingImportCourseOptions_(trainingRows, progressRows) {
   const quizCourses = new Map();
   const progressCourses = new Map();
@@ -4670,7 +4750,7 @@ function buildTrainingImportCourseOptions_(trainingRows, progressRows) {
   const addCourseRecord = (map, courseTitle, timestamp) => {
     const title = String(courseTitle || '').trim();
     if (!title) return;
-    const activityAtMs = parseDashboardTimestampMs_(timestamp);
+    const activityAtMs = parseTrainingImportTaipeiTimestampMs_(timestamp);
     if (!map.has(title)) {
       map.set(title, { count: 0, latestActivityAtMs: 0, latestActivityAt: '' });
     }
@@ -4785,7 +4865,7 @@ function buildTrainingImportDataset_(input) {
     if (!passed) return;
     const record = ensureQualification(email);
     record.quizPassed = true;
-    const passedAtMs = parseDashboardTimestampMs_(row[0]);
+    const passedAtMs = parseTrainingImportTaipeiTimestampMs_(row[0]);
     if (passedAtMs > 0 && (!record.quizPassedAtMs || passedAtMs < record.quizPassedAtMs)) {
       record.quizPassedAtMs = passedAtMs;
     }
@@ -4800,7 +4880,7 @@ function buildTrainingImportDataset_(input) {
     if (!watched) return;
     const record = ensureQualification(email);
     record.watchQualified = true;
-    const qualifiedAtMs = parseDashboardTimestampMs_(row[6]);
+    const qualifiedAtMs = parseTrainingImportTaipeiTimestampMs_(row[6]);
     if (qualifiedAtMs > 0 && (!record.watchQualifiedAtMs || qualifiedAtMs < record.watchQualifiedAtMs)) {
       record.watchQualifiedAtMs = qualifiedAtMs;
     }
@@ -5074,6 +5154,9 @@ function populateTrainingImportRowXml_(rowXml, values, rowNumber) {
     const columnIndex = getTrainingImportColumnIndex_(referenceMatch[1]);
     if (columnIndex < 0 || columnIndex >= TRAINING_IMPORT_HEADERS.length) return cellXml;
 
+    if (seenColumns.has(columnIndex)) {
+      throw new Error('教育訓練匯入範本第 ' + rowNumber + ' 列包含重複儲存格');
+    }
     seenColumns.add(columnIndex);
     const isNumeric = TRAINING_IMPORT_NUMERIC_COLUMN_INDEXES.has(columnIndex);
     const updatedAttributes = updateTrainingImportCellAttributes_(attributes, isNumeric);
@@ -5091,6 +5174,102 @@ function populateTrainingImportRowXml_(rowXml, values, rowNumber) {
   return updatedRow;
 }
 
+function getTrainingImportRowElements_(sheetDataXml) {
+  const rowElements = [];
+  const rowPattern = /<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g;
+  String(sheetDataXml || '').replace(rowPattern, (rowXml, attributes, innerXml) => {
+    rowElements.push({ rowXml, attributes, innerXml: String(innerXml || '') });
+    return rowXml;
+  });
+  const rowTagCount = (String(sheetDataXml || '').match(/<row\b/g) || []).length;
+  if (rowElements.length !== rowTagCount) {
+    throw new Error('教育訓練匯入範本包含無法解析的列結構');
+  }
+  return rowElements;
+}
+
+function getTrainingImportRowNumber_(attributes) {
+  const rowIndexes = [];
+  String(attributes || '').replace(/(?:^|\s)r=(['"])([^'"]*)\1/g, (match, quote, value) => {
+    rowIndexes.push(value);
+    return match;
+  });
+  if (rowIndexes.length !== 1 || !/^[1-9]\d*$/.test(rowIndexes[0])) {
+    throw new Error('教育訓練匯入範本每列必須有且僅有一個正整數 r 列索引');
+  }
+  return Number(rowIndexes[0]);
+}
+
+function hasTrainingImportCellValue_(_cellXml, innerXml) {
+  const content = String(innerXml || '');
+  if (/<f\b/.test(content)) return true;
+  const valueMatch = content.match(/<v\b[^>]*>([\s\S]*?)<\/v>/);
+  if (valueMatch && decodeTrainingImportXml_(valueMatch[1]) !== '') return true;
+  let inlineText = '';
+  content.replace(/<t\b[^>]*>([\s\S]*?)<\/t>/g, (match, text) => {
+    inlineText += decodeTrainingImportXml_(text);
+    return match;
+  });
+  return inlineText !== '';
+}
+
+function assertTrainingImportRowCellContract_(rowElement, rowNumber) {
+  rowElement.rowXml.replace(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, (cellXml, attributes, innerXml) => {
+    const referenceMatch = String(attributes || '').match(/\br="([A-Z]+)(\d+)"/);
+    if (!referenceMatch) {
+      if (hasTrainingImportCellValue_(cellXml, innerXml)) {
+        throw new Error('教育訓練匯入範本第 ' + rowNumber + ' 列包含未索引的資料儲存格');
+      }
+      return cellXml;
+    }
+    const columnIndex = getTrainingImportColumnIndex_(referenceMatch[1]);
+    if (columnIndex < 0 || columnIndex >= TRAINING_IMPORT_HEADERS.length) return cellXml;
+    const referencedRowNumber = Number(referenceMatch[2]);
+    if (referencedRowNumber !== rowNumber) {
+      throw new Error(
+        '教育訓練匯入範本儲存格列索引不符：'
+        + referenceMatch[1]
+        + referenceMatch[2]
+      );
+    }
+    if (rowNumber > 1000 && hasTrainingImportCellValue_(cellXml, innerXml)) {
+      throw new Error(
+        '教育訓練匯入範本資料範圍外不得包含 A:N 值：'
+        + referenceMatch[1]
+        + rowNumber
+      );
+    }
+    return cellXml;
+  });
+}
+
+function indexTrainingImportSheetRows_(sheetXml) {
+  const xml = String(sheetXml || '');
+  const sheetDataMatch = xml.match(/<sheetData\b[^>]*>[\s\S]*?<\/sheetData>/);
+  if (!sheetDataMatch) throw new Error('教育訓練匯入範本缺少 sheetData');
+
+  const rowsByNumber = new Map();
+  getTrainingImportRowElements_(sheetDataMatch[0]).forEach((rowElement) => {
+    const rowNumber = getTrainingImportRowNumber_(rowElement.attributes);
+    if (rowsByNumber.has(rowNumber)) {
+      throw new Error('教育訓練匯入範本包含重複列索引：' + rowNumber);
+    }
+    rowsByNumber.set(rowNumber, rowElement.rowXml);
+    assertTrainingImportRowCellContract_(rowElement, rowNumber);
+  });
+
+  for (let rowNumber = 1; rowNumber <= 1000; rowNumber += 1) {
+    if (!rowsByNumber.has(rowNumber)) {
+      throw new Error('教育訓練匯入範本缺少第 ' + rowNumber + ' 列');
+    }
+  }
+  return {
+    sheetDataMatch,
+    sheetDataXml: sheetDataMatch[0],
+    rowsByNumber
+  };
+}
+
 /**
  * 只替換範本資料列，避免重建工作簿時破壞既有樣式、驗證規則與註解。
  *
@@ -5101,14 +5280,14 @@ function populateTrainingImportRowXml_(rowXml, values, rowNumber) {
 function populateTrainingImportSheetXml_(sheetXml, rows) {
   validateTrainingImportRows_(rows);
   const xml = String(sheetXml || '');
-  const sheetDataMatch = xml.match(/<sheetData\b[^>]*>[\s\S]*?<\/sheetData>/);
-  if (!sheetDataMatch) throw new Error('教育訓練匯入範本缺少 sheetData');
+  const indexedSheet = indexTrainingImportSheetRows_(xml);
+  const sheetDataMatch = indexedSheet.sheetDataMatch;
 
-  const originalSheetData = sheetDataMatch[0];
+  const originalSheetData = indexedSheet.sheetDataXml;
   const updatedSheetData = originalSheetData.replace(
-    /<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>/g,
-    (rowXml, rowNumberText) => {
-      const rowNumber = Number(rowNumberText);
+    /<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g,
+    (rowXml, attributes) => {
+      const rowNumber = getTrainingImportRowNumber_(attributes);
       if (rowNumber === 1 || rowNumber > 1000) return rowXml;
       const values = rowNumber - 2 < rows.length
         ? rows[rowNumber - 2]
@@ -5117,12 +5296,6 @@ function populateTrainingImportSheetXml_(sheetXml, rows) {
     }
   );
 
-  for (let rowNumber = 1; rowNumber <= 1000; rowNumber += 1) {
-    const rowPattern = new RegExp('<row\\b[^>]*\\br="' + rowNumber + '"');
-    if (!rowPattern.test(updatedSheetData)) {
-      throw new Error('教育訓練匯入範本缺少第 ' + rowNumber + ' 列');
-    }
-  }
   return xml.slice(0, sheetDataMatch.index)
     + updatedSheetData
     + xml.slice(sheetDataMatch.index + originalSheetData.length);
@@ -5228,13 +5401,13 @@ function parseTrainingImportSharedStrings_(sharedStringsXml) {
 }
 
 function findTrainingImportRowXml_(sheetXml, rowNumber) {
-  const rowPattern = new RegExp('<row\\b[^>]*\\br="' + rowNumber + '"[^>]*>[\\s\\S]*?<\\/row>');
-  const match = String(sheetXml || '').match(rowPattern);
-  return match ? match[0] : '';
+  return indexTrainingImportSheetRows_(sheetXml).rowsByNumber.get(Number(rowNumber)) || '';
 }
 
-function parseTrainingImportRowCells_(sheetXml, rowNumber, sharedStrings) {
-  const rowXml = findTrainingImportRowXml_(sheetXml, rowNumber);
+function parseTrainingImportRowCells_(sheetXml, rowNumber, sharedStrings, rowsByNumber) {
+  const rowXml = rowsByNumber
+    ? rowsByNumber.get(Number(rowNumber)) || ''
+    : findTrainingImportRowXml_(sheetXml, rowNumber);
   if (!rowXml) throw new Error('教育訓練匯入工作表缺少第 ' + rowNumber + ' 列');
 
   const cells = new Array(TRAINING_IMPORT_HEADERS.length).fill(null);
@@ -5344,11 +5517,17 @@ function validateTrainingImportTemplateParts_(parts) {
 
   const sharedStrings = parseTrainingImportSharedStrings_(sharedStringsBlob.getDataAsString());
   const sheetXml = sheetBlob.getDataAsString();
-  const headers = parseTrainingImportRowValues_(sheetXml, 1, sharedStrings);
+  const indexedSheet = indexTrainingImportSheetRows_(sheetXml);
+  const headers = parseTrainingImportRowCells_(
+    sheetXml,
+    1,
+    sharedStrings,
+    indexedSheet.rowsByNumber
+  ).map((cell) => cell.value);
   if (headers.some((header, index) => header !== TRAINING_IMPORT_HEADERS[index])) {
     throw new Error('教育訓練匯入範本 A1:N1 欄位不符');
   }
-  return { sheetBlob, sheetXml };
+  return { sheetBlob, sheetXml, sheetRowsByNumber: indexedSheet.rowsByNumber };
 }
 
 /**
@@ -5395,7 +5574,12 @@ function verifyTrainingImportWorkbookBlob_(blob, expectedRows) {
 
   expectedRows.forEach((expectedRow, rowIndex) => {
     const rowNumber = rowIndex + 2;
-    const actualCells = parseTrainingImportRowCells_(validated.sheetXml, rowNumber, sharedStrings);
+    const actualCells = parseTrainingImportRowCells_(
+      validated.sheetXml,
+      rowNumber,
+      sharedStrings,
+      validated.sheetRowsByNumber
+    );
     validateTrainingImportRowStructure_(actualCells, expectedRow, rowNumber);
     const actualRow = actualCells.map((cell) => cell.value);
     expectedRow.forEach((expectedValue, columnIndex) => {
@@ -5409,7 +5593,12 @@ function verifyTrainingImportWorkbookBlob_(blob, expectedRows) {
   });
 
   for (let rowNumber = expectedRows.length + 2; rowNumber <= 1000; rowNumber += 1) {
-    const unusedCells = parseTrainingImportRowCells_(validated.sheetXml, rowNumber, sharedStrings);
+    const unusedCells = parseTrainingImportRowCells_(
+      validated.sheetXml,
+      rowNumber,
+      sharedStrings,
+      validated.sheetRowsByNumber
+    );
     validateTrainingImportRowStructure_(unusedCells, null, rowNumber);
     const values = unusedCells.map((cell) => cell.value);
     if (values.some((value) => String(value || '') !== '')) {
@@ -5450,12 +5639,91 @@ function readTrainingImportSheetRows_(spreadsheetCandidates, sheetName) {
     if (!spreadsheet || typeof spreadsheet.getSheetByName !== 'function') continue;
     const sheet = spreadsheet.getSheetByName(sheetName);
     if (!sheet) continue;
-    const rows = sheet.getLastRow() >= 1
-      ? sheet.getDataRange().getDisplayValues()
-      : [];
-    return { spreadsheet, rows };
+    if (sheet.getLastRow() < 1) {
+      return { spreadsheet, sheet, rows: [], displayRows: [] };
+    }
+    const range = sheet.getDataRange();
+    const displayRows = range.getDisplayValues();
+    const rows = typeof range.getValues === 'function'
+      ? range.getValues()
+      : displayRows;
+    return { spreadsheet, sheet, rows, displayRows };
   }
-  return { spreadsheet: null, rows: [] };
+  return { spreadsheet: null, sheet: null, rows: [], displayRows: [] };
+}
+
+function deduplicateTrainingImportSpreadsheets_(spreadsheetCandidates) {
+  const unique = [];
+  const seenIds = new Set();
+  const seenObjects = new Set();
+  (Array.isArray(spreadsheetCandidates) ? spreadsheetCandidates : []).forEach((spreadsheet) => {
+    if (!spreadsheet || seenObjects.has(spreadsheet)) return;
+    let spreadsheetId = '';
+    try {
+      spreadsheetId = typeof spreadsheet.getId === 'function'
+        ? String(spreadsheet.getId() || '').trim()
+        : '';
+    } catch (error) {
+      spreadsheetId = '';
+    }
+    if (spreadsheetId && seenIds.has(spreadsheetId)) return;
+    if (spreadsheetId) seenIds.add(spreadsheetId);
+    seenObjects.add(spreadsheet);
+    unique.push(spreadsheet);
+  });
+  return unique;
+}
+
+function assertTrainingImportLogRows_(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return;
+  const header = Array.isArray(rows[0]) ? rows[0] : [];
+  const headerMatches = TRAINING_IMPORT_LOG_HEADERS.every(
+    (expected, index) => String(header[index] || '') === expected
+  );
+  const hasUnexpectedHeader = header.slice(TRAINING_IMPORT_LOG_HEADERS.length)
+    .some((value) => String(value || '') !== '');
+  if (!headerMatches || hasUnexpectedHeader) {
+    throw new Error('訓練匯出台帳表頭與固定 14 欄合約不符');
+  }
+}
+
+function hasTrainingImportLogHistory_(rows) {
+  return (Array.isArray(rows) ? rows.slice(1) : []).some((row) => (
+    (Array.isArray(row) ? row : []).some((value) => String(value || '').trim() !== '')
+  ));
+}
+
+function resolveTrainingImportLogSource_(spreadsheetCandidates, fallbackSpreadsheet) {
+  const ledgerSources = [];
+  deduplicateTrainingImportSpreadsheets_(spreadsheetCandidates).forEach((spreadsheet) => {
+    if (!spreadsheet || typeof spreadsheet.getSheetByName !== 'function') return;
+    const sheet = spreadsheet.getSheetByName(MENTION_CONFIG.trainingImportLogSheetName);
+    if (!sheet) return;
+    let rows = [];
+    if (sheet.getLastRow() >= 1) {
+      rows = sheet.getDataRange().getDisplayValues();
+      assertTrainingImportLogRows_(rows);
+    }
+    ledgerSources.push({
+      spreadsheet,
+      sheet,
+      rows,
+      hasHistory: hasTrainingImportLogHistory_(rows)
+    });
+  });
+
+  const historySources = ledgerSources.filter((source) => source.hasHistory);
+  if (historySources.length > 1) {
+    throw new Error('發現多個含歷史資料的訓練匯出台帳，請先人工對帳與整併');
+  }
+  if (historySources.length === 1) return historySources[0];
+  if (ledgerSources.length > 0) return ledgerSources[0];
+  return {
+    spreadsheet: fallbackSpreadsheet,
+    sheet: null,
+    rows: [],
+    hasHistory: false
+  };
 }
 
 /**
@@ -5463,7 +5731,8 @@ function readTrainingImportSheetRows_(spreadsheetCandidates, sheetName) {
  *
  * @returns {Object} 試算表、六類顯示值資料列及通知領域上下文
  */
-function readTrainingImportSource_() {
+function readTrainingImportSource_(options) {
+  const opts = options || {};
   let masterSpreadsheet = null;
   let activeSpreadsheet = null;
 
@@ -5478,38 +5747,55 @@ function readTrainingImportSource_() {
     console.warn('讀取教育訓練匯入作用中試算表失敗:', error && error.message ? error.message : error);
   }
 
-  const spreadsheetCandidates = [];
-  [masterSpreadsheet, activeSpreadsheet].forEach((spreadsheet) => {
-    if (spreadsheet && !spreadsheetCandidates.includes(spreadsheet)) {
-      spreadsheetCandidates.push(spreadsheet);
-    }
-  });
+  const spreadsheetCandidates = deduplicateTrainingImportSpreadsheets_([
+    masterSpreadsheet,
+    activeSpreadsheet
+  ]);
   if (spreadsheetCandidates.length === 0) {
     throw new Error('找不到教育訓練資料來源試算表');
+  }
+
+  const trainingSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.quizRecordSheetName);
+  const progressSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.progressSheetName);
+  const trainingSpreadsheet = trainingSource.spreadsheet || activeSpreadsheet || masterSpreadsheet;
+  if (opts.coursesOnly) {
+    return {
+      spreadsheet: trainingSpreadsheet,
+      trainingRows: trainingSource.rows,
+      trainingDisplayRows: trainingSource.displayRows,
+      progressRows: progressSource.rows,
+      progressDisplayRows: progressSource.displayRows
+    };
   }
 
   const personnelSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.personnelSheetName);
   const assignmentSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.assignmentSheetName);
   const orgSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.orgSheetName);
-  const trainingSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.quizRecordSheetName);
-  const progressSource = readTrainingImportSheetRows_(spreadsheetCandidates, MENTION_CONFIG.progressSheetName);
-  const trainingSpreadsheet = trainingSource.spreadsheet || activeSpreadsheet || masterSpreadsheet;
-  const logCandidates = [trainingSpreadsheet].concat(spreadsheetCandidates.filter(
-    (spreadsheet) => spreadsheet !== trainingSpreadsheet
-  ));
-  const logSource = readTrainingImportSheetRows_(logCandidates, MENTION_CONFIG.trainingImportLogSheetName);
+  const logCandidates = [trainingSpreadsheet].concat(spreadsheetCandidates);
+  const logSource = resolveTrainingImportLogSource_(logCandidates, trainingSpreadsheet);
   const logSpreadsheet = logSource.spreadsheet || trainingSpreadsheet;
 
+  const context = buildMentionContext_({
+    sourceRows: {
+      personnelRows: personnelSource.displayRows,
+      assignmentRows: assignmentSource.displayRows,
+      orgRows: orgSource.displayRows,
+      trainingRows: trainingSource.rows,
+      progressRows: progressSource.rows
+    }
+  });
   return {
     spreadsheet: trainingSpreadsheet,
     logSpreadsheet,
-    personnelRows: personnelSource.rows,
-    assignmentRows: assignmentSource.rows,
-    orgRows: orgSource.rows,
+    personnelRows: personnelSource.displayRows,
+    assignmentRows: assignmentSource.displayRows,
+    orgRows: orgSource.displayRows,
     trainingRows: trainingSource.rows,
+    trainingDisplayRows: trainingSource.displayRows,
     progressRows: progressSource.rows,
+    progressDisplayRows: progressSource.displayRows,
     logRows: logSource.rows,
-    context: buildMentionContext_()
+    context
   };
 }
 
@@ -5568,18 +5854,17 @@ function getTrainingImportTemplateBlob_(templateFileId) {
   return templateBlob;
 }
 
-function assertTrainingImportDatasetCanSend_(dataset) {
-  if (dataset.errors.length > 0) {
-    const messages = dataset.errors.map((error) => error.message).filter(Boolean);
-    throw new Error('教育訓練匯入資料錯誤：' + messages.join('；'));
-  }
-  if (dataset.rows.length === 0) {
-    throw new Error('此課程目前沒有新增待寄資料');
-  }
-  if (dataset.rows.length > MENTION_CONFIG.trainingImportMaxRows) {
-    throw new Error('教育訓練匯入範本單次最多可寄送 999 筆資料');
-  }
-  validateTrainingImportRows_(dataset.rows);
+function normalizeTrainingImportPreviewError_(error) {
+  const source = error && typeof error === 'object' ? error : { message: error };
+  return {
+    email: normalizeEmail_(source.email),
+    name: String(source.name || '').trim(),
+    message: String(source.message || '').trim()
+  };
+}
+
+function isTrainingImportIdentityConfigError_(error) {
+  return /^收件人|^寄件人/.test(String(error && error.message || ''));
 }
 
 /**
@@ -5610,35 +5895,70 @@ function buildAuthoritativeTrainingImportPreview_(courseTitle) {
     recipientEmail: config.recipientEmail,
     viewerEmail
   });
-  assertTrainingImportDatasetCanSend_(dataset);
+
+  const identityErrors = dataset.errors.filter(isTrainingImportIdentityConfigError_);
+  if (identityErrors.length > 0) {
+    throw new Error(
+      '教育訓練匯入設定錯誤：'
+      + identityErrors.map((error) => error.message).filter(Boolean).join('；')
+    );
+  }
 
   const templateBlob = getTrainingImportTemplateBlob_(config.templateFileId);
-  const generatedWorkbook = buildTrainingImportWorkbookBlob_(
-    templateBlob,
-    dataset.rows,
-    dataset.attachmentName
-  );
-  assertTrainingImportAttachmentSize_(
-    getTrainingImportBlobSize_(generatedWorkbook),
-    '教育訓練匯入產出附件'
-  );
-  verifyTrainingImportWorkbookBlob_(generatedWorkbook, dataset.rows);
+  const previewErrors = dataset.errors
+    .filter((error) => !isTrainingImportIdentityConfigError_(error))
+    .map(normalizeTrainingImportPreviewError_)
+    .filter((error) => error.message);
+  if (dataset.rows.length === 0) {
+    let reason = '此課程目前沒有新增待寄資料。';
+    if (dataset.preparing.length > 0) {
+      reason = '目前沒有新增待寄資料；尚有 '
+        + dataset.preparing.length
+        + ' 筆準備寄送紀錄需人工確認。';
+    } else if (dataset.alreadySent.length > 0) {
+      reason = '此課程目前沒有新增待寄資料；合格資料均已寄出。';
+    }
+    previewErrors.push({ email: '', name: '', message: reason });
+  }
+  if (dataset.rows.length > MENTION_CONFIG.trainingImportMaxRows) {
+    previewErrors.push({
+      email: '',
+      name: '',
+      message: '教育訓練匯入範本單次最多可寄送 999 筆資料'
+    });
+  }
+  const canSend = previewErrors.length === 0 && dataset.rows.length > 0;
+  if (canSend) {
+    validateTrainingImportRows_(dataset.rows);
+    const generatedWorkbook = buildTrainingImportWorkbookBlob_(
+      templateBlob,
+      dataset.rows,
+      dataset.attachmentName
+    );
+    assertTrainingImportAttachmentSize_(
+      getTrainingImportBlobSize_(generatedWorkbook),
+      '教育訓練匯入產出附件'
+    );
+    verifyTrainingImportWorkbookBlob_(generatedWorkbook, dataset.rows);
+  }
 
   const snapshot = Object.assign({}, dataset, {
+    errors: previewErrors,
     recipientEmail: config.recipientEmail,
     viewerEmail,
     pendingCount: dataset.pendingLearners.length,
     alreadySentCount: dataset.alreadySent.length,
     preparingCount: dataset.preparing.length,
     retryableFailureCount: dataset.retryableFailures.length,
-    errorCount: dataset.errors.length,
+    errorCount: previewErrors.length,
     headers: TRAINING_IMPORT_HEADERS.slice(),
-    canSend: true,
+    canSend,
+    message: previewErrors.map((error) => error.message).join('；'),
     source,
     context: source.context,
     templateBlob
   });
-  snapshot.previewHash = buildTrainingImportPreviewHash_(snapshot);
+  snapshot.previewHash = canSend ? buildTrainingImportPreviewHash_(snapshot) : '';
   return snapshot;
 }
 
@@ -5653,7 +5973,7 @@ function listTrainingImportCourses() {
     if (!canAccessMention_(viewerEmail)) {
       throw new Error('權限不足：您無法使用教育訓練匯入功能');
     }
-    const source = readTrainingImportSource_();
+    const source = readTrainingImportSource_({ coursesOnly: true });
     return {
       success: true,
       courses: buildTrainingImportCourseOptions_(source.trainingRows, source.progressRows)
@@ -5664,6 +5984,29 @@ function listTrainingImportCourses() {
       message: error && error.message ? error.message : String(error)
     };
   }
+}
+
+function buildPublicTrainingImportPreviewDto_(snapshot) {
+  const source = snapshot || {};
+  return {
+    success: true,
+    canSend: Boolean(source.canSend),
+    courseTitle: String(source.courseTitle || ''),
+    headers: Array.isArray(source.headers) ? source.headers : [],
+    rows: Array.isArray(source.rows) ? source.rows : [],
+    recipientEmail: String(source.recipientEmail || ''),
+    subject: String(source.subject || ''),
+    htmlBody: String(source.htmlBody || ''),
+    attachmentName: String(source.attachmentName || ''),
+    previewHash: String(source.previewHash || ''),
+    pendingCount: Number(source.pendingCount || 0),
+    alreadySentCount: Number(source.alreadySentCount || 0),
+    preparingCount: Number(source.preparingCount || 0),
+    retryableFailureCount: Number(source.retryableFailureCount || 0),
+    errorCount: Number(source.errorCount || 0),
+    errors: Array.isArray(source.errors) ? source.errors : [],
+    message: String(source.message || '')
+  };
 }
 
 /**
@@ -5680,12 +6023,7 @@ function previewTrainingImportEmail(payload) {
     }
     const courseTitle = String(payload && payload.courseTitle || '').trim();
     const snapshot = buildAuthoritativeTrainingImportPreview_(courseTitle);
-    const publicPreview = { success: true };
-    Object.keys(snapshot).forEach((key) => {
-      if (key === 'source' || key === 'context' || key === 'templateBlob') return;
-      publicPreview[key] = snapshot[key];
-    });
-    return publicPreview;
+    return buildPublicTrainingImportPreviewDto_(snapshot);
   } catch (error) {
     return {
       success: false,
@@ -5713,6 +6051,8 @@ function getOrCreateTrainingImportLogSheet_(spreadsheet) {
     sheet.getRange(1, 1, 1, TRAINING_IMPORT_LOG_HEADERS.length)
       .setValues([TRAINING_IMPORT_LOG_HEADERS.slice()]);
     SpreadsheetApp.flush();
+  } else {
+    assertTrainingImportLogRows_(sheet.getDataRange().getDisplayValues());
   }
   return sheet;
 }
@@ -5730,8 +6070,9 @@ function reserveTrainingImportBatch_(sheet, snapshot, batchId, nowText) {
   const pendingLearners = Array.isArray(snapshot && snapshot.pendingLearners)
     ? snapshot.pendingLearners
     : [];
-  pendingLearners.forEach((learner) => {
-    sheet.appendRow([
+  if (pendingLearners.length === 0) return 0;
+  const reservationRows = pendingLearners.map((learner) => (
+    [
       batchId,
       buildTrainingImportUniqueKey_(snapshot.courseTitle, learner.email),
       snapshot.courseTitle,
@@ -5746,8 +6087,14 @@ function reserveTrainingImportBatch_(sheet, snapshot, batchId, nowText) {
       '',
       nowText,
       ''
-    ]);
-  });
+    ]
+  ));
+  sheet.getRange(
+    sheet.getLastRow() + 1,
+    1,
+    reservationRows.length,
+    TRAINING_IMPORT_LOG_HEADERS.length
+  ).setValues(reservationRows);
   return pendingLearners.length;
 }
 
@@ -5815,7 +6162,7 @@ function executeTrainingImportEmail(payload) {
   const lock = LockService.getScriptLock();
   let logSheet = null;
   let batchId = '';
-  let nowText = '';
+  let reservationAtText = '';
   let attachmentName = '';
   let sentCount = 0;
   let reservationStarted = false;
@@ -5835,12 +6182,16 @@ function executeTrainingImportEmail(payload) {
     }
 
     logSheet = getOrCreateTrainingImportLogSheet_(snapshot.source.logSpreadsheet);
-    nowText = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+    reservationAtText = Utilities.formatDate(
+      new Date(),
+      'Asia/Taipei',
+      'yyyy/MM/dd HH:mm:ss'
+    );
     batchId = Utilities.getUuid();
     attachmentName = snapshot.attachmentName;
     sentCount = snapshot.rows.length;
     reservationStarted = true;
-    reserveTrainingImportBatch_(logSheet, snapshot, batchId, nowText);
+    reserveTrainingImportBatch_(logSheet, snapshot, batchId, reservationAtText);
     SpreadsheetApp.flush();
 
     const attachment = buildTrainingImportWorkbookBlob_(
@@ -5859,9 +6210,14 @@ function executeTrainingImportEmail(payload) {
     });
     mailAccepted = true;
 
+    const acceptedAtText = Utilities.formatDate(
+      new Date(),
+      'Asia/Taipei',
+      'yyyy/MM/dd HH:mm:ss'
+    );
     updateTrainingImportBatchStatus_(logSheet, batchId, '已寄出', {
-      sentAt: nowText,
-      updatedAt: nowText,
+      sentAt: acceptedAtText,
+      updatedAt: acceptedAtText,
       error: ''
     });
     SpreadsheetApp.flush();
@@ -5870,13 +6226,15 @@ function executeTrainingImportEmail(payload) {
       batchId,
       sentCount,
       attachmentName,
-      message: '教育訓練匯入檔已寄送。'
+      mailAccepted: true,
+      requiresManualReview: false,
+      message: 'MailApp 已接受寄送要求並完成台帳記錄；最終投遞仍由郵件系統處理。'
     };
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
     if (reservationStarted && !mailAccepted && logSheet && batchId) {
       try {
-        const failedAt = nowText || Utilities.formatDate(
+        const failedAt = Utilities.formatDate(
           new Date(),
           'Asia/Taipei',
           'yyyy/MM/dd HH:mm:ss'
@@ -5894,11 +6252,27 @@ function executeTrainingImportEmail(payload) {
         );
       }
     }
+    if (mailAccepted) {
+      return {
+        success: false,
+        batchId,
+        sentCount,
+        attachmentName,
+        mailAccepted: true,
+        requiresManualReview: true,
+        message: 'MailApp 已接受本批寄送要求，但台帳更新失敗；'
+          + '實際投遞狀態未知，請保留「準備寄送」並以批次 ID 人工對帳。'
+          + '原始錯誤：'
+          + message
+      };
+    }
     return {
       success: false,
       batchId,
       sentCount: 0,
       attachmentName,
+      mailAccepted: false,
+      requiresManualReview: false,
       message
     };
   } finally {

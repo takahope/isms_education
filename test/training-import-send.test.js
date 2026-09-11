@@ -131,6 +131,8 @@ const sandbox = {
   zipCallCount: 0,
   uuidCounter: 0,
   lockReleased: false,
+  rangeWrites: [],
+  nowTick: 0,
   masterSpreadsheet: null,
   activeSpreadsheet: null
 };
@@ -182,6 +184,15 @@ class MockSheet {
       },
       setValues: (values) => {
         sandbox.eventOrder.push('setValues');
+        sandbox.rangeWrites.push({
+          sheetName: this.name,
+          startRow,
+          startColumn,
+          rowCount,
+          columnCount,
+          values: cloneRows(values),
+          eventIndex: sandbox.eventOrder.length - 1
+        });
         const isSentStatusUpdate = this.name === '訓練匯出紀錄'
           && values.some((row) => row[8] === '已寄出');
         if (isSentStatusUpdate && sandbox.throwOnSentStatusUpdate) {
@@ -202,7 +213,8 @@ class MockSheet {
 }
 
 class MockSpreadsheet {
-  constructor(rowsByName) {
+  constructor(rowsByName, id) {
+    this.id = id || '';
     this.sheets = {};
     Object.keys(rowsByName || {}).forEach((name) => {
       this.sheets[name] = new MockSheet(name, rowsByName[name]);
@@ -211,6 +223,10 @@ class MockSpreadsheet {
 
   getSheetByName(name) {
     return this.sheets[name] || null;
+  }
+
+  getId() {
+    return this.id;
   }
 
   insertSheet(name) {
@@ -261,6 +277,8 @@ function resetFixtures(options) {
   sandbox.zipCallCount = 0;
   sandbox.uuidCounter = 0;
   sandbox.lockReleased = false;
+  sandbox.rangeWrites = [];
+  sandbox.nowTick = 0;
   const masterRows = {
     人員主檔: [
       ['信箱', '姓名', '人員狀態', '', '', '', '', '工作地點'],
@@ -270,19 +288,24 @@ function resetFixtures(options) {
     組織架構樹: [['類型', '層級', '代碼', '名稱', '別名', '父代碼', '主管信箱', '主管姓名']]
   };
   if (settings.masterLogRows) masterRows.訓練匯出紀錄 = settings.masterLogRows;
-  sandbox.masterSpreadsheet = new MockSpreadsheet(masterRows);
+  sandbox.masterSpreadsheet = new MockSpreadsheet(masterRows, 'master-sheet-id');
   const activeRows = {
     人員職務配置: [['使用者信箱', '姓名', '組織代碼', '組織名稱', '職稱', '類型']],
     訓練紀錄: qualified.trainingRows,
     觀看進度: qualified.progressRows
   };
   if (settings.logRows) activeRows.訓練匯出紀錄 = settings.logRows;
-  sandbox.activeSpreadsheet = new MockSpreadsheet(activeRows);
+  sandbox.activeSpreadsheet = new MockSpreadsheet(activeRows, 'active-sheet-id');
 }
 
 class FixedDate extends Date {
   constructor(...args) {
-    super(...(args.length ? args : ['2026-09-11T08:00:00+08:00']));
+    if (args.length) {
+      super(...args);
+      return;
+    }
+    super(Date.parse('2026-09-11T08:00:00+08:00') + sandbox.nowTick * 1000);
+    sandbox.nowTick += 1;
   }
 }
 FixedDate.now = () => new Date('2026-09-11T08:00:00+08:00').getTime();
@@ -467,6 +490,32 @@ function readAttachmentRows(attachment) {
 }
 
 resetFixtures();
+const highRowLogSheet = new MockSheet('訓練匯出紀錄', [LOG_HEADERS]);
+const highRowSnapshot = {
+  courseTitle: '課程甲',
+  recipientEmail: 'receiver@example.org',
+  attachmentName: 'importtemplate_v20260911.xlsx',
+  viewerEmail: 'admin@example.org',
+  pendingLearners: Array.from({ length: 999 }, (_, index) => ({
+    email: `learner${index}@example.org`,
+    name: `學員${index}`,
+    completionDate: '2026-09-11'
+  }))
+};
+sandbox.eventOrder = [];
+sandbox.rangeWrites = [];
+assert.strictEqual(
+  api.reserveTrainingImportBatch_(highRowLogSheet, highRowSnapshot, 'batch-high', '2026/09/11 09:00:00'),
+  999
+);
+const highRowReservationWrites = sandbox.rangeWrites.filter((write) => write.startRow === 2);
+assert.strictEqual(highRowReservationWrites.length, 1);
+assert.strictEqual(highRowReservationWrites[0].rowCount, 999);
+assert.strictEqual(highRowReservationWrites[0].columnCount, 14);
+assert.strictEqual(highRowReservationWrites[0].values.length, 999);
+assert.strictEqual(sandbox.eventOrder.includes('appendRow'), false);
+
+resetFixtures();
 const preview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
 assert.strictEqual(preview.success, true);
 sandbox.eventOrder = [];
@@ -480,6 +529,8 @@ assert.strictEqual(result.success, true);
 assert.strictEqual(result.batchId, 'batch-1');
 assert.strictEqual(result.sentCount, 4);
 assert.strictEqual(result.attachmentName, 'importtemplate_v20260911.xlsx');
+assert.strictEqual(result.mailAccepted, true);
+assert.strictEqual(result.requiresManualReview, false);
 assert.match(result.message, /寄送/);
 assert.strictEqual(sandbox.sentMessages.length, 1);
 assert.strictEqual(sandbox.sentMessages[0].to, 'receiver@example.org');
@@ -494,17 +545,27 @@ assert.strictEqual(logRowsForBatch.length, 4);
 assert(logRowsForBatch.every((row) => row[8] === '已寄出'));
 assert(logRowsForBatch.every((row) => row[0] === 'batch-1'));
 assert.strictEqual(new Set(logRowsForBatch.map((row) => row[1])).size, 4);
-const lastReservationIndex = sandbox.eventOrder.lastIndexOf('appendRow');
-const reservationFlushIndex = sandbox.eventOrder.indexOf('flush', lastReservationIndex);
+const reservationWrites = sandbox.rangeWrites.filter((write) => (
+  write.sheetName === '訓練匯出紀錄'
+  && write.startRow === 2
+  && write.rowCount === 4
+  && write.values.every((row) => row[8] === '準備寄送')
+));
+assert.strictEqual(reservationWrites.length, 1);
+const reservationFlushIndex = sandbox.eventOrder.indexOf('flush', reservationWrites[0].eventIndex + 1);
 const sendIndex = sandbox.eventOrder.indexOf('sendEmail');
-assert(lastReservationIndex >= 0);
-assert(reservationFlushIndex > lastReservationIndex);
+assert.strictEqual(sandbox.eventOrder.includes('appendRow'), false);
+assert(reservationFlushIndex > reservationWrites[0].eventIndex);
 assert(reservationFlushIndex < sendIndex);
+assert.notStrictEqual(logRowsForBatch[0][10], logRowsForBatch[0][11]);
+assert.strictEqual(logRowsForBatch[0][11], logRowsForBatch[0][12]);
 assert.strictEqual(sandbox.eventOrder[sandbox.eventOrder.length - 1], 'releaseLock');
 assert.strictEqual(sandbox.lockReleased, true);
 
 const freshPreviewAfterSuccess = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
-assert.strictEqual(freshPreviewAfterSuccess.success, false);
+assert.strictEqual(freshPreviewAfterSuccess.success, true);
+assert.strictEqual(freshPreviewAfterSuccess.canSend, false);
+assert.strictEqual(freshPreviewAfterSuccess.alreadySentCount, 4);
 const duplicateResult = api.executeTrainingImportEmail({
   courseTitle: '課程甲',
   previewHash: freshPreviewAfterSuccess.previewHash
@@ -552,7 +613,8 @@ assert.strictEqual(
   1
 );
 const fallbackPreviewAfterSend = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
-assert.strictEqual(fallbackPreviewAfterSend.success, false);
+assert.strictEqual(fallbackPreviewAfterSend.success, true);
+assert.strictEqual(fallbackPreviewAfterSend.canSend, false);
 assert.match(fallbackPreviewAfterSend.message, /待寄|新增|資料/);
 assert.strictEqual(sandbox.sentMessages.length, 1);
 
@@ -604,6 +666,8 @@ const failedBatchRows = getLogRows().filter((row) => row[0] === mailFailure.batc
 assert.strictEqual(failedBatchRows.length, 4);
 assert(failedBatchRows.every((row) => row[8] === '寄送失敗'));
 assert(failedBatchRows.every((row) => row[13].includes('MailApp')));
+assert(failedBatchRows.every((row) => row[11] === ''));
+assert(failedBatchRows.every((row) => row[10] !== row[12]));
 assert.strictEqual(sandbox.sentMessages.length, 0);
 sandbox.throwOnMail = false;
 const retryPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
@@ -621,13 +685,21 @@ const acceptedButUnlogged = api.executeTrainingImportEmail({
 });
 assert.strictEqual(acceptedButUnlogged.success, false);
 assert.match(acceptedButUnlogged.message, /台帳更新失敗/);
+assert.strictEqual(acceptedButUnlogged.batchId, 'batch-1');
+assert.strictEqual(acceptedButUnlogged.sentCount, 4);
+assert.strictEqual(acceptedButUnlogged.attachmentName, 'importtemplate_v20260911.xlsx');
+assert.strictEqual(acceptedButUnlogged.mailAccepted, true);
+assert.strictEqual(acceptedButUnlogged.requiresManualReview, true);
+assert.match(acceptedButUnlogged.message, /投遞狀態未知|人工對帳|人工確認/);
 assert.strictEqual(sandbox.sentMessages.length, 1);
 const preparingRows = getLogRows().filter((row) => row[0] === acceptedButUnlogged.batchId);
 assert.strictEqual(preparingRows.length, 4);
 assert(preparingRows.every((row) => row[8] === '準備寄送'));
 sandbox.throwOnSentStatusUpdate = false;
 const previewAfterAcceptedMail = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
-assert.strictEqual(previewAfterAcceptedMail.success, false);
+assert.strictEqual(previewAfterAcceptedMail.success, true);
+assert.strictEqual(previewAfterAcceptedMail.canSend, false);
+assert.strictEqual(previewAfterAcceptedMail.preparingCount, 4);
 const acceptedRetry = api.executeTrainingImportEmail({
   courseTitle: '課程甲',
   previewHash: previewBeforeAcceptedMail.previewHash

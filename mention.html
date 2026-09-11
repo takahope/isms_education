@@ -867,9 +867,23 @@
     };
     let trainingImportEventsBound = false;
     let trainingImportSending = false;
+    let trainingImportCourseRequestId = 0;
+    let trainingImportPreviewRequestId = 0;
 
     function getTrainingImportElement(id) {
       return document.getElementById(id);
+    }
+
+    function formatTrainingImportError(error) {
+      if (!error || typeof error !== 'object') return String(error || '').trim();
+      const email = String(error.email || '').trim();
+      const name = String(error.name || '').trim();
+      const message = String(error.message || '').trim();
+      if (!message) return '';
+      if (name && email) return name + '（' + email + '）：' + message;
+      if (name) return name + '：' + message;
+      if (email) return email + '：' + message;
+      return message;
     }
 
     function setTrainingImportActionState(isSending) {
@@ -887,8 +901,8 @@
     function renderTrainingImportErrors(errors) {
       const errorBox = getTrainingImportElement('training-import-errors');
       const messages = (Array.isArray(errors) ? errors : [errors])
-        .filter(function(message) { return String(message || '').trim(); })
-        .map(function(message) { return String(message); });
+        .map(formatTrainingImportError)
+        .filter(function(message) { return message; });
       if (!errorBox) return;
       errorBox.textContent = messages.join('\n');
       if (messages.length) {
@@ -956,7 +970,7 @@
 
       trainingImportState.previewHash = String(preview.previewHash || '');
       const previewErrors = (Array.isArray(preview.errors) ? preview.errors : [])
-        .filter(function(message) { return String(message || '').trim(); });
+        .filter(function(error) { return formatTrainingImportError(error); });
       trainingImportState.canSend = Boolean(preview.canSend && trainingImportState.previewHash && previewErrors.length === 0);
       const recipient = getTrainingImportElement('training-import-recipient');
       const subject = getTrainingImportElement('training-import-subject');
@@ -978,6 +992,7 @@
     function loadTrainingImportCourses() {
       const courseSelect = getTrainingImportElement('training-import-course-select');
       if (!courseSelect) return;
+      const requestId = ++trainingImportCourseRequestId;
       courseSelect.innerHTML = '';
       const defaultOption = document.createElement('option');
       defaultOption.value = '';
@@ -991,6 +1006,7 @@
       }
       google.script.run
         .withSuccessHandler(function(result) {
+          if (requestId !== trainingImportCourseRequestId) return;
           if (!result || !result.success) {
             renderTrainingImportErrors([(result && result.message) || '讀取課程清單失敗。']);
             return;
@@ -1005,6 +1021,7 @@
           });
         })
         .withFailureHandler(function(error) {
+          if (requestId !== trainingImportCourseRequestId) return;
           renderTrainingImportErrors([(error && error.message) || String(error || '讀取課程清單失敗。')]);
         })
         .listTrainingImportCourses();
@@ -1017,6 +1034,7 @@
         return;
       }
       const normalizedTitle = String(courseTitle || '').trim();
+      const requestId = ++trainingImportPreviewRequestId;
       trainingImportState.courseTitle = normalizedTitle;
       trainingImportState.previewHash = '';
       trainingImportState.canSend = false;
@@ -1035,11 +1053,15 @@
       }
       google.script.run
         .withSuccessHandler(function(result) {
-          if (trainingImportSending || trainingImportState.courseTitle !== normalizedTitle) return;
+          if (trainingImportSending
+              || requestId !== trainingImportPreviewRequestId
+              || trainingImportState.courseTitle !== normalizedTitle) return;
           renderTrainingImportPreview(result);
         })
         .withFailureHandler(function(error) {
-          if (trainingImportSending || trainingImportState.courseTitle !== normalizedTitle) return;
+          if (trainingImportSending
+              || requestId !== trainingImportPreviewRequestId
+              || trainingImportState.courseTitle !== normalizedTitle) return;
           renderTrainingImportPreview({
             success: false,
             message: (error && error.message) || String(error || '產生預覽失敗。')
@@ -1053,6 +1075,8 @@
       if (cancelButton && cancelButton.disabled) return;
       const modal = getTrainingImportElement('training-import-modal');
       if (modal) modal.classList.add('hidden');
+      trainingImportCourseRequestId += 1;
+      trainingImportPreviewRequestId += 1;
     }
 
     function ensureTrainingImportEventHandlers() {
@@ -1073,6 +1097,7 @@
     function openTrainingImportModal() {
       if (trainingImportSending) return;
       ensureTrainingImportEventHandlers();
+      trainingImportPreviewRequestId += 1;
       trainingImportState.courseTitle = '';
       trainingImportState.previewHash = '';
       trainingImportState.canSend = false;
@@ -1082,6 +1107,31 @@
       const modal = getTrainingImportElement('training-import-modal');
       if (modal) modal.classList.remove('hidden');
       loadTrainingImportCourses();
+    }
+
+    function buildTrainingImportOutcomeText(result) {
+      const outcome = result || {};
+      return [
+        String(outcome.message || '').trim(),
+        outcome.batchId ? '批次 ID：' + outcome.batchId : '',
+        Number(outcome.sentCount || 0) > 0 ? '本批筆數：' + Number(outcome.sentCount) + ' 筆' : '',
+        outcome.attachmentName ? '附件：' + outcome.attachmentName : ''
+      ].filter(function(line) { return line; }).join('\n');
+    }
+
+    function showTrainingImportOutcome(title, text, icon) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({ title: title, text: text, icon: icon });
+        return;
+      }
+      renderTrainingImportErrors([text]);
+    }
+
+    function reloadTrainingImportPreviewAfterExecute(courseTitle) {
+      trainingImportState.previewHash = '';
+      trainingImportState.canSend = false;
+      trainingImportState.loading = false;
+      loadTrainingImportPreview(courseTitle);
     }
 
     function confirmTrainingImportSend() {
@@ -1094,6 +1144,7 @@
       };
       trainingImportSending = true;
       trainingImportState.loading = true;
+      trainingImportPreviewRequestId += 1;
       setTrainingImportActionState(true);
       if (typeof google === 'undefined' || !google.script || !google.script.run) {
         trainingImportSending = false;
@@ -1107,25 +1158,41 @@
           trainingImportSending = false;
           trainingImportState.loading = false;
           if (result && result.success && Number(result.sentCount || 0) > 0) {
+            reloadTrainingImportPreviewAfterExecute(payload.courseTitle);
             const modal = getTrainingImportElement('training-import-modal');
             if (modal) modal.classList.add('hidden');
-            trainingImportState.courseTitle = '';
-            trainingImportState.previewHash = '';
-            trainingImportState.canSend = false;
-            clearTrainingImportPreview();
-            setTrainingImportActionState(false);
-            loadTrainingImportCourses();
-            if (typeof Swal !== 'undefined') Swal.fire('寄送完成', '時數匯入檔已成功寄送。', 'success');
+            showTrainingImportOutcome(
+              '寄送要求已接受',
+              buildTrainingImportOutcomeText(result),
+              'success'
+            );
             return;
           }
-          renderTrainingImportErrors([(result && result.message) || '未成功寄送任何時數匯入資料，請重新預覽後再試。']);
-          setTrainingImportActionState(false);
+          reloadTrainingImportPreviewAfterExecute(payload.courseTitle);
+          if (result && result.mailAccepted && result.requiresManualReview) {
+            showTrainingImportOutcome(
+              '需要人工對帳',
+              buildTrainingImportOutcomeText(result),
+              'warning'
+            );
+            return;
+          }
+          showTrainingImportOutcome(
+            '寄送未完成',
+            buildTrainingImportOutcomeText(result) || '未成功寄送任何時數匯入資料，請依重新載入的預覽確認後再試。',
+            'error'
+          );
         })
         .withFailureHandler(function(error) {
           trainingImportSending = false;
           trainingImportState.loading = false;
-          renderTrainingImportErrors([(error && error.message) || String(error || '寄送時發生錯誤。')]);
-          setTrainingImportActionState(false);
+          reloadTrainingImportPreviewAfterExecute(payload.courseTitle);
+          showTrainingImportOutcome(
+            '寄送狀態未確認',
+            '與伺服器的回應中斷，已重新載入預覽。請先確認台帳與郵件狀態：'
+              + ((error && error.message) || String(error || '寄送時發生錯誤。')),
+            'warning'
+          );
         })
         .executeTrainingImportEmail({
           courseTitle: payload.courseTitle,

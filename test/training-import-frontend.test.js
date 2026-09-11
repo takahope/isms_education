@@ -114,6 +114,7 @@ const documentMock = {
 
 const rpcCalls = [];
 const handlers = [];
+const swalCalls = [];
 function createRpcChain(request) {
   const handlersForRequest = request || { success: null, failure: null };
   return {
@@ -148,7 +149,11 @@ const sandbox = {
   document: documentMock,
   google: { script: { run: createRpcChain() } },
   window: { location: { href: 'https://example.test/mention' } },
-  Swal: { fire() {}, close() {}, showLoading() {} },
+  Swal: {
+    fire() { swalCalls.push(Array.from(arguments)); },
+    close() {},
+    showLoading() {}
+  },
   alert() {},
   setTimeout() {},
   clearTimeout,
@@ -196,14 +201,23 @@ sandbox.openTrainingImportModal();
 assert.strictEqual(courseSelect.value, '');
 assert.strictEqual(confirmButton.disabled, true);
 assert.strictEqual(rpcCalls[0].method, 'listTrainingImportCourses');
-latestHandler('listTrainingImportCourses').success({
+const firstCourseListHandler = latestHandler('listTrainingImportCourses');
+sandbox.closeTrainingImportModal();
+sandbox.openTrainingImportModal();
+const currentCourseListHandler = latestHandler('listTrainingImportCourses');
+firstCourseListHandler.success({
+  success: true,
+  courses: [{ courseTitle: '過期課程' }]
+});
+assert.strictEqual(courseSelect.children.length, 1);
+currentCourseListHandler.success({
   success: true,
   courses: [{ courseTitle: '課程甲' }, { courseTitle: '課程乙' }]
 });
 
 courseSelect.value = '課程甲';
 courseSelect.dispatchEvent({ type: 'change', target: courseSelect });
-assert.deepStrictEqual(plain(rpcCalls[1]), {
+assert.deepStrictEqual(plain(rpcCalls[2]), {
   method: 'previewTrainingImportEmail',
   payload: { courseTitle: '課程甲' }
 });
@@ -213,25 +227,63 @@ const courseAPreviewHandler = latestHandler('previewTrainingImportEmail');
 sandbox.renderTrainingImportPreview(previewResult({
   rows: [['<script>bad()</script>'].concat(new Array(13).fill('值'))],
   headers: ['<b>危險欄位</b>'].concat(new Array(13).fill('欄位')),
-  errors: ['<img src=x onerror=bad()>']
+  canSend: false,
+  errors: [{
+    email: 'bad@example.org',
+    name: '王小明',
+    message: '<img src=x onerror=bad()>'
+  }]
 }));
 assert.strictEqual(elements['training-import-table-head'].children[0].children.length, 14);
 assert.strictEqual(elements['training-import-table-body'].children.length, 1);
 assert.strictEqual(elements['training-import-table-body'].children[0].children.length, 14);
 assert.strictEqual(elements['training-import-table-body'].children[0].children[0].textContent, '<script>bad()</script>');
-assert.strictEqual(elements['training-import-errors'].textContent, '<img src=x onerror=bad()>');
+assert.strictEqual(
+  elements['training-import-errors'].textContent,
+  '王小明（bad@example.org）：<img src=x onerror=bad()>'
+);
 assert.strictEqual(elements['training-import-body'].innerHTML, '<p>內容</p>');
 assert.strictEqual(elements['training-import-summary'].textContent, '待寄送 0 筆；已寄出 0 筆；準備中 0 筆；可重試失敗 0 筆；異常 0 筆。');
 assert.strictEqual(confirmButton.disabled, true);
 
+sandbox.renderTrainingImportPreview(previewResult({
+  canSend: false,
+  previewHash: '',
+  rows: [],
+  pendingCount: 0,
+  preparingCount: 4,
+  errorCount: 1,
+  errors: [{ email: '', name: '', message: '準備寄送紀錄需人工確認。' }]
+}));
+assert.strictEqual(elements['training-import-summary'].textContent, '待寄送 0 筆；已寄出 0 筆；準備中 4 筆；可重試失敗 0 筆；異常 1 筆。');
+assert.strictEqual(confirmButton.disabled, true);
+
 courseSelect.value = '課程乙';
 courseSelect.dispatchEvent({ type: 'change', target: courseSelect });
-assert.deepStrictEqual(plain(rpcCalls[2]), {
+assert.deepStrictEqual(plain(rpcCalls[3]), {
   method: 'previewTrainingImportEmail',
   payload: { courseTitle: '課程乙' }
 });
 assert.strictEqual(confirmButton.disabled, true);
+const courseBPreviewHandler = latestHandler('previewTrainingImportEmail');
+courseSelect.value = '課程甲';
+courseSelect.dispatchEvent({ type: 'change', target: courseSelect });
+const currentCourseAPreviewHandler = latestHandler('previewTrainingImportEmail');
 courseAPreviewHandler.success(previewResult());
+assert.strictEqual(confirmButton.disabled, true);
+courseBPreviewHandler.success(previewResult({
+  courseTitle: '課程乙',
+  previewHash: 'b'.repeat(64)
+}));
+assert.strictEqual(confirmButton.disabled, true);
+currentCourseAPreviewHandler.success(previewResult({
+  courseTitle: '課程甲',
+  previewHash: 'c'.repeat(64)
+}));
+assert.strictEqual(confirmButton.disabled, false);
+
+courseSelect.value = '課程乙';
+courseSelect.dispatchEvent({ type: 'change', target: courseSelect });
 assert.strictEqual(confirmButton.disabled, true);
 sandbox.confirmTrainingImportSend();
 assert.strictEqual(rpcCalls.filter((call) => call.method === 'executeTrainingImportEmail').length, 0);
@@ -247,7 +299,7 @@ latestHandler('previewTrainingImportEmail').success(previewResult({
 }));
 assert.strictEqual(elements['training-import-summary'].textContent, '待寄送 1 筆；已寄出 2 筆；準備中 3 筆；可重試失敗 4 筆；異常 5 筆。');
 confirmButton.dispatchEvent({ type: 'click', target: confirmButton });
-assert.deepStrictEqual(plain(rpcCalls[3]), {
+assert.deepStrictEqual(plain(rpcCalls[rpcCalls.length - 1]), {
   method: 'executeTrainingImportEmail',
   payload: { courseTitle: '課程乙', previewHash: 'b'.repeat(64) }
 });
@@ -257,7 +309,7 @@ assert.strictEqual(courseSelect.disabled, true);
 courseSelect.value = '課程甲';
 courseSelect.dispatchEvent({ type: 'change', target: courseSelect });
 assert.strictEqual(courseSelect.value, '課程乙');
-assert.strictEqual(rpcCalls.filter((call) => call.method === 'previewTrainingImportEmail').length, 2);
+assert.strictEqual(rpcCalls.filter((call) => call.method === 'previewTrainingImportEmail').length, 4);
 latestHandler('previewTrainingImportEmail').success(previewResult({
   courseTitle: '課程乙',
   previewHash: 'c'.repeat(64)
@@ -266,15 +318,71 @@ assert.strictEqual(confirmButton.disabled, true);
 assert.strictEqual(elements['training-import-cancel'].disabled, true);
 assert.strictEqual(courseSelect.disabled, true);
 latestHandler('executeTrainingImportEmail').failure(new Error('寄送失敗'));
-assert.strictEqual(confirmButton.disabled, false);
+assert.strictEqual(rpcCalls.filter((call) => call.method === 'previewTrainingImportEmail').length, 5);
+assert.strictEqual(confirmButton.disabled, true);
 assert.strictEqual(elements['training-import-cancel'].disabled, false);
 assert.strictEqual(courseSelect.disabled, false);
+assert.match(JSON.stringify(swalCalls[swalCalls.length - 1]), /寄送失敗|狀態未確認/);
+
+latestHandler('previewTrainingImportEmail').success(previewResult({
+  courseTitle: '課程乙',
+  previewHash: 'd'.repeat(64)
+}));
+assert.strictEqual(confirmButton.disabled, false);
 
 confirmButton.dispatchEvent({ type: 'click', target: confirmButton });
-latestHandler('executeTrainingImportEmail').success({ success: true, sentCount: 1 });
+latestHandler('executeTrainingImportEmail').success({
+  success: false,
+  batchId: 'batch-warning',
+  sentCount: 4,
+  attachmentName: 'importtemplate_v20260911.xlsx',
+  mailAccepted: true,
+  requiresManualReview: true,
+  message: 'MailApp 已接受，實際投遞狀態未知，請人工對帳。'
+});
+assert.strictEqual(modal.classList.contains('hidden'), false);
+assert.strictEqual(confirmButton.disabled, true);
+assert.strictEqual(rpcCalls.filter((call) => call.method === 'previewTrainingImportEmail').length, 6);
+const warningText = JSON.stringify(swalCalls[swalCalls.length - 1]);
+assert.match(warningText, /batch-warning/);
+assert.match(warningText, /4/);
+assert.match(warningText, /importtemplate_v20260911\.xlsx/);
+assert.match(warningText, /人工對帳|投遞狀態未知/);
+
+latestHandler('previewTrainingImportEmail').success(previewResult({
+  courseTitle: '課程乙',
+  canSend: false,
+  previewHash: '',
+  rows: [],
+  pendingCount: 0,
+  preparingCount: 4,
+  errorCount: 1,
+  errors: [{ email: '', name: '', message: '準備寄送紀錄需人工確認。' }]
+}));
+assert.strictEqual(confirmButton.disabled, true);
+
+sandbox.renderTrainingImportPreview(previewResult({
+  courseTitle: '課程乙',
+  previewHash: 'e'.repeat(64),
+  pendingCount: 2
+}));
+confirmButton.dispatchEvent({ type: 'click', target: confirmButton });
+latestHandler('executeTrainingImportEmail').success({
+  success: true,
+  batchId: 'batch-success',
+  sentCount: 2,
+  attachmentName: 'importtemplate_v20260911.xlsx',
+  mailAccepted: true,
+  requiresManualReview: false,
+  message: 'MailApp 已接受寄送要求。'
+});
 assert.strictEqual(modal.classList.contains('hidden'), true);
 assert.strictEqual(confirmButton.disabled, true);
-assert.strictEqual(courseSelect.value, '');
+assert.strictEqual(rpcCalls.filter((call) => call.method === 'previewTrainingImportEmail').length, 7);
+const successText = JSON.stringify(swalCalls[swalCalls.length - 1]);
+assert.match(successText, /batch-success/);
+assert.match(successText, /2/);
+assert.match(successText, /importtemplate_v20260911\.xlsx/);
 assert.strictEqual(rpcCalls.filter((call) => call.method === 'listTrainingImportCourses').length, 2);
 
 console.log('training import frontend behavior: PASS');
