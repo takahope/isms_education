@@ -2,6 +2,7 @@
 .claude
 conductor
 .memsearch/
+.worktrees/
 example/
 docs/
 superpowers/
