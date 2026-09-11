@@ -5691,3 +5691,215 @@ function previewTrainingImportEmail(payload) {
     };
   }
 }
+
+/**
+ * 取得教育訓練匯出台帳，首次建立時立即寫入固定表頭並 flush。
+ *
+ * @param {Object} spreadsheet - 與訓練紀錄相同的試算表
+ * @returns {Object} 訓練匯出紀錄工作表
+ */
+function getOrCreateTrainingImportLogSheet_(spreadsheet) {
+  if (!spreadsheet || typeof spreadsheet.getSheetByName !== 'function') {
+    throw new Error('找不到教育訓練匯出台帳所屬試算表');
+  }
+
+  let sheet = spreadsheet.getSheetByName(MENTION_CONFIG.trainingImportLogSheetName);
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(MENTION_CONFIG.trainingImportLogSheetName);
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, TRAINING_IMPORT_LOG_HEADERS.length)
+      .setValues([TRAINING_IMPORT_LOG_HEADERS.slice()]);
+    SpreadsheetApp.flush();
+  }
+  return sheet;
+}
+
+/**
+ * 在發信前逐筆保留唯一鍵，讓同一把 Script Lock 下的後續請求看見準備中狀態。
+ *
+ * @param {Object} sheet - 訓練匯出紀錄工作表
+ * @param {Object} snapshot - 鎖內重建的權威預覽
+ * @param {string} batchId - 同一封信共用的批次 ID
+ * @param {string} nowText - 台北時區建立時間
+ * @returns {number} 保留筆數
+ */
+function reserveTrainingImportBatch_(sheet, snapshot, batchId, nowText) {
+  const pendingLearners = Array.isArray(snapshot && snapshot.pendingLearners)
+    ? snapshot.pendingLearners
+    : [];
+  pendingLearners.forEach((learner) => {
+    sheet.appendRow([
+      batchId,
+      buildTrainingImportUniqueKey_(snapshot.courseTitle, learner.email),
+      snapshot.courseTitle,
+      learner.name,
+      normalizeEmail_(learner.email),
+      learner.completionDate,
+      snapshot.recipientEmail,
+      snapshot.attachmentName,
+      '準備寄送',
+      snapshot.viewerEmail,
+      nowText,
+      '',
+      nowText,
+      ''
+    ]);
+  });
+  return pendingLearners.length;
+}
+
+/**
+ * 以單次 setValues 原子更新完整批次，避免成功寄信後留下部分已寄出、部分準備中的狀態。
+ *
+ * @param {Object} sheet - 訓練匯出紀錄工作表
+ * @param {string} batchId - 要更新的批次 ID
+ * @param {string} status - 新狀態
+ * @param {Object} values - 寄送時間、更新時間及錯誤訊息
+ * @returns {number} 更新筆數
+ */
+function updateTrainingImportBatchStatus_(sheet, batchId, status, values) {
+  const updates = values || {};
+  const rows = sheet.getDataRange().getDisplayValues();
+  const matchingIndexes = [];
+  rows.forEach((row, index) => {
+    if (index > 0 && String(row[0] || '') === String(batchId || '')) {
+      matchingIndexes.push(index);
+    }
+  });
+  if (matchingIndexes.length === 0) {
+    throw new Error('找不到教育訓練匯出批次：' + batchId);
+  }
+
+  const firstIndex = matchingIndexes[0];
+  const lastIndex = matchingIndexes[matchingIndexes.length - 1];
+  if (lastIndex - firstIndex + 1 !== matchingIndexes.length) {
+    throw new Error('教育訓練匯出批次列不連續：' + batchId);
+  }
+
+  const updatedRows = matchingIndexes.map((index) => {
+    const row = rows[index].slice(0, TRAINING_IMPORT_LOG_HEADERS.length);
+    while (row.length < TRAINING_IMPORT_LOG_HEADERS.length) row.push('');
+    row[8] = status;
+    if (Object.prototype.hasOwnProperty.call(updates, 'sentAt')) row[11] = updates.sentAt;
+    if (Object.prototype.hasOwnProperty.call(updates, 'updatedAt')) row[12] = updates.updatedAt;
+    if (Object.prototype.hasOwnProperty.call(updates, 'error')) row[13] = updates.error;
+    return row;
+  });
+  sheet.getRange(
+    firstIndex + 1,
+    1,
+    updatedRows.length,
+    TRAINING_IMPORT_LOG_HEADERS.length
+  ).setValues(updatedRows);
+  return updatedRows.length;
+}
+
+/**
+ * 寄送匯入檔前在 Script Lock 內重建快照及保留唯一鍵，避免重複寄送同一完訓者。
+ *
+ * @param {Object} payload - 僅接受 courseTitle 與 previewHash
+ * @returns {{success: boolean, batchId?: string, sentCount?: number, attachmentName?: string, message: string}}
+ */
+function executeTrainingImportEmail(payload) {
+  const request = payload || {};
+  const viewerEmail = normalizeEmail_(getCurrentUserEmail());
+  if (!canAccessMention_(viewerEmail)) {
+    return { success: false, message: '權限不足：您未被授權寄送教育訓練匯入檔。' };
+  }
+
+  const courseTitle = String(request.courseTitle || '').trim();
+  const previewHash = String(request.previewHash || '').trim().toLowerCase();
+  const lock = LockService.getScriptLock();
+  let logSheet = null;
+  let batchId = '';
+  let nowText = '';
+  let attachmentName = '';
+  let sentCount = 0;
+  let reservationStarted = false;
+  let mailAccepted = false;
+
+  try {
+    lock.waitLock(10000);
+    const snapshot = buildAuthoritativeTrainingImportPreview_(courseTitle);
+    if (snapshot.previewHash !== previewHash) {
+      throw new Error('預覽資料已變動，請重新預覽後再寄送。');
+    }
+    if (!snapshot.canSend || snapshot.rows.length === 0) {
+      throw new Error('目前沒有可寄送的新完課資料。');
+    }
+    if (MailApp.getRemainingDailyQuota() < 1) {
+      throw new Error('今日 MailApp 寄件配額不足。');
+    }
+
+    logSheet = getOrCreateTrainingImportLogSheet_(snapshot.source.spreadsheet);
+    nowText = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+    batchId = Utilities.getUuid();
+    attachmentName = snapshot.attachmentName;
+    sentCount = snapshot.rows.length;
+    reservationStarted = true;
+    reserveTrainingImportBatch_(logSheet, snapshot, batchId, nowText);
+    SpreadsheetApp.flush();
+
+    const attachment = buildTrainingImportWorkbookBlob_(
+      snapshot.templateBlob,
+      snapshot.rows,
+      snapshot.attachmentName
+    );
+    verifyTrainingImportWorkbookBlob_(attachment, snapshot.rows);
+    MailApp.sendEmail({
+      to: snapshot.recipientEmail,
+      subject: snapshot.subject,
+      body: snapshot.textBody,
+      htmlBody: snapshot.htmlBody,
+      name: resolveDefaultMentionSenderName_(viewerEmail, snapshot.context),
+      attachments: [attachment]
+    });
+    mailAccepted = true;
+
+    updateTrainingImportBatchStatus_(logSheet, batchId, '已寄出', {
+      sentAt: nowText,
+      updatedAt: nowText,
+      error: ''
+    });
+    SpreadsheetApp.flush();
+    return {
+      success: true,
+      batchId,
+      sentCount,
+      attachmentName,
+      message: '教育訓練匯入檔已寄送。'
+    };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    if (reservationStarted && !mailAccepted && logSheet && batchId) {
+      try {
+        const failedAt = nowText || Utilities.formatDate(
+          new Date(),
+          'Asia/Taipei',
+          'yyyy/MM/dd HH:mm:ss'
+        );
+        updateTrainingImportBatchStatus_(logSheet, batchId, '寄送失敗', {
+          sentAt: '',
+          updatedAt: failedAt,
+          error: message
+        });
+        SpreadsheetApp.flush();
+      } catch (logError) {
+        console.error(
+          '更新教育訓練匯出失敗狀態失敗:',
+          logError && logError.message ? logError.message : logError
+        );
+      }
+    }
+    return {
+      success: false,
+      batchId,
+      sentCount: 0,
+      attachmentName,
+      message
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
