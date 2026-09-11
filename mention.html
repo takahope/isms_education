@@ -45,6 +45,12 @@
           </svg>
           📊 匯出報告
         </button>
+        <button id="training-import-btn" type="button" class="inline-flex items-center px-3 py-1.5 border border-slate-300 text-xs sm:text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-2xs transition">
+          <svg class="w-4 h-4 mr-1.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a1.99 1.99 0 002.22 0L21 8m-18 8h18a2 2 0 002-2V6a2 2 0 00-2-2H3a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+          </svg>
+          📨 寄送時數匯入檔
+        </button>
         <a href="<?= webAppUrl ?>" target="_top" class="text-xs sm:text-sm text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
           回到上課首頁
         </a>
@@ -227,6 +233,60 @@
 
     </div>
   </main>
+
+  <!-- 教育訓練時數匯入檔預覽 Modal -->
+  <div id="training-import-modal" class="fixed inset-0 z-50 overflow-y-auto hidden bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-7xl w-full max-h-[90vh] shadow-2xl flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+          <h3 class="text-base font-bold text-slate-900">時數匯入檔寄送預覽</h3>
+          <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">唯讀預覽</span>
+        </div>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-4 text-sm flex-1">
+        <div class="max-w-xl">
+          <label for="training-import-course-select" class="block text-xs font-semibold text-slate-700 mb-1.5">選擇課程</label>
+          <select id="training-import-course-select" class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 bg-white border">
+            <option value="">請選擇要寄送的課程</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 rounded-lg p-3.5 border border-slate-200/80 font-mono text-xs">
+          <div class="flex items-start"><span class="text-slate-400 w-16 font-medium">收件者：</span><span id="training-import-recipient" class="text-slate-800 font-semibold flex-1 break-all"></span></div>
+          <div class="flex items-start"><span class="text-slate-400 w-16 font-medium">附件：</span><span id="training-import-filename" class="text-slate-800 font-semibold flex-1 break-all"></span></div>
+          <div class="flex items-start md:col-span-2"><span class="text-slate-400 w-16 font-medium">主旨：</span><span id="training-import-subject" class="text-slate-800 font-semibold flex-1 break-all"></span></div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <h4 class="text-xs font-bold text-slate-700">信件內文</h4>
+            <span class="text-[11px] text-slate-400">伺服器產生的唯讀內容</span>
+          </div>
+          <div id="training-import-body" class="p-5 border border-slate-200 rounded-lg bg-white overflow-x-auto text-slate-800 text-sm leading-relaxed min-h-[120px]"></div>
+        </div>
+
+        <div id="training-import-errors" class="hidden rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 whitespace-pre-wrap"></div>
+        <p id="training-import-summary" class="text-xs text-slate-500"></p>
+
+        <div class="border border-slate-200 rounded-lg overflow-auto max-h-[320px]">
+          <table class="min-w-max w-full text-xs text-left text-slate-700">
+            <thead id="training-import-table-head" class="sticky top-0 z-10 bg-slate-100 text-slate-600"></thead>
+            <tbody id="training-import-table-body" class="divide-y divide-slate-100 bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+        <span class="text-[11px] text-slate-500">寄送時會再次驗證預覽資料是否仍為最新狀態。</span>
+        <div class="flex space-x-2.5">
+          <button type="button" id="training-import-cancel" class="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-medium hover:bg-white transition">關閉</button>
+          <button type="button" id="training-import-confirm" class="px-5 py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>確認並寄送</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- 預覽彈窗 Modal -->
   <div id="preview-modal" class="fixed inset-0 z-50 overflow-y-auto hidden bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -797,6 +857,265 @@
     }
 
     // ==========================================
+    // 教育訓練時數匯入檔寄送預覽
+    // ==========================================
+    const trainingImportState = {
+      courseTitle: '',
+      previewHash: '',
+      canSend: false,
+      loading: false
+    };
+    let trainingImportEventsBound = false;
+
+    function getTrainingImportElement(id) {
+      return document.getElementById(id);
+    }
+
+    function setTrainingImportActionState(isSending) {
+      const confirmButton = getTrainingImportElement('training-import-confirm');
+      const cancelButton = getTrainingImportElement('training-import-cancel');
+      if (confirmButton) {
+        confirmButton.disabled = Boolean(isSending) || trainingImportState.loading || !trainingImportState.canSend;
+      }
+      if (cancelButton) cancelButton.disabled = Boolean(isSending);
+    }
+
+    function renderTrainingImportErrors(errors) {
+      const errorBox = getTrainingImportElement('training-import-errors');
+      const messages = (Array.isArray(errors) ? errors : [errors])
+        .filter(function(message) { return String(message || '').trim(); })
+        .map(function(message) { return String(message); });
+      if (!errorBox) return;
+      errorBox.textContent = messages.join('\n');
+      if (messages.length) {
+        errorBox.classList.remove('hidden');
+      } else {
+        errorBox.classList.add('hidden');
+      }
+    }
+
+    function clearTrainingImportPreview() {
+      const ids = ['training-import-recipient', 'training-import-subject', 'training-import-filename', 'training-import-summary'];
+      ids.forEach(function(id) {
+        const element = getTrainingImportElement(id);
+        if (element) element.textContent = '';
+      });
+      const body = getTrainingImportElement('training-import-body');
+      const tableHead = getTrainingImportElement('training-import-table-head');
+      const tableBody = getTrainingImportElement('training-import-table-body');
+      if (body) body.innerHTML = '';
+      if (tableHead) tableHead.innerHTML = '';
+      if (tableBody) tableBody.innerHTML = '';
+      renderTrainingImportErrors([]);
+    }
+
+    function renderTrainingImportTable(headers, rows) {
+      const tableHead = getTrainingImportElement('training-import-table-head');
+      const tableBody = getTrainingImportElement('training-import-table-body');
+      if (!tableHead || !tableBody) return;
+      tableHead.innerHTML = '';
+      tableBody.innerHTML = '';
+
+      const headerRow = document.createElement('tr');
+      (Array.isArray(headers) ? headers : []).forEach(function(header) {
+        const cell = document.createElement('th');
+        cell.scope = 'col';
+        cell.className = 'px-3 py-2.5 font-semibold whitespace-nowrap';
+        cell.textContent = String(header || '');
+        headerRow.appendChild(cell);
+      });
+      tableHead.appendChild(headerRow);
+
+      (Array.isArray(rows) ? rows : []).forEach(function(row) {
+        const tableRow = document.createElement('tr');
+        (Array.isArray(row) ? row : []).forEach(function(value) {
+          const cell = document.createElement('td');
+          cell.className = 'px-3 py-2 whitespace-nowrap';
+          cell.textContent = String(value || '');
+          tableRow.appendChild(cell);
+        });
+        tableBody.appendChild(tableRow);
+      });
+    }
+
+    function renderTrainingImportPreview(result) {
+      trainingImportState.loading = false;
+      const preview = result || {};
+      if (!preview.success) {
+        trainingImportState.previewHash = '';
+        trainingImportState.canSend = false;
+        renderTrainingImportErrors([preview.message || '無法產生時數匯入檔預覽，請稍後再試。']);
+        setTrainingImportActionState(false);
+        return;
+      }
+
+      trainingImportState.previewHash = String(preview.previewHash || '');
+      trainingImportState.canSend = Boolean(preview.canSend && trainingImportState.previewHash);
+      const recipient = getTrainingImportElement('training-import-recipient');
+      const subject = getTrainingImportElement('training-import-subject');
+      const filename = getTrainingImportElement('training-import-filename');
+      const body = getTrainingImportElement('training-import-body');
+      const summary = getTrainingImportElement('training-import-summary');
+      if (recipient) recipient.textContent = String(preview.recipientEmail || '');
+      if (subject) subject.textContent = String(preview.subject || '');
+      if (filename) filename.textContent = String(preview.attachmentName || '');
+      if (body) body.innerHTML = preview.htmlBody || '';
+      if (summary) {
+        const counts = preview.counts || {};
+        summary.textContent = '待寄送 ' + Number(counts.pending || 0) + ' 筆；已寄出 ' + Number(counts.sent || 0) + ' 筆；準備中 ' + Number(counts.preparing || 0) + ' 筆；異常 ' + Number(counts.errors || 0) + ' 筆。';
+      }
+      renderTrainingImportTable(preview.headers, preview.rows);
+      renderTrainingImportErrors(preview.errors || []);
+      setTrainingImportActionState(false);
+    }
+
+    function loadTrainingImportCourses() {
+      const courseSelect = getTrainingImportElement('training-import-course-select');
+      if (!courseSelect) return;
+      courseSelect.innerHTML = '';
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = '請選擇要寄送的課程';
+      courseSelect.appendChild(defaultOption);
+      courseSelect.value = '';
+
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        renderTrainingImportErrors(['目前無法連線至伺服器讀取課程清單。']);
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (!result || !result.success) {
+            renderTrainingImportErrors([(result && result.message) || '讀取課程清單失敗。']);
+            return;
+          }
+          (Array.isArray(result.courses) ? result.courses : []).forEach(function(course) {
+            const title = String((course && course.courseTitle) || '').trim();
+            if (!title) return;
+            const option = document.createElement('option');
+            option.value = title;
+            option.textContent = title;
+            courseSelect.appendChild(option);
+          });
+        })
+        .withFailureHandler(function(error) {
+          renderTrainingImportErrors([(error && error.message) || String(error || '讀取課程清單失敗。')]);
+        })
+        .listTrainingImportCourses();
+    }
+
+    function loadTrainingImportPreview(courseTitle) {
+      const normalizedTitle = String(courseTitle || '').trim();
+      trainingImportState.courseTitle = normalizedTitle;
+      trainingImportState.previewHash = '';
+      trainingImportState.canSend = false;
+      trainingImportState.loading = false;
+      clearTrainingImportPreview();
+      setTrainingImportActionState(false);
+      if (!normalizedTitle) return;
+
+      trainingImportState.loading = true;
+      const summary = getTrainingImportElement('training-import-summary');
+      if (summary) summary.textContent = '正在依最新資料產生預覽…';
+      setTrainingImportActionState(false);
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        renderTrainingImportPreview({ success: false, message: '目前無法連線至伺服器產生預覽。' });
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (trainingImportState.courseTitle !== normalizedTitle) return;
+          renderTrainingImportPreview(result);
+        })
+        .withFailureHandler(function(error) {
+          if (trainingImportState.courseTitle !== normalizedTitle) return;
+          renderTrainingImportPreview({
+            success: false,
+            message: (error && error.message) || String(error || '產生預覽失敗。')
+          });
+        })
+        .previewTrainingImportEmail({ courseTitle: normalizedTitle });
+    }
+
+    function closeTrainingImportModal() {
+      const cancelButton = getTrainingImportElement('training-import-cancel');
+      if (cancelButton && cancelButton.disabled) return;
+      const modal = getTrainingImportElement('training-import-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function ensureTrainingImportEventHandlers() {
+      if (trainingImportEventsBound) return;
+      trainingImportEventsBound = true;
+      const courseSelect = getTrainingImportElement('training-import-course-select');
+      const cancelButton = getTrainingImportElement('training-import-cancel');
+      if (courseSelect) {
+        courseSelect.addEventListener('change', function(event) {
+          loadTrainingImportPreview(event.target.value);
+        });
+      }
+      if (cancelButton) cancelButton.addEventListener('click', closeTrainingImportModal);
+    }
+
+    function openTrainingImportModal() {
+      ensureTrainingImportEventHandlers();
+      trainingImportState.courseTitle = '';
+      trainingImportState.previewHash = '';
+      trainingImportState.canSend = false;
+      trainingImportState.loading = false;
+      clearTrainingImportPreview();
+      setTrainingImportActionState(false);
+      const modal = getTrainingImportElement('training-import-modal');
+      if (modal) modal.classList.remove('hidden');
+      loadTrainingImportCourses();
+    }
+
+    function confirmTrainingImportSend() {
+      if (trainingImportState.loading || !trainingImportState.canSend || !trainingImportState.courseTitle || !trainingImportState.previewHash) {
+        return;
+      }
+      const payload = {
+        courseTitle: trainingImportState.courseTitle,
+        previewHash: trainingImportState.previewHash
+      };
+      trainingImportState.loading = true;
+      setTrainingImportActionState(true);
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        trainingImportState.loading = false;
+        renderTrainingImportErrors(['目前無法連線至伺服器執行寄送。']);
+        setTrainingImportActionState(false);
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(function(result) {
+          trainingImportState.loading = false;
+          if (result && result.success && Number(result.sentCount || 0) > 0) {
+            const modal = getTrainingImportElement('training-import-modal');
+            if (modal) modal.classList.add('hidden');
+            trainingImportState.courseTitle = '';
+            trainingImportState.previewHash = '';
+            trainingImportState.canSend = false;
+            clearTrainingImportPreview();
+            setTrainingImportActionState(false);
+            loadTrainingImportCourses();
+            if (typeof Swal !== 'undefined') Swal.fire('寄送完成', '時數匯入檔已成功寄送。', 'success');
+            return;
+          }
+          renderTrainingImportErrors([(result && result.message) || '未成功寄送任何時數匯入資料，請重新預覽後再試。']);
+          setTrainingImportActionState(false);
+        })
+        .withFailureHandler(function(error) {
+          trainingImportState.loading = false;
+          renderTrainingImportErrors([(error && error.message) || String(error || '寄送時發生錯誤。')]);
+          setTrainingImportActionState(false);
+        })
+        .executeTrainingImportEmail({
+          courseTitle: payload.courseTitle,
+          previewHash: payload.previewHash
+        });
+    }
+
+    // ==========================================
     // 報表匯出功能 (移植自 dashboard)
     // ==========================================
 
@@ -1278,6 +1597,7 @@
       initPage();
 
       document.getElementById('export-report-btn').addEventListener('click', exportTrainingReport);
+      document.getElementById('training-import-btn').addEventListener('click', openTrainingImportModal);
       document.getElementById('mention-template-type').addEventListener('change', updateTemplateFields);
       document.getElementById('mention-deadline-date').addEventListener('input', function(e) {
         updateDeadlineDatePreview(e.target.value);
