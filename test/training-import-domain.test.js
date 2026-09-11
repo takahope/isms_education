@@ -32,6 +32,34 @@ assert.strictEqual(
   '課程甲\nming@example.org'
 );
 
+const courseOptions = api.buildTrainingImportCourseOptions_([
+  trainingRows[0],
+  ['2026/09/02 08:00:00', '王小明', 'ming@example.org', '較舊課程', '80', '通過'],
+  ['2026/09/09 08:00:00', '王小明', 'ming@example.org', '最新課程', '80', '通過'],
+  ['2026/09/10 08:00:00', '李小華', 'hua@example.org', '最新課程', '90', '通過'],
+  ['2026/09/12 08:00:00', '李小華', 'hua@example.org', '只有測驗', '90', '通過']
+], [
+  progressRows[0],
+  ['ming@example.org', '較舊課程', 'video-1', '', '3600', '', '2026/09/03 08:00:00'],
+  ['ming@example.org', '最新課程', 'video-1', '', '3600', '', '2026/09/11 08:00:00'],
+  ['hua@example.org', '最新課程', 'video-1', '', '3600', '', '2026/09/08 08:00:00'],
+  ['other@example.org', '只有觀看', 'video-1', '', '3600', '', '2026/09/13 08:00:00']
+]);
+assert.deepStrictEqual(courseOptions, [
+  {
+    courseTitle: '最新課程',
+    latestActivityAt: '2026/09/11 08:00:00',
+    quizRecordCount: 2,
+    progressRecordCount: 2
+  },
+  {
+    courseTitle: '較舊課程',
+    latestActivityAt: '2026/09/03 08:00:00',
+    quizRecordCount: 1,
+    progressRecordCount: 1
+  }
+]);
+
 const personnelRows = [
   ['信箱', '姓名', '人員狀態', '', '', '', '', '工作地點'],
   ['ming@example.org', '王小明', '在勤', '', '', '', '', ''],
@@ -128,5 +156,63 @@ assert.strictEqual(dataset.htmlBody.includes('小明您好：'), true);
 assert.strictEqual(dataset.htmlBody.includes('小華 敬上'), true);
 assert.strictEqual(dataset.htmlBody.includes('自動發送'), false);
 assert.strictEqual(dataset.attachmentName, 'importtemplate_v20260911.xlsx');
+
+const qualificationPersonnelRows = [
+  personnelRows[0],
+  ['recipient@example.org', '李小華', '在勤', '', '', '', '', ''],
+  ['operator@example.org', '王小明', '在勤', '', '', '', '', ''],
+  ['score@example.org', '許小安', '在勤', '', '', '', '', ''],
+  ['timing@example.org', '陳小美', '在勤', '', '', '', '', ''],
+  ['cross-course@example.org', '林小文', '在勤', '', '', '', '', ''],
+  ['assignment-vendor@example.org', '周小芳', '在勤', '', '', '', '', '']
+];
+const qualificationDataset = api.buildTrainingImportDataset_({
+  courseTitle: '課程乙',
+  personnelRows: qualificationPersonnelRows,
+  trainingRows: [
+    trainingRows[0],
+    ['2026/09/04 08:00:00', '許小安', 'score@example.org', '課程乙', '70', '未通過'],
+    ['2026/09/10 08:00:00', '陳小美', 'timing@example.org', '課程乙', '90', '通過'],
+    ['2026/09/07 08:00:00', '陳小美', 'timing@example.org', '課程乙', '80', '通過'],
+    ['2026/09/04 08:00:00', '林小文', 'cross-course@example.org', '課程乙', '80', '通過'],
+    ['2026/09/04 08:00:00', '周小芳', 'assignment-vendor@example.org', '課程乙', '80', '通過']
+  ],
+  progressRows: [
+    progressRows[0],
+    ['score@example.org', '課程乙', 'video-1', '', '3600', '', '2026/09/03 08:00:00'],
+    ['timing@example.org', '課程乙', 'video-1', '', '3500', '', '2026/09/01 08:00:00'],
+    ['timing@example.org', '課程乙', 'video-1', '', '3600', '', '2026/09/12 08:00:00'],
+    ['timing@example.org', '課程乙', 'video-1', '', '3600', '', '2026/09/08 08:00:00'],
+    ['cross-course@example.org', '課程丙', 'video-1', '', '3600', '', '2026/09/05 08:00:00'],
+    ['assignment-vendor@example.org', '課程乙', 'video-1', '', '3600', '', '2026/09/05 08:00:00']
+  ],
+  logRows: [],
+  context: {
+    learners: [],
+    assignments: [{
+      email: 'assignment-vendor@example.org',
+      orgCode: 'GRP-CO-EX-01',
+      orgName: '收案委外駐站',
+      title: '工程師'
+    }],
+    orgNodes: [],
+    orgNodeMap: new Map()
+  },
+  recipientEmail: 'recipient@example.org',
+  viewerEmail: 'operator@example.org',
+  now: new Date('2026-09-11T08:00:00+08:00')
+});
+assert.deepStrictEqual(
+  qualificationDataset.pendingLearners.map((learner) => learner.email),
+  ['score@example.org', 'timing@example.org']
+);
+assert.strictEqual(
+  qualificationDataset.rows.find((row) => row[11] === 'score@example.org')[6],
+  '2026-09-04'
+);
+assert.strictEqual(
+  qualificationDataset.rows.find((row) => row[11] === 'timing@example.org')[6],
+  '2026-09-08'
+);
 
 console.log('Training import domain tests passed.');

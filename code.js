@@ -4764,8 +4764,7 @@ function buildTrainingImportDataset_(input) {
         quizPassed: false,
         quizPassedAtMs: 0,
         watchQualified: false,
-        watchQualifiedAtMs: 0,
-        maxWatchedSeconds: 0
+        watchQualifiedAtMs: 0
       });
     }
     return qualificationByEmail.get(email);
@@ -4792,12 +4791,9 @@ function buildTrainingImportDataset_(input) {
     const courseTitle = String(row && row[1] || '').trim();
     if (!email || courseTitle !== rawCourseTitle) return;
     const watchedSeconds = Number(row[4] || 0);
-    const record = ensureQualification(email);
-    if (Number.isFinite(watchedSeconds) && watchedSeconds > record.maxWatchedSeconds) {
-      record.maxWatchedSeconds = watchedSeconds;
-    }
     const watched = watchedSeconds >= MENTION_CONFIG.requiredWatchSeconds;
     if (!watched) return;
+    const record = ensureQualification(email);
     record.watchQualified = true;
     const qualifiedAtMs = parseDashboardTimestampMs_(row[6]);
     if (qualifiedAtMs > 0 && (!record.watchQualifiedAtMs || qualifiedAtMs < record.watchQualifiedAtMs)) {
