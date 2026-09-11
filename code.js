@@ -4694,6 +4694,10 @@ const TRAINING_IMPORT_LOG_HEADERS = [
   '最後更新時間', '錯誤訊息'
 ];
 
+const TRAINING_IMPORT_XLSX_MIME_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const TRAINING_IMPORT_ZIP_MIME_TYPE = 'application/zip';
+
 function extractTrainingImportGivenName_(fullName) {
   const compact = String(fullName || '').replace(/\s+/g, '');
   if (!/^[\u3400-\u9fff]{2,}$/.test(compact)) {
@@ -5561,6 +5565,20 @@ function validateTrainingImportTemplateParts_(parts) {
 }
 
 /**
+ * 以副本將 XLSX 暫時標記為 ZIP 後解包，避免改變後續寄送附件的 XLSX MIME。
+ *
+ * @param {Object} workbookBlob - XLSX 活頁簿 Blob
+ * @returns {Array<Object>} OOXML ZIP 內的檔案 Blob
+ */
+function unzipTrainingImportWorkbook_(workbookBlob) {
+  if (!workbookBlob || typeof workbookBlob.copyBlob !== 'function') {
+    throw new Error('教育訓練匯入活頁簿無法建立解壓用副本');
+  }
+  const zipBlob = workbookBlob.copyBlob().setContentType(TRAINING_IMPORT_ZIP_MIME_TYPE);
+  return Utilities.unzip(zipBlob);
+}
+
+/**
  * 以原始 ZIP parts 重組附件，使非資料工作表與 OOXML 關聯完整保留。
  *
  * @param {Object} templateBlob - 官方 XLSX 範本 Blob
@@ -5569,7 +5587,7 @@ function validateTrainingImportTemplateParts_(parts) {
  * @returns {Object} XLSX Blob
  */
 function buildTrainingImportWorkbookBlob_(templateBlob, rows, filename) {
-  const parts = Utilities.unzip(templateBlob);
+  const parts = unzipTrainingImportWorkbook_(templateBlob);
   const validated = validateTrainingImportTemplateParts_(parts);
   const updatedXml = populateTrainingImportSheetXml_(validated.sheetXml, rows);
   const updatedParts = parts.map((part) => part.getName() === 'xl/worksheets/sheet1.xml'
@@ -5577,7 +5595,7 @@ function buildTrainingImportWorkbookBlob_(templateBlob, rows, filename) {
     : part);
   return Utilities.zip(updatedParts, filename)
     .setName(filename)
-    .setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    .setContentType(TRAINING_IMPORT_XLSX_MIME_TYPE);
 }
 
 function normalizeTrainingImportExpectedCell_(value, columnIndex) {
@@ -5595,7 +5613,7 @@ function normalizeTrainingImportExpectedCell_(value, columnIndex) {
  */
 function verifyTrainingImportWorkbookBlob_(blob, expectedRows) {
   validateTrainingImportRows_(expectedRows);
-  const parts = Utilities.unzip(blob);
+  const parts = unzipTrainingImportWorkbook_(blob);
   const validated = validateTrainingImportTemplateParts_(parts);
   const partMap = getTrainingImportPartMap_(parts);
   const sharedStrings = parseTrainingImportSharedStrings_(
@@ -5871,8 +5889,7 @@ function assertTrainingImportAttachmentSize_(size, label) {
 function getTrainingImportTemplateBlob_(templateFileId) {
   const templateFile = DriveApp.getFileById(templateFileId);
   const mimeType = String(templateFile.getMimeType() || '').trim();
-  const xlsxMimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  if (mimeType !== xlsxMimeType) {
+  if (mimeType !== TRAINING_IMPORT_XLSX_MIME_TYPE) {
     throw new Error('教育訓練匯入範本必須為 XLSX 檔案');
   }
   if (typeof templateFile.getSize === 'function') {
@@ -5880,7 +5897,7 @@ function getTrainingImportTemplateBlob_(templateFileId) {
   }
   const templateBlob = templateFile.getBlob();
   assertTrainingImportAttachmentSize_(getTrainingImportBlobSize_(templateBlob), '教育訓練匯入來源範本');
-  validateTrainingImportTemplateParts_(Utilities.unzip(templateBlob));
+  validateTrainingImportTemplateParts_(unzipTrainingImportWorkbook_(templateBlob));
   return templateBlob;
 }
 

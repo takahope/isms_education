@@ -64,6 +64,10 @@ class MockBlob {
     return { length: this.byteLength };
   }
 
+  copyBlob() {
+    return new MockBlob(this.data, this.contentType, this.name, this.parts, this.byteLength);
+  }
+
   setName(name) {
     this.name = name;
     return this;
@@ -305,6 +309,7 @@ const Utilities = {
     ].join('-');
   },
   unzip(blob) {
+    assert.strictEqual(blob.getContentType(), 'application/zip');
     const parts = blob.parts || [];
     return sandbox.invalidTemplate
       ? parts.filter((part) => part.getName() !== 'xl/workbook.xml')

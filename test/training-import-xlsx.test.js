@@ -27,6 +27,10 @@ class MockBlob {
     return String(this.data || '');
   }
 
+  copyBlob() {
+    return new MockBlob(this.data, this.contentType, this.name, this.parts);
+  }
+
   setName(name) {
     this.name = name;
     return this;
@@ -53,6 +57,11 @@ const templateBlob = new MockBlob('', 'application/vnd.openxmlformats-officedocu
 
 const Utilities = {
   unzip(blob) {
+    assert.strictEqual(
+      blob.getContentType(),
+      'application/zip',
+      'Utilities.unzip 的輸入 Blob 必須暫時標記為 application/zip'
+    );
     return blob.parts;
   },
   newBlob(data, contentType, name) {
@@ -172,6 +181,11 @@ assert.throws(() => api.validateTrainingImportTemplateParts_(wrongHeaders), /A1:
 
 const filename = 'importtemplate_v20260911.xlsx';
 const workbookBlob = api.buildTrainingImportWorkbookBlob_(templateBlob, rows, filename);
+assert.strictEqual(
+  templateBlob.getContentType(),
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '解壓驗證不得改變原始 XLSX Blob 的 MIME 類型'
+);
 assert.strictEqual(workbookBlob.getName(), filename);
 assert.strictEqual(workbookBlob.getContentType(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 assert.deepStrictEqual(workbookBlob.parts.map((part) => part.getName()), partNames);

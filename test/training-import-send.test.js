@@ -65,6 +65,10 @@ class MockBlob {
     return { length: this.byteLength };
   }
 
+  copyBlob() {
+    return new MockBlob(this.data, this.contentType, this.name, this.parts, this.byteLength);
+  }
+
   setName(name) {
     this.name = name;
     return this;
@@ -388,6 +392,7 @@ const Utilities = {
     return 'batch-' + sandbox.uuidCounter;
   },
   unzip(blob) {
+    assert.strictEqual(blob.getContentType(), 'application/zip');
     return blob.parts || [];
   },
   newBlob(data, contentType, name) {
@@ -476,7 +481,9 @@ function getMasterLogRows() {
 }
 
 function readAttachmentRows(attachment) {
-  const partMap = new Map(Utilities.unzip(attachment).map((part) => [part.getName(), part]));
+  const partMap = new Map(Utilities.unzip(
+    attachment.copyBlob().setContentType('application/zip')
+  ).map((part) => [part.getName(), part]));
   const sheetXml = partMap.get('xl/worksheets/sheet1.xml').getDataAsString();
   const sharedStrings = api.parseTrainingImportSharedStrings_(
     partMap.get('xl/sharedStrings.xml').getDataAsString()
