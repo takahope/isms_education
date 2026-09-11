@@ -2533,6 +2533,13 @@ function buildNotificationLoginReminderHtml_() {
   ].join('');
 }
 
+function buildNotificationShadowLoginReminderHtml_() {
+  return [
+    '<p>※ 專屬免登入提醒：<br>',
+    '此專屬連結已內嵌安全認證憑證，點擊進入後系統將<strong>自動認列您的公務身分</strong>，無需切換或登入 Google 組織帳號，學習與測驗紀錄將自動為您保存與同步。</p>'
+  ].join('');
+}
+
 function buildNotificationAutoReplyFooterHtml_() {
   return [
     '<p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">',
@@ -3186,6 +3193,14 @@ function injectCapabilityUrlIntoHtmlBody_(htmlBody, capUrl, noticeBanner) {
       body += '<p style="margin-top: 16px;"><a href="' + capUrl + '" style="display: inline-block; padding: 10px 18px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: bold;">專屬免登入前往上課</a></p>';
     }
   }
+
+  // 置換登入提醒為影子專屬免登入提醒
+  const shadowReminder = buildNotificationShadowLoginReminderHtml_();
+  const loginReminderRegex = /<(p|div)[^>]*>\s*※\s*登入提醒[\s\S]*?<\/\1>/gi;
+  if (loginReminderRegex.test(body)) {
+    body = body.replace(loginReminderRegex, shadowReminder);
+  }
+
   return (noticeBanner || '') + body;
 }
 
