@@ -4634,3 +4634,332 @@ function getTrainingReportExportData(payload) {
   }
 }
 
+const TRAINING_IMPORT_HEADERS = [
+  'course_title', 'category_id', 'category_title', 'name', 'instName',
+  'certified_hour', 'certified_date', 'year', 'sso', 'tel', 'title',
+  'mail', 'typez', 'certNo'
+];
+
+const TRAINING_IMPORT_LOG_HEADERS = [
+  '批次ID', '唯一鍵', '課程名稱', '姓名', '使用者信箱', '完成日期',
+  '收件人信箱', '附件檔名', '狀態', '操作者', '建立時間', '寄送時間',
+  '最後更新時間', '錯誤訊息'
+];
+
+function extractTrainingImportGivenName_(fullName) {
+  const compact = String(fullName || '').replace(/\s+/g, '');
+  if (!/^[\u3400-\u9fff]{2,}$/.test(compact)) {
+    throw new Error('無法解析中文姓名：姓名至少需要兩個中文字');
+  }
+  return compact.slice(1);
+}
+
+function buildTrainingImportUniqueKey_(courseTitle, email) {
+  return String(courseTitle || '').trim() + '\n' + normalizeEmail_(email);
+}
+
+function buildTrainingImportCourseOptions_(trainingRows, progressRows) {
+  const quizCourses = new Map();
+  const progressCourses = new Map();
+
+  const addCourseRecord = (map, courseTitle, timestamp) => {
+    const title = String(courseTitle || '').trim();
+    if (!title) return;
+    const activityAtMs = parseDashboardTimestampMs_(timestamp);
+    if (!map.has(title)) {
+      map.set(title, { count: 0, latestActivityAtMs: 0, latestActivityAt: '' });
+    }
+    const item = map.get(title);
+    item.count += 1;
+    if (activityAtMs > item.latestActivityAtMs) {
+      item.latestActivityAtMs = activityAtMs;
+      item.latestActivityAt = String(timestamp || '').trim();
+    }
+  };
+
+  (Array.isArray(trainingRows) ? trainingRows.slice(1) : []).forEach((row) => {
+    addCourseRecord(quizCourses, row && row[3], row && row[0]);
+  });
+  (Array.isArray(progressRows) ? progressRows.slice(1) : []).forEach((row) => {
+    addCourseRecord(progressCourses, row && row[1], row && row[6]);
+  });
+
+  return Array.from(quizCourses.keys())
+    .filter((courseTitle) => progressCourses.has(courseTitle))
+    .map((courseTitle) => {
+      const quiz = quizCourses.get(courseTitle);
+      const progress = progressCourses.get(courseTitle);
+      const latestActivityAtMs = Math.max(quiz.latestActivityAtMs, progress.latestActivityAtMs);
+      return {
+        courseTitle,
+        latestActivityAt: quiz.latestActivityAtMs >= progress.latestActivityAtMs
+          ? quiz.latestActivityAt
+          : progress.latestActivityAt,
+        quizRecordCount: quiz.count,
+        progressRecordCount: progress.count,
+        latestActivityAtMs
+      };
+    })
+    .sort((left, right) => right.latestActivityAtMs - left.latestActivityAtMs || left.courseTitle.localeCompare(right.courseTitle, 'zh-Hant'))
+    .map((item) => ({
+      courseTitle: item.courseTitle,
+      latestActivityAt: item.latestActivityAt,
+      quizRecordCount: item.quizRecordCount,
+      progressRecordCount: item.progressRecordCount
+    }));
+}
+
+function formatTrainingImportTaipeiDate_(value) {
+  const date = value instanceof Date ? value : new Date(Number(value));
+  if (Number.isNaN(date.getTime())) return '';
+  if (typeof Utilities !== 'undefined' && Utilities && typeof Utilities.formatDate === 'function') {
+    return Utilities.formatDate(date, 'Asia/Taipei', 'yyyy-MM-dd');
+  }
+  const taipei = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  const year = taipei.getUTCFullYear();
+  const month = String(taipei.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(taipei.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatTrainingImportTaipeiChineseDate_(value) {
+  const dateStr = formatTrainingImportTaipeiDate_(value);
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  return `${parts[0]}年${Number(parts[1])}月${Number(parts[2])}日`;
+}
+
+function getTrainingImportPersonnelByEmail_(personnelRows) {
+  const personnelByEmail = new Map();
+  (Array.isArray(personnelRows) ? personnelRows.slice(1) : []).forEach((row) => {
+    const email = normalizeEmail_(row && row[0]);
+    if (!email || personnelByEmail.has(email)) return;
+    personnelByEmail.set(email, {
+      email,
+      name: String(row[1] || '').trim(),
+      personnelStatus: String(row[2] || '').trim(),
+      location: String(row[7] || '').trim()
+    });
+  });
+  return personnelByEmail;
+}
+
+function buildTrainingImportDataset_(input) {
+  const source = input || {};
+  const rawCourseTitle = String(source.courseTitle || '').trim();
+  const context = source.context || {};
+  const errors = [];
+  const personnelByEmail = getTrainingImportPersonnelByEmail_(source.personnelRows);
+  const learnersByEmail = new Map();
+  (Array.isArray(context.learners) ? context.learners : []).forEach((learner) => {
+    const email = normalizeEmail_(learner && learner.email);
+    if (email && !learnersByEmail.has(email)) learnersByEmail.set(email, learner);
+  });
+
+  const qualificationByEmail = new Map();
+  const ensureQualification = (email) => {
+    if (!qualificationByEmail.has(email)) {
+      qualificationByEmail.set(email, {
+        email,
+        quizPassed: false,
+        quizPassedAtMs: 0,
+        watchQualified: false,
+        watchQualifiedAtMs: 0,
+        maxWatchedSeconds: 0
+      });
+    }
+    return qualificationByEmail.get(email);
+  };
+
+  (Array.isArray(source.trainingRows) ? source.trainingRows.slice(1) : []).forEach((row) => {
+    const email = normalizeEmail_(row && row[2]);
+    const courseTitle = String(row && row[3] || '').trim();
+    if (!email || courseTitle !== rawCourseTitle) return;
+    const score = Number(row[4] || 0);
+    const result = String(row[5] || '').trim();
+    const passed = result === '通過' || score >= MENTION_CONFIG.passingScore;
+    if (!passed) return;
+    const record = ensureQualification(email);
+    record.quizPassed = true;
+    const passedAtMs = parseDashboardTimestampMs_(row[0]);
+    if (passedAtMs > 0 && (!record.quizPassedAtMs || passedAtMs < record.quizPassedAtMs)) {
+      record.quizPassedAtMs = passedAtMs;
+    }
+  });
+
+  (Array.isArray(source.progressRows) ? source.progressRows.slice(1) : []).forEach((row) => {
+    const email = normalizeEmail_(row && row[0]);
+    const courseTitle = String(row && row[1] || '').trim();
+    if (!email || courseTitle !== rawCourseTitle) return;
+    const watchedSeconds = Number(row[4] || 0);
+    const record = ensureQualification(email);
+    if (Number.isFinite(watchedSeconds) && watchedSeconds > record.maxWatchedSeconds) {
+      record.maxWatchedSeconds = watchedSeconds;
+    }
+    const watched = watchedSeconds >= MENTION_CONFIG.requiredWatchSeconds;
+    if (!watched) return;
+    record.watchQualified = true;
+    const qualifiedAtMs = parseDashboardTimestampMs_(row[6]);
+    if (qualifiedAtMs > 0 && (!record.watchQualifiedAtMs || qualifiedAtMs < record.watchQualifiedAtMs)) {
+      record.watchQualifiedAtMs = qualifiedAtMs;
+    }
+  });
+
+  const logStatusesByKey = new Map();
+  (Array.isArray(source.logRows) ? source.logRows.slice(1) : []).forEach((row) => {
+    const key = String(row && row[1] || '').trim();
+    const status = String(row && row[8] || '').trim();
+    if (!key || !status) return;
+    if (!logStatusesByKey.has(key)) logStatusesByKey.set(key, new Set());
+    logStatusesByKey.get(key).add(status);
+  });
+
+  const importCourseTitle = rawCourseTitle.startsWith('【資安通識】')
+    ? rawCourseTitle
+    : '【資安通識】' + rawCourseTitle;
+  const pendingLearners = [];
+  const alreadySent = [];
+  const preparing = [];
+  const retryableFailures = [];
+  const now = source.now instanceof Date ? source.now : new Date();
+  const attachmentDate = formatTrainingImportTaipeiDate_(now);
+  const attachmentName = 'importtemplate_v' + attachmentDate.replace(/-/g, '') + '.xlsx';
+
+  qualificationByEmail.forEach((qualification, email) => {
+    if (!qualification.quizPassed || !qualification.watchQualified) return;
+    const personnel = personnelByEmail.get(email);
+    if (!personnel) {
+      errors.push({ email, message: '人員主檔查無此信箱' });
+      return;
+    }
+
+    const contextLearner = learnersByEmail.get(email) || {};
+    const learner = Object.assign({}, contextLearner, {
+      email,
+      name: personnel.name,
+      personnelStatus: String(contextLearner.personnelStatus || personnel.personnelStatus || '').trim(),
+      location: String(contextLearner.location || personnel.location || '').trim(),
+      assignments: contextLearner.assignments || []
+    });
+    if (personnel.personnelStatus === '離職' || learner.personnelStatus === '離職') return;
+    const personnelStatusLearner = Object.assign({}, learner, {
+      personnelStatus: personnel.personnelStatus,
+      location: personnel.location
+    });
+    if (isVendorPersonnel_(learner, context) || isVendorPersonnel_(personnelStatusLearner, context)) return;
+
+    if (!qualification.quizPassedAtMs || !qualification.watchQualifiedAtMs) {
+      errors.push({ email, name: personnel.name, message: '完訓時間格式錯誤' });
+      return;
+    }
+    const completedAtMs = Math.max(qualification.quizPassedAtMs, qualification.watchQualifiedAtMs);
+    const completionDate = formatTrainingImportTaipeiDate_(completedAtMs);
+    const sso = email.split('@')[0];
+    const validationErrors = [];
+    if (!personnel.name) validationErrors.push('缺少中文姓名');
+    if (!isValidEmail_(email)) validationErrors.push('信箱格式錯誤');
+    if (!sso) validationErrors.push('缺少 SSO');
+    if (!completionDate) validationErrors.push('完成日期格式錯誤');
+    if (validationErrors.length > 0) {
+      errors.push({ email, name: personnel.name, message: validationErrors.join('、') });
+      return;
+    }
+
+    const learnerRecord = {
+      email,
+      name: personnel.name,
+      completedAtMs,
+      completionDate,
+      uniqueKey: buildTrainingImportUniqueKey_(rawCourseTitle, email),
+      row: [
+        importCourseTitle,
+        522,
+        '資通安全(通識)',
+        personnel.name,
+        '生醫轉譯研究中心',
+        3,
+        completionDate,
+        Number(completionDate.slice(0, 4)),
+        sso,
+        '',
+        '臺灣人體生物資料庫研究人員',
+        email,
+        '本院自辦課程',
+        ''
+      ]
+    };
+    const statuses = logStatusesByKey.get(learnerRecord.uniqueKey) || new Set();
+    if (statuses.has('已寄出')) {
+      alreadySent.push(learnerRecord);
+      return;
+    }
+    if (statuses.has('準備寄送')) {
+      preparing.push(learnerRecord);
+      return;
+    }
+    pendingLearners.push(learnerRecord);
+    if (statuses.has('寄送失敗')) retryableFailures.push(learnerRecord);
+  });
+
+  pendingLearners.sort((left, right) => left.email.localeCompare(right.email));
+  alreadySent.sort((left, right) => left.email.localeCompare(right.email));
+  preparing.sort((left, right) => left.email.localeCompare(right.email));
+  retryableFailures.sort((left, right) => left.email.localeCompare(right.email));
+
+  const resolveGivenName = (email, label) => {
+    const normalizedEmail = normalizeEmail_(email);
+    const personnel = personnelByEmail.get(normalizedEmail);
+    if (!isValidEmail_(normalizedEmail)) {
+      errors.push({ email: normalizedEmail, message: label + '信箱格式錯誤' });
+      return '';
+    }
+    if (!personnel) {
+      errors.push({ email: normalizedEmail, message: label + '不在員工主檔中' });
+      return '';
+    }
+    try {
+      return extractTrainingImportGivenName_(personnel.name);
+    } catch (error) {
+      errors.push({ email: normalizedEmail, message: label + (error && error.message ? error.message : String(error)) });
+      return '';
+    }
+  };
+
+  const recipientGivenName = resolveGivenName(source.recipientEmail, '收件人');
+  const senderGivenName = resolveGivenName(source.viewerEmail, '寄件人');
+  const dateText = formatTrainingImportTaipeiChineseDate_(now);
+  const subject = `【教育訓練資料匯入】${rawCourseTitle}完訓名單（${dateText}）`;
+  const textBody = [
+    `${recipientGivenName}您好：`,
+    '',
+    `附件為截至 ${dateText} 新增完成「${rawCourseTitle}」之教育訓練資料，共 ${pendingLearners.length} 筆。名單均已符合影片觀看達標及測驗通過條件，並依全院時數管理系統匯入範本產製，請協助匯入相關系統。`,
+    '',
+    `附件：${attachmentName}`,
+    '本批資料已排除先前成功寄送之紀錄。',
+    '',
+    `${senderGivenName} 敬上`
+  ].join('\n');
+  const htmlBody = [
+    `<p>${escapeHtml_(recipientGivenName)}您好：</p>`,
+    `<p>附件為截至 ${escapeHtml_(dateText)} 新增完成「${escapeHtml_(rawCourseTitle)}」之教育訓練資料，共 ${pendingLearners.length} 筆。名單均已符合影片觀看達標及測驗通過條件，並依全院時數管理系統匯入範本產製，請協助匯入相關系統。</p>`,
+    `<p>附件：${escapeHtml_(attachmentName)}<br>本批資料已排除先前成功寄送之紀錄。</p>`,
+    `<p>${escapeHtml_(senderGivenName)} 敬上</p>`
+  ].join('');
+
+  return {
+    courseTitle: rawCourseTitle,
+    importCourseTitle,
+    rows: pendingLearners.map((learner) => learner.row),
+    pendingLearners,
+    alreadySent,
+    preparing,
+    retryableFailures,
+    errors,
+    recipientGivenName,
+    senderGivenName,
+    attachmentName,
+    subject,
+    htmlBody,
+    textBody
+  };
+}
