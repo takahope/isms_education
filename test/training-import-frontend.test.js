@@ -221,7 +221,8 @@ assert.strictEqual(elements['training-import-table-body'].children[0].children.l
 assert.strictEqual(elements['training-import-table-body'].children[0].children[0].textContent, '<script>bad()</script>');
 assert.strictEqual(elements['training-import-errors'].textContent, '<img src=x onerror=bad()>');
 assert.strictEqual(elements['training-import-body'].innerHTML, '<p>內容</p>');
-assert.strictEqual(confirmButton.disabled, false);
+assert.strictEqual(elements['training-import-summary'].textContent, '待寄送 0 筆；已寄出 0 筆；準備中 0 筆；可重試失敗 0 筆；異常 0 筆。');
+assert.strictEqual(confirmButton.disabled, true);
 
 courseSelect.value = '課程乙';
 courseSelect.dispatchEvent({ type: 'change', target: courseSelect });
@@ -237,20 +238,39 @@ assert.strictEqual(rpcCalls.filter((call) => call.method === 'executeTrainingImp
 
 latestHandler('previewTrainingImportEmail').success(previewResult({
   courseTitle: '課程乙',
-  previewHash: 'b'.repeat(64)
+  previewHash: 'b'.repeat(64),
+  pendingCount: 1,
+  alreadySentCount: 2,
+  preparingCount: 3,
+  retryableFailureCount: 4,
+  errorCount: 5
 }));
-sandbox.confirmTrainingImportSend();
+assert.strictEqual(elements['training-import-summary'].textContent, '待寄送 1 筆；已寄出 2 筆；準備中 3 筆；可重試失敗 4 筆；異常 5 筆。');
+confirmButton.dispatchEvent({ type: 'click', target: confirmButton });
 assert.deepStrictEqual(plain(rpcCalls[3]), {
   method: 'executeTrainingImportEmail',
   payload: { courseTitle: '課程乙', previewHash: 'b'.repeat(64) }
 });
 assert.strictEqual(confirmButton.disabled, true);
 assert.strictEqual(elements['training-import-cancel'].disabled, true);
+assert.strictEqual(courseSelect.disabled, true);
+courseSelect.value = '課程甲';
+courseSelect.dispatchEvent({ type: 'change', target: courseSelect });
+assert.strictEqual(courseSelect.value, '課程乙');
+assert.strictEqual(rpcCalls.filter((call) => call.method === 'previewTrainingImportEmail').length, 2);
+latestHandler('previewTrainingImportEmail').success(previewResult({
+  courseTitle: '課程乙',
+  previewHash: 'c'.repeat(64)
+}));
+assert.strictEqual(confirmButton.disabled, true);
+assert.strictEqual(elements['training-import-cancel'].disabled, true);
+assert.strictEqual(courseSelect.disabled, true);
 latestHandler('executeTrainingImportEmail').failure(new Error('寄送失敗'));
 assert.strictEqual(confirmButton.disabled, false);
 assert.strictEqual(elements['training-import-cancel'].disabled, false);
+assert.strictEqual(courseSelect.disabled, false);
 
-sandbox.confirmTrainingImportSend();
+confirmButton.dispatchEvent({ type: 'click', target: confirmButton });
 latestHandler('executeTrainingImportEmail').success({ success: true, sentCount: 1 });
 assert.strictEqual(modal.classList.contains('hidden'), true);
 assert.strictEqual(confirmButton.disabled, true);

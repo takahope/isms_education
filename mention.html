@@ -866,6 +866,7 @@
       loading: false
     };
     let trainingImportEventsBound = false;
+    let trainingImportSending = false;
 
     function getTrainingImportElement(id) {
       return document.getElementById(id);
@@ -874,10 +875,13 @@
     function setTrainingImportActionState(isSending) {
       const confirmButton = getTrainingImportElement('training-import-confirm');
       const cancelButton = getTrainingImportElement('training-import-cancel');
+      const courseSelect = getTrainingImportElement('training-import-course-select');
+      const isLocked = trainingImportSending || Boolean(isSending);
       if (confirmButton) {
-        confirmButton.disabled = Boolean(isSending) || trainingImportState.loading || !trainingImportState.canSend;
+        confirmButton.disabled = isLocked || trainingImportState.loading || !trainingImportState.canSend;
       }
-      if (cancelButton) cancelButton.disabled = Boolean(isSending);
+      if (cancelButton) cancelButton.disabled = isLocked;
+      if (courseSelect) courseSelect.disabled = isLocked;
     }
 
     function renderTrainingImportErrors(errors) {
@@ -939,6 +943,7 @@
     }
 
     function renderTrainingImportPreview(result) {
+      if (trainingImportSending) return;
       trainingImportState.loading = false;
       const preview = result || {};
       if (!preview.success) {
@@ -950,7 +955,9 @@
       }
 
       trainingImportState.previewHash = String(preview.previewHash || '');
-      trainingImportState.canSend = Boolean(preview.canSend && trainingImportState.previewHash);
+      const previewErrors = (Array.isArray(preview.errors) ? preview.errors : [])
+        .filter(function(message) { return String(message || '').trim(); });
+      trainingImportState.canSend = Boolean(preview.canSend && trainingImportState.previewHash && previewErrors.length === 0);
       const recipient = getTrainingImportElement('training-import-recipient');
       const subject = getTrainingImportElement('training-import-subject');
       const filename = getTrainingImportElement('training-import-filename');
@@ -961,11 +968,10 @@
       if (filename) filename.textContent = String(preview.attachmentName || '');
       if (body) body.innerHTML = preview.htmlBody || '';
       if (summary) {
-        const counts = preview.counts || {};
-        summary.textContent = '待寄送 ' + Number(counts.pending || 0) + ' 筆；已寄出 ' + Number(counts.sent || 0) + ' 筆；準備中 ' + Number(counts.preparing || 0) + ' 筆；異常 ' + Number(counts.errors || 0) + ' 筆。';
+        summary.textContent = '待寄送 ' + Number(preview.pendingCount || 0) + ' 筆；已寄出 ' + Number(preview.alreadySentCount || 0) + ' 筆；準備中 ' + Number(preview.preparingCount || 0) + ' 筆；可重試失敗 ' + Number(preview.retryableFailureCount || 0) + ' 筆；異常 ' + Number(preview.errorCount || 0) + ' 筆。';
       }
       renderTrainingImportTable(preview.headers, preview.rows);
-      renderTrainingImportErrors(preview.errors || []);
+      renderTrainingImportErrors(previewErrors);
       setTrainingImportActionState(false);
     }
 
@@ -1005,6 +1011,11 @@
     }
 
     function loadTrainingImportPreview(courseTitle) {
+      if (trainingImportSending) {
+        const courseSelect = getTrainingImportElement('training-import-course-select');
+        if (courseSelect) courseSelect.value = trainingImportState.courseTitle;
+        return;
+      }
       const normalizedTitle = String(courseTitle || '').trim();
       trainingImportState.courseTitle = normalizedTitle;
       trainingImportState.previewHash = '';
@@ -1024,11 +1035,11 @@
       }
       google.script.run
         .withSuccessHandler(function(result) {
-          if (trainingImportState.courseTitle !== normalizedTitle) return;
+          if (trainingImportSending || trainingImportState.courseTitle !== normalizedTitle) return;
           renderTrainingImportPreview(result);
         })
         .withFailureHandler(function(error) {
-          if (trainingImportState.courseTitle !== normalizedTitle) return;
+          if (trainingImportSending || trainingImportState.courseTitle !== normalizedTitle) return;
           renderTrainingImportPreview({
             success: false,
             message: (error && error.message) || String(error || '產生預覽失敗。')
@@ -1049,15 +1060,18 @@
       trainingImportEventsBound = true;
       const courseSelect = getTrainingImportElement('training-import-course-select');
       const cancelButton = getTrainingImportElement('training-import-cancel');
+      const confirmButton = getTrainingImportElement('training-import-confirm');
       if (courseSelect) {
         courseSelect.addEventListener('change', function(event) {
           loadTrainingImportPreview(event.target.value);
         });
       }
       if (cancelButton) cancelButton.addEventListener('click', closeTrainingImportModal);
+      if (confirmButton) confirmButton.addEventListener('click', confirmTrainingImportSend);
     }
 
     function openTrainingImportModal() {
+      if (trainingImportSending) return;
       ensureTrainingImportEventHandlers();
       trainingImportState.courseTitle = '';
       trainingImportState.previewHash = '';
@@ -1078,9 +1092,11 @@
         courseTitle: trainingImportState.courseTitle,
         previewHash: trainingImportState.previewHash
       };
+      trainingImportSending = true;
       trainingImportState.loading = true;
       setTrainingImportActionState(true);
       if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        trainingImportSending = false;
         trainingImportState.loading = false;
         renderTrainingImportErrors(['目前無法連線至伺服器執行寄送。']);
         setTrainingImportActionState(false);
@@ -1088,6 +1104,7 @@
       }
       google.script.run
         .withSuccessHandler(function(result) {
+          trainingImportSending = false;
           trainingImportState.loading = false;
           if (result && result.success && Number(result.sentCount || 0) > 0) {
             const modal = getTrainingImportElement('training-import-modal');
@@ -1105,6 +1122,7 @@
           setTrainingImportActionState(false);
         })
         .withFailureHandler(function(error) {
+          trainingImportSending = false;
           trainingImportState.loading = false;
           renderTrainingImportErrors([(error && error.message) || String(error || '寄送時發生錯誤。')]);
           setTrainingImportActionState(false);
