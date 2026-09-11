@@ -119,6 +119,19 @@ assert.throws(() => api.validateTrainingImportTemplateParts_(withoutPart('xl/wor
 assert.throws(() => api.validateTrainingImportTemplateParts_(withoutPart('xl/worksheets/sheet2.xml')), /xl\/worksheets\/sheet2\.xml/);
 assert.throws(() => api.validateTrainingImportTemplateParts_(withoutPart('xl/worksheets/sheet3.xml')), /xl\/worksheets\/sheet3\.xml/);
 assert.throws(() => api.validateTrainingImportTemplateParts_(withoutPart('xl/sharedStrings.xml')), /xl\/sharedStrings\.xml/);
+[
+  'xl/_rels/workbook.xml.rels',
+  'xl/styles.xml',
+  'xl/drawings/drawing1.xml',
+  'xl/comments1.xml',
+  'xl/metadata',
+  '[Content_Types].xml'
+].forEach((requiredPartName) => {
+  assert.throws(
+    () => api.validateTrainingImportTemplateParts_(withoutPart(requiredPartName)),
+    new RegExp(requiredPartName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  );
+});
 
 function replacePart(parts, name, transform) {
   return parts.map((part) => part.getName() === name
@@ -131,6 +144,25 @@ const wrongSheetNames = replacePart(templateParts, 'xl/workbook.xml', (xml) => x
   'name="錯誤工作表"'
 ));
 assert.throws(() => api.validateTrainingImportTemplateParts_(wrongSheetNames), /工作表/);
+
+const wrongWorkbookRelationship = replacePart(
+  templateParts,
+  'xl/_rels/workbook.xml.rels',
+  (xml) => xml.replace('Target="worksheets/sheet1.xml"', 'Target="worksheets/sheet3.xml"')
+);
+assert.throws(
+  () => api.validateTrainingImportTemplateParts_(wrongWorkbookRelationship),
+  /關聯|sheet1/
+);
+
+const missingWorkbookRelationship = replacePart(templateParts, 'xl/workbook.xml', (xml) => xml.replace(
+  'r:id="rId4"',
+  'r:id="rId99"'
+));
+assert.throws(
+  () => api.validateTrainingImportTemplateParts_(missingWorkbookRelationship),
+  /關聯|rId99/
+);
 
 const wrongHeaders = replacePart(templateParts, 'xl/sharedStrings.xml', (xml) => xml.replace(
   '<si><t>course_title</t></si>',
@@ -163,6 +195,51 @@ assert.throws(
   /L2|資料/
 );
 
+const numericAsTextParts = replacePart(workbookBlob.parts, 'xl/worksheets/sheet1.xml', (xml) => xml.replace(
+  '<c r="B2" s="1"><v>522</v></c>',
+  '<c r="B2" s="1" t="inlineStr"><is><t>522</t></is></c>'
+));
+assert.throws(
+  () => api.verifyTrainingImportWorkbookBlob_(new MockBlob('', '', 'numeric-as-text.xlsx', numericAsTextParts), rows),
+  /B2|數值/
+);
+
+const textAsNumberParts = replacePart(workbookBlob.parts, 'xl/worksheets/sheet1.xml', (xml) => xml.replace(
+  '<c r="A2" s="1" t="inlineStr"><is><t xml:space="preserve">【資安通識】課程甲 &amp; &lt;測試&gt;</t></is></c>',
+  '<c r="A2" s="1"><v>【資安通識】課程甲 &amp; &lt;測試&gt;</v></c>'
+));
+assert.throws(
+  () => api.verifyTrainingImportWorkbookBlob_(new MockBlob('', '', 'text-as-number.xlsx', textAsNumberParts), rows),
+  /A2|inlineStr|文字/
+);
+
+const usedFormulaParts = replacePart(workbookBlob.parts, 'xl/worksheets/sheet1.xml', (xml) => xml.replace(
+  '<c r="B2" s="1"><v>522</v></c>',
+  '<c r="B2" s="1"><f>SUM(500,22)</f><v>522</v></c>'
+));
+assert.throws(
+  () => api.verifyTrainingImportWorkbookBlob_(new MockBlob('', '', 'used-formula.xlsx', usedFormulaParts), rows),
+  /B2|公式/
+);
+
+const unusedFormulaParts = replacePart(workbookBlob.parts, 'xl/worksheets/sheet1.xml', (xml) => xml.replace(
+  '<c r="A3" s="1" t="inlineStr"/>',
+  '<c r="A3" s="1" t="inlineStr"><f>""</f><v></v></c>'
+));
+assert.throws(
+  () => api.verifyTrainingImportWorkbookBlob_(new MockBlob('', '', 'unused-formula.xlsx', unusedFormulaParts), rows),
+  /A3|公式/
+);
+
+const unclearedUnusedParts = replacePart(workbookBlob.parts, 'xl/worksheets/sheet1.xml', (xml) => xml.replace(
+  '<c r="A3" s="1" t="inlineStr"/>',
+  '<c r="A3" s="1" t="inlineStr"><is><t></t></is></c>'
+));
+assert.throws(
+  () => api.verifyTrainingImportWorkbookBlob_(new MockBlob('', '', 'uncleared-unused.xlsx', unclearedUnusedParts), rows),
+  /A3|清空/
+);
+
 const extraRowXml = api.populateTrainingImportSheetXml_(originalXml, rows.concat([rows[0]]));
 const extraRowParts = replacePart(templateParts, 'xl/worksheets/sheet1.xml', () => extraRowXml);
 assert.throws(
@@ -173,6 +250,25 @@ assert.throws(
 assert.throws(
   () => api.verifyTrainingImportWorkbookBlob_(new MockBlob('', '', 'missing-sheet.xlsx', withoutPart('xl/worksheets/sheet1.xml')), rows),
   /xl\/worksheets\/sheet1\.xml/
+);
+
+const originalRow2 = originalXml.match(/<row\b[^>]*\br="2"[^>]*>[\s\S]*?<\/row>/)[0];
+const row2WithAuxiliaryCell = originalRow2.replace(
+  '</row>',
+  '<c r="AA2" s="42" t="inlineStr"><is><t>auxiliary</t></is></c></row>'
+);
+const xmlWithAuxiliaryCell = originalXml.replace(originalRow2, row2WithAuxiliaryCell);
+const populatedWithAuxiliaryCell = api.populateTrainingImportSheetXml_(xmlWithAuxiliaryCell, rows);
+assert(populatedWithAuxiliaryCell.includes(
+  '<c r="AA2" s="42" t="inlineStr"><is><t>auxiliary</t></is></c>'
+));
+
+const row2MissingAWithAA = originalRow2
+  .replace('<c r="A2" s="1" t="s"><v>14</v></c>', '')
+  .replace('</row>', '<c r="AA2" s="42" t="s"><v>14</v></c></row>');
+assert.throws(
+  () => api.populateTrainingImportSheetXml_(originalXml.replace(originalRow2, row2MissingAWithAA), rows),
+  /A:N/
 );
 
 console.log('Training import XLSX tests passed.');

@@ -4966,6 +4966,34 @@ const TRAINING_IMPORT_TEMPLATE_SHEET_NAMES = [
   '表3-對應清單(參考用)'
 ];
 
+const TRAINING_IMPORT_TEMPLATE_REQUIRED_PART_NAMES = [
+  'xl/comments1.xml',
+  'xl/_rels/comments1.xml.rels',
+  'xl/drawings/vmlDrawing1.vml',
+  'xl/drawings/drawing1.xml',
+  'xl/drawings/drawing2.xml',
+  'xl/drawings/drawing3.xml',
+  'xl/worksheets/sheet1.xml',
+  'xl/worksheets/_rels/sheet1.xml.rels',
+  'xl/worksheets/sheet2.xml',
+  'xl/worksheets/_rels/sheet2.xml.rels',
+  'xl/worksheets/sheet3.xml',
+  'xl/worksheets/_rels/sheet3.xml.rels',
+  'docProps/core.xml',
+  'xl/theme/theme1.xml',
+  'xl/sharedStrings.xml',
+  'xl/styles.xml',
+  'xl/workbook.xml',
+  'xl/_rels/workbook.xml.rels',
+  '_rels/.rels',
+  'xl/metadata',
+  'xl/commentsmeta0',
+  '[Content_Types].xml'
+];
+
+const TRAINING_IMPORT_WORKSHEET_RELATIONSHIP_TYPE =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet';
+
 const TRAINING_IMPORT_TEMPLATE_MAX_ROWS = 999;
 const TRAINING_IMPORT_NUMERIC_COLUMN_INDEXES = new Set([1, 5, 7]);
 
@@ -5011,6 +5039,16 @@ function getTrainingImportColumnName_(columnIndex) {
   return String.fromCharCode(65 + columnIndex);
 }
 
+function getTrainingImportColumnIndex_(columnName) {
+  const label = String(columnName || '');
+  if (!/^[A-Z]+$/.test(label)) return -1;
+  let oneBasedIndex = 0;
+  for (let index = 0; index < label.length; index += 1) {
+    oneBasedIndex = oneBasedIndex * 26 + label.charCodeAt(index) - 64;
+  }
+  return oneBasedIndex - 1;
+}
+
 function updateTrainingImportCellAttributes_(attributes, isNumeric) {
   const withoutType = attributes.replace(/\s+t=(['"])[\s\S]*?\1/g, '');
   return isNumeric ? withoutType : withoutType + ' t="inlineStr"';
@@ -5028,7 +5066,7 @@ function populateTrainingImportRowXml_(rowXml, values, rowNumber) {
     const referenceMatch = attributes.match(/\br="([A-Z]+)(\d+)"/);
     if (!referenceMatch || Number(referenceMatch[2]) !== rowNumber) return cellXml;
 
-    const columnIndex = referenceMatch[1].charCodeAt(0) - 65;
+    const columnIndex = getTrainingImportColumnIndex_(referenceMatch[1]);
     if (columnIndex < 0 || columnIndex >= TRAINING_IMPORT_HEADERS.length) return cellXml;
 
     seenColumns.add(columnIndex);
@@ -5102,6 +5140,74 @@ function requireTrainingImportPart_(partMap, name) {
   return part;
 }
 
+function getTrainingImportXmlAttribute_(attributes, name) {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = String(attributes || '').match(new RegExp('(?:^|\\s)' + escapedName + '="([^"]*)"'));
+  return match ? decodeTrainingImportXml_(match[1]) : '';
+}
+
+function parseTrainingImportWorkbookSheets_(workbookXml) {
+  const sheets = [];
+  String(workbookXml || '').replace(/<sheet\b([^>]*)\/?\s*>/g, (sheetXml, attributes) => {
+    sheets.push({
+      name: getTrainingImportXmlAttribute_(attributes, 'name'),
+      relationshipId: getTrainingImportXmlAttribute_(attributes, 'r:id')
+    });
+    return sheetXml;
+  });
+  return sheets;
+}
+
+function parseTrainingImportWorkbookRelationships_(relationshipsXml) {
+  const relationshipsById = new Map();
+  String(relationshipsXml || '').replace(/<Relationship\b([^>]*)\/?\s*>/g, (relationshipXml, attributes) => {
+    const id = getTrainingImportXmlAttribute_(attributes, 'Id');
+    if (!id) return relationshipXml;
+    if (relationshipsById.has(id)) {
+      throw new Error('教育訓練匯入範本工作簿包含重複關聯：' + id);
+    }
+    relationshipsById.set(id, {
+      type: getTrainingImportXmlAttribute_(attributes, 'Type'),
+      target: getTrainingImportXmlAttribute_(attributes, 'Target')
+    });
+    return relationshipXml;
+  });
+  return relationshipsById;
+}
+
+function resolveTrainingImportWorkbookTarget_(target) {
+  const rawPath = String(target || '');
+  const absolutePath = rawPath.charAt(0) === '/' ? rawPath.slice(1) : 'xl/' + rawPath;
+  const resolvedSegments = [];
+  absolutePath.split('/').forEach((segment) => {
+    if (!segment || segment === '.') return;
+    if (segment === '..') {
+      resolvedSegments.pop();
+      return;
+    }
+    resolvedSegments.push(segment);
+  });
+  return resolvedSegments.join('/');
+}
+
+function validateTrainingImportWorkbookRelationships_(workbookSheets, relationshipsXml) {
+  const relationshipsById = parseTrainingImportWorkbookRelationships_(relationshipsXml);
+  workbookSheets.forEach((sheet, index) => {
+    const relationship = relationshipsById.get(sheet.relationshipId);
+    const expectedTarget = 'xl/worksheets/sheet' + (index + 1) + '.xml';
+    if (!relationship
+        || relationship.type !== TRAINING_IMPORT_WORKSHEET_RELATIONSHIP_TYPE
+        || resolveTrainingImportWorkbookTarget_(relationship.target) !== expectedTarget) {
+      throw new Error(
+        '教育訓練匯入範本工作表關聯不符：'
+        + (sheet.relationshipId || '(缺少 r:id)')
+        + ' 應指向 '
+        + expectedTarget
+      );
+    }
+  });
+}
+
 function parseTrainingImportSharedStrings_(sharedStringsXml) {
   const values = [];
   String(sharedStringsXml || '').replace(/<si\b[^>]*>([\s\S]*?)<\/si>/g, (_, itemXml) => {
@@ -5122,43 +5228,85 @@ function findTrainingImportRowXml_(sheetXml, rowNumber) {
   return match ? match[0] : '';
 }
 
-function parseTrainingImportRowValues_(sheetXml, rowNumber, sharedStrings) {
+function parseTrainingImportRowCells_(sheetXml, rowNumber, sharedStrings) {
   const rowXml = findTrainingImportRowXml_(sheetXml, rowNumber);
   if (!rowXml) throw new Error('教育訓練匯入工作表缺少第 ' + rowNumber + ' 列');
 
-  const values = new Array(TRAINING_IMPORT_HEADERS.length).fill('');
+  const cells = new Array(TRAINING_IMPORT_HEADERS.length).fill(null);
   const seenColumns = new Set();
   rowXml.replace(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, (cellXml, attributes, innerXml) => {
     const referenceMatch = attributes.match(/\br="([A-Z]+)(\d+)"/);
     if (!referenceMatch || Number(referenceMatch[2]) !== rowNumber) return cellXml;
-    const columnIndex = referenceMatch[1].charCodeAt(0) - 65;
+    const columnIndex = getTrainingImportColumnIndex_(referenceMatch[1]);
     if (columnIndex < 0 || columnIndex >= TRAINING_IMPORT_HEADERS.length) return cellXml;
 
+    if (seenColumns.has(columnIndex)) {
+      throw new Error('教育訓練匯入工作表第 ' + rowNumber + ' 列包含重複儲存格');
+    }
     seenColumns.add(columnIndex);
     const typeMatch = attributes.match(/\bt="([^"]+)"/);
     const type = typeMatch ? typeMatch[1] : '';
     const content = String(innerXml || '');
+    let value = '';
     if (type === 'inlineStr') {
-      let textValue = '';
       content.replace(/<t\b[^>]*>([\s\S]*?)<\/t>/g, (match, text) => {
-        textValue += decodeTrainingImportXml_(text);
+        value += decodeTrainingImportXml_(text);
         return match;
       });
-      values[columnIndex] = textValue;
-      return cellXml;
+    } else {
+      const valueMatch = content.match(/<v\b[^>]*>([\s\S]*?)<\/v>/);
+      if (valueMatch) {
+        const rawValue = decodeTrainingImportXml_(valueMatch[1]);
+        value = type === 's' ? sharedStrings[Number(rawValue)] : rawValue;
+      }
     }
-
-    const valueMatch = content.match(/<v\b[^>]*>([\s\S]*?)<\/v>/);
-    if (!valueMatch) return cellXml;
-    const rawValue = decodeTrainingImportXml_(valueMatch[1]);
-    values[columnIndex] = type === 's' ? sharedStrings[Number(rawValue)] : rawValue;
+    cells[columnIndex] = {
+      reference: referenceMatch[1] + rowNumber,
+      type,
+      value,
+      hasFormula: /<f\b/.test(content),
+      hasValue: /<v\b/.test(content),
+      hasInlineString: /<is\b/.test(content)
+    };
     return cellXml;
   });
 
   if (seenColumns.size !== TRAINING_IMPORT_HEADERS.length) {
     throw new Error('教育訓練匯入工作表第 ' + rowNumber + ' 列缺少 A:N 儲存格');
   }
-  return values;
+  return cells;
+}
+
+function parseTrainingImportRowValues_(sheetXml, rowNumber, sharedStrings) {
+  return parseTrainingImportRowCells_(sheetXml, rowNumber, sharedStrings)
+    .map((cell) => cell.value);
+}
+
+function validateTrainingImportRowStructure_(cells, expectedRow, rowNumber) {
+  const isUsedRow = Boolean(expectedRow);
+  cells.forEach((cell, columnIndex) => {
+    if (cell.hasFormula) {
+      throw new Error('教育訓練匯入資料 ' + cell.reference + ' 不得包含公式');
+    }
+    if (!isUsedRow) {
+      if (cell.hasValue || cell.hasInlineString) {
+        throw new Error('教育訓練匯入資料筆數與預期列數不符：' + cell.reference + ' 未完整清空');
+      }
+      return;
+    }
+
+    const expectedValue = expectedRow[columnIndex];
+    if (expectedValue === '' || expectedValue === null || expectedValue === undefined) return;
+    if (TRAINING_IMPORT_NUMERIC_COLUMN_INDEXES.has(columnIndex)) {
+      if (cell.type || !cell.hasValue || cell.hasInlineString) {
+        throw new Error('教育訓練匯入資料 ' + cell.reference + ' 必須為數值儲存格');
+      }
+      return;
+    }
+    if (cell.type !== 'inlineStr' || !cell.hasInlineString || cell.hasValue) {
+      throw new Error('教育訓練匯入資料 ' + cell.reference + ' 必須為 inlineStr 文字儲存格');
+    }
+  });
 }
 
 /**
@@ -5169,21 +5317,23 @@ function parseTrainingImportRowValues_(sheetXml, rowNumber, sharedStrings) {
  */
 function validateTrainingImportTemplateParts_(parts) {
   const partMap = getTrainingImportPartMap_(parts);
+  TRAINING_IMPORT_TEMPLATE_REQUIRED_PART_NAMES.forEach((name) => {
+    requireTrainingImportPart_(partMap, name);
+  });
   const workbookBlob = requireTrainingImportPart_(partMap, 'xl/workbook.xml');
+  const workbookRelationshipsBlob = requireTrainingImportPart_(partMap, 'xl/_rels/workbook.xml.rels');
   const sharedStringsBlob = requireTrainingImportPart_(partMap, 'xl/sharedStrings.xml');
   const sheetBlob = requireTrainingImportPart_(partMap, 'xl/worksheets/sheet1.xml');
-  requireTrainingImportPart_(partMap, 'xl/worksheets/sheet2.xml');
-  requireTrainingImportPart_(partMap, 'xl/worksheets/sheet3.xml');
   const workbookXml = workbookBlob.getDataAsString();
-  const sheetNames = [];
-  workbookXml.replace(/<sheet\b[^>]*\bname="([^"]*)"[^>]*\/?\s*>/g, (sheetXml, name) => {
-    sheetNames.push(decodeTrainingImportXml_(name));
-    return sheetXml;
-  });
-  if (sheetNames.length !== TRAINING_IMPORT_TEMPLATE_SHEET_NAMES.length
-      || sheetNames.some((name, index) => name !== TRAINING_IMPORT_TEMPLATE_SHEET_NAMES[index])) {
+  const workbookSheets = parseTrainingImportWorkbookSheets_(workbookXml);
+  if (workbookSheets.length !== TRAINING_IMPORT_TEMPLATE_SHEET_NAMES.length
+      || workbookSheets.some((sheet, index) => sheet.name !== TRAINING_IMPORT_TEMPLATE_SHEET_NAMES[index])) {
     throw new Error('教育訓練匯入範本工作表名稱或順序不符');
   }
+  validateTrainingImportWorkbookRelationships_(
+    workbookSheets,
+    workbookRelationshipsBlob.getDataAsString()
+  );
 
   const sharedStrings = parseTrainingImportSharedStrings_(sharedStringsBlob.getDataAsString());
   const sheetXml = sheetBlob.getDataAsString();
@@ -5238,7 +5388,9 @@ function verifyTrainingImportWorkbookBlob_(blob, expectedRows) {
 
   expectedRows.forEach((expectedRow, rowIndex) => {
     const rowNumber = rowIndex + 2;
-    const actualRow = parseTrainingImportRowValues_(validated.sheetXml, rowNumber, sharedStrings);
+    const actualCells = parseTrainingImportRowCells_(validated.sheetXml, rowNumber, sharedStrings);
+    validateTrainingImportRowStructure_(actualCells, expectedRow, rowNumber);
+    const actualRow = actualCells.map((cell) => cell.value);
     expectedRow.forEach((expectedValue, columnIndex) => {
       const expected = normalizeTrainingImportExpectedCell_(expectedValue, columnIndex);
       const actual = String(actualRow[columnIndex] === undefined ? '' : actualRow[columnIndex]);
@@ -5250,7 +5402,9 @@ function verifyTrainingImportWorkbookBlob_(blob, expectedRows) {
   });
 
   for (let rowNumber = expectedRows.length + 2; rowNumber <= 1000; rowNumber += 1) {
-    const values = parseTrainingImportRowValues_(validated.sheetXml, rowNumber, sharedStrings);
+    const unusedCells = parseTrainingImportRowCells_(validated.sheetXml, rowNumber, sharedStrings);
+    validateTrainingImportRowStructure_(unusedCells, null, rowNumber);
+    const values = unusedCells.map((cell) => cell.value);
     if (values.some((value) => String(value || '') !== '')) {
       throw new Error('教育訓練匯入資料筆數與預期列數不符');
     }
