@@ -4959,3 +4959,300 @@ function buildTrainingImportDataset_(input) {
     textBody
   };
 }
+
+const TRAINING_IMPORT_TEMPLATE_SHEET_NAMES = [
+  '表1-匯入資料填寫區',
+  '表2-此為範例說明(勿在此頁輸入資料)',
+  '表3-對應清單(參考用)'
+];
+
+const TRAINING_IMPORT_TEMPLATE_MAX_ROWS = 999;
+const TRAINING_IMPORT_NUMERIC_COLUMN_INDEXES = new Set([1, 5, 7]);
+
+function escapeTrainingImportXml_(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function decodeTrainingImportXml_(value) {
+  return String(value || '')
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_, decimal) => String.fromCodePoint(parseInt(decimal, 10)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+function buildTrainingImportCellPayload_(value, isNumeric) {
+  if (value === '') return '';
+  if (isNumeric) return '<v>' + Number(value) + '</v>';
+  return '<is><t xml:space="preserve">' + escapeTrainingImportXml_(value) + '</t></is>';
+}
+
+function validateTrainingImportRows_(rows) {
+  if (!Array.isArray(rows)) throw new Error('教育訓練匯入資料必須為陣列');
+  if (rows.length > TRAINING_IMPORT_TEMPLATE_MAX_ROWS) {
+    throw new Error('教育訓練匯入範本最多可寫入 999 筆資料');
+  }
+  rows.forEach((row, index) => {
+    if (!Array.isArray(row) || row.length !== TRAINING_IMPORT_HEADERS.length) {
+      throw new Error('教育訓練匯入資料第 ' + (index + 1) + ' 筆必須包含 14 個欄位');
+    }
+  });
+}
+
+function getTrainingImportColumnName_(columnIndex) {
+  return String.fromCharCode(65 + columnIndex);
+}
+
+function updateTrainingImportCellAttributes_(attributes, isNumeric) {
+  const withoutType = attributes.replace(/\s+t=(['"])[\s\S]*?\1/g, '');
+  return isNumeric ? withoutType : withoutType + ' t="inlineStr"';
+}
+
+function removeTrainingImportCellValue_(innerXml) {
+  return String(innerXml || '')
+    .replace(/<(v|is|f)\b[^>]*>[\s\S]*?<\/\1>/g, '')
+    .replace(/<(v|is|f)\b[^>]*\/>/g, '');
+}
+
+function populateTrainingImportRowXml_(rowXml, values, rowNumber) {
+  const seenColumns = new Set();
+  const updatedRow = rowXml.replace(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, (cellXml, attributes, innerXml) => {
+    const referenceMatch = attributes.match(/\br="([A-Z]+)(\d+)"/);
+    if (!referenceMatch || Number(referenceMatch[2]) !== rowNumber) return cellXml;
+
+    const columnIndex = referenceMatch[1].charCodeAt(0) - 65;
+    if (columnIndex < 0 || columnIndex >= TRAINING_IMPORT_HEADERS.length) return cellXml;
+
+    seenColumns.add(columnIndex);
+    const isNumeric = TRAINING_IMPORT_NUMERIC_COLUMN_INDEXES.has(columnIndex);
+    const updatedAttributes = updateTrainingImportCellAttributes_(attributes, isNumeric);
+    const payload = buildTrainingImportCellPayload_(values[columnIndex], isNumeric);
+    const remainingInnerXml = removeTrainingImportCellValue_(innerXml);
+    const updatedInnerXml = payload + remainingInnerXml;
+    return updatedInnerXml
+      ? '<c' + updatedAttributes + '>' + updatedInnerXml + '</c>'
+      : '<c' + updatedAttributes + '/>';
+  });
+
+  if (seenColumns.size !== TRAINING_IMPORT_HEADERS.length) {
+    throw new Error('教育訓練匯入範本第 ' + rowNumber + ' 列缺少 A:N 儲存格');
+  }
+  return updatedRow;
+}
+
+/**
+ * 只替換範本資料列，避免重建工作簿時破壞既有樣式、驗證規則與註解。
+ *
+ * @param {string} sheetXml - 原始第一張工作表 XML
+ * @param {Array<Array<*>>} rows - A:N 共 14 欄的匯入資料
+ * @returns {string} 保留範本結構的工作表 XML
+ */
+function populateTrainingImportSheetXml_(sheetXml, rows) {
+  validateTrainingImportRows_(rows);
+  const xml = String(sheetXml || '');
+  const sheetDataMatch = xml.match(/<sheetData\b[^>]*>[\s\S]*?<\/sheetData>/);
+  if (!sheetDataMatch) throw new Error('教育訓練匯入範本缺少 sheetData');
+
+  const originalSheetData = sheetDataMatch[0];
+  const updatedSheetData = originalSheetData.replace(
+    /<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>/g,
+    (rowXml, rowNumberText) => {
+      const rowNumber = Number(rowNumberText);
+      if (rowNumber === 1 || rowNumber > 1000) return rowXml;
+      const values = rowNumber - 2 < rows.length
+        ? rows[rowNumber - 2]
+        : new Array(TRAINING_IMPORT_HEADERS.length).fill('');
+      return populateTrainingImportRowXml_(rowXml, values, rowNumber);
+    }
+  );
+
+  for (let rowNumber = 1; rowNumber <= 1000; rowNumber += 1) {
+    const rowPattern = new RegExp('<row\\b[^>]*\\br="' + rowNumber + '"');
+    if (!rowPattern.test(updatedSheetData)) {
+      throw new Error('教育訓練匯入範本缺少第 ' + rowNumber + ' 列');
+    }
+  }
+  return xml.slice(0, sheetDataMatch.index)
+    + updatedSheetData
+    + xml.slice(sheetDataMatch.index + originalSheetData.length);
+}
+
+function getTrainingImportPartMap_(parts) {
+  const partMap = new Map();
+  (Array.isArray(parts) ? parts : []).forEach((part) => {
+    const name = part && typeof part.getName === 'function' ? part.getName() : '';
+    if (!name) return;
+    if (partMap.has(name)) throw new Error('教育訓練匯入範本包含重複 ZIP part：' + name);
+    partMap.set(name, part);
+  });
+  return partMap;
+}
+
+function requireTrainingImportPart_(partMap, name) {
+  const part = partMap.get(name);
+  if (!part) throw new Error('教育訓練匯入範本缺少 ZIP part：' + name);
+  return part;
+}
+
+function parseTrainingImportSharedStrings_(sharedStringsXml) {
+  const values = [];
+  String(sharedStringsXml || '').replace(/<si\b[^>]*>([\s\S]*?)<\/si>/g, (_, itemXml) => {
+    let value = '';
+    itemXml.replace(/<t\b[^>]*>([\s\S]*?)<\/t>/g, (_match, text) => {
+      value += decodeTrainingImportXml_(text);
+      return _match;
+    });
+    values.push(value);
+    return _;
+  });
+  return values;
+}
+
+function findTrainingImportRowXml_(sheetXml, rowNumber) {
+  const rowPattern = new RegExp('<row\\b[^>]*\\br="' + rowNumber + '"[^>]*>[\\s\\S]*?<\\/row>');
+  const match = String(sheetXml || '').match(rowPattern);
+  return match ? match[0] : '';
+}
+
+function parseTrainingImportRowValues_(sheetXml, rowNumber, sharedStrings) {
+  const rowXml = findTrainingImportRowXml_(sheetXml, rowNumber);
+  if (!rowXml) throw new Error('教育訓練匯入工作表缺少第 ' + rowNumber + ' 列');
+
+  const values = new Array(TRAINING_IMPORT_HEADERS.length).fill('');
+  const seenColumns = new Set();
+  rowXml.replace(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, (cellXml, attributes, innerXml) => {
+    const referenceMatch = attributes.match(/\br="([A-Z]+)(\d+)"/);
+    if (!referenceMatch || Number(referenceMatch[2]) !== rowNumber) return cellXml;
+    const columnIndex = referenceMatch[1].charCodeAt(0) - 65;
+    if (columnIndex < 0 || columnIndex >= TRAINING_IMPORT_HEADERS.length) return cellXml;
+
+    seenColumns.add(columnIndex);
+    const typeMatch = attributes.match(/\bt="([^"]+)"/);
+    const type = typeMatch ? typeMatch[1] : '';
+    const content = String(innerXml || '');
+    if (type === 'inlineStr') {
+      let textValue = '';
+      content.replace(/<t\b[^>]*>([\s\S]*?)<\/t>/g, (match, text) => {
+        textValue += decodeTrainingImportXml_(text);
+        return match;
+      });
+      values[columnIndex] = textValue;
+      return cellXml;
+    }
+
+    const valueMatch = content.match(/<v\b[^>]*>([\s\S]*?)<\/v>/);
+    if (!valueMatch) return cellXml;
+    const rawValue = decodeTrainingImportXml_(valueMatch[1]);
+    values[columnIndex] = type === 's' ? sharedStrings[Number(rawValue)] : rawValue;
+    return cellXml;
+  });
+
+  if (seenColumns.size !== TRAINING_IMPORT_HEADERS.length) {
+    throw new Error('教育訓練匯入工作表第 ' + rowNumber + ' 列缺少 A:N 儲存格');
+  }
+  return values;
+}
+
+/**
+ * 在寫入前鎖定官方範本的工作表與欄位契約，避免把資料套入錯誤版本。
+ *
+ * @param {Array<Object>} parts - Utilities.unzip() 回傳的 Blob 陣列
+ * @returns {{sheetBlob: Object, sheetXml: string}} 第一張工作表 Blob 與 XML
+ */
+function validateTrainingImportTemplateParts_(parts) {
+  const partMap = getTrainingImportPartMap_(parts);
+  const workbookBlob = requireTrainingImportPart_(partMap, 'xl/workbook.xml');
+  const sharedStringsBlob = requireTrainingImportPart_(partMap, 'xl/sharedStrings.xml');
+  const sheetBlob = requireTrainingImportPart_(partMap, 'xl/worksheets/sheet1.xml');
+  requireTrainingImportPart_(partMap, 'xl/worksheets/sheet2.xml');
+  requireTrainingImportPart_(partMap, 'xl/worksheets/sheet3.xml');
+  const workbookXml = workbookBlob.getDataAsString();
+  const sheetNames = [];
+  workbookXml.replace(/<sheet\b[^>]*\bname="([^"]*)"[^>]*\/?\s*>/g, (sheetXml, name) => {
+    sheetNames.push(decodeTrainingImportXml_(name));
+    return sheetXml;
+  });
+  if (sheetNames.length !== TRAINING_IMPORT_TEMPLATE_SHEET_NAMES.length
+      || sheetNames.some((name, index) => name !== TRAINING_IMPORT_TEMPLATE_SHEET_NAMES[index])) {
+    throw new Error('教育訓練匯入範本工作表名稱或順序不符');
+  }
+
+  const sharedStrings = parseTrainingImportSharedStrings_(sharedStringsBlob.getDataAsString());
+  const sheetXml = sheetBlob.getDataAsString();
+  const headers = parseTrainingImportRowValues_(sheetXml, 1, sharedStrings);
+  if (headers.some((header, index) => header !== TRAINING_IMPORT_HEADERS[index])) {
+    throw new Error('教育訓練匯入範本 A1:N1 欄位不符');
+  }
+  return { sheetBlob, sheetXml };
+}
+
+/**
+ * 以原始 ZIP parts 重組附件，使非資料工作表與 OOXML 關聯完整保留。
+ *
+ * @param {Object} templateBlob - 官方 XLSX 範本 Blob
+ * @param {Array<Array<*>>} rows - A:N 匯入資料
+ * @param {string} filename - 產出附件檔名
+ * @returns {Object} XLSX Blob
+ */
+function buildTrainingImportWorkbookBlob_(templateBlob, rows, filename) {
+  const parts = Utilities.unzip(templateBlob);
+  const validated = validateTrainingImportTemplateParts_(parts);
+  const updatedXml = populateTrainingImportSheetXml_(validated.sheetXml, rows);
+  const updatedParts = parts.map((part) => part.getName() === 'xl/worksheets/sheet1.xml'
+    ? Utilities.newBlob(updatedXml, 'application/xml', part.getName())
+    : part);
+  return Utilities.zip(updatedParts, filename)
+    .setName(filename)
+    .setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+
+function normalizeTrainingImportExpectedCell_(value, columnIndex) {
+  return TRAINING_IMPORT_NUMERIC_COLUMN_INDEXES.has(columnIndex)
+    ? String(Number(value))
+    : String(value === null || value === undefined ? '' : value);
+}
+
+/**
+ * 附件寄出前重新解包核對，讓任何 ZIP、欄位或資料列損壞都能安全中止寄信。
+ *
+ * @param {Object} blob - 已產生的 XLSX Blob
+ * @param {Array<Array<*>>} expectedRows - 預期 A:N 匯入資料
+ * @throws {Error} 結構或資料與預期不符時拋出
+ */
+function verifyTrainingImportWorkbookBlob_(blob, expectedRows) {
+  validateTrainingImportRows_(expectedRows);
+  const parts = Utilities.unzip(blob);
+  const validated = validateTrainingImportTemplateParts_(parts);
+  const partMap = getTrainingImportPartMap_(parts);
+  const sharedStrings = parseTrainingImportSharedStrings_(
+    requireTrainingImportPart_(partMap, 'xl/sharedStrings.xml').getDataAsString()
+  );
+
+  expectedRows.forEach((expectedRow, rowIndex) => {
+    const rowNumber = rowIndex + 2;
+    const actualRow = parseTrainingImportRowValues_(validated.sheetXml, rowNumber, sharedStrings);
+    expectedRow.forEach((expectedValue, columnIndex) => {
+      const expected = normalizeTrainingImportExpectedCell_(expectedValue, columnIndex);
+      const actual = String(actualRow[columnIndex] === undefined ? '' : actualRow[columnIndex]);
+      if (actual !== expected) {
+        const cellReference = getTrainingImportColumnName_(columnIndex) + rowNumber;
+        throw new Error('教育訓練匯入資料 ' + cellReference + ' 與預期資料不符');
+      }
+    });
+  });
+
+  for (let rowNumber = expectedRows.length + 2; rowNumber <= 1000; rowNumber += 1) {
+    const values = parseTrainingImportRowValues_(validated.sheetXml, rowNumber, sharedStrings);
+    if (values.some((value) => String(value || '') !== '')) {
+      throw new Error('教育訓練匯入資料筆數與預期列數不符');
+    }
+  }
+}
