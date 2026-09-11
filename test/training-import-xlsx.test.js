@@ -213,6 +213,15 @@ assert.throws(
   /A2|inlineStr|文字/
 );
 
+const emptyTextWithoutTypeParts = replacePart(workbookBlob.parts, 'xl/worksheets/sheet1.xml', (xml) => xml.replace(
+  '<c r="J2" s="4" t="inlineStr"/>',
+  '<c r="J2" s="4"/>'
+));
+assert.throws(
+  () => api.verifyTrainingImportWorkbookBlob_(new MockBlob('', '', 'empty-text-without-type.xlsx', emptyTextWithoutTypeParts), rows),
+  /J2|inlineStr|文字/
+);
+
 const usedFormulaParts = replacePart(workbookBlob.parts, 'xl/worksheets/sheet1.xml', (xml) => xml.replace(
   '<c r="B2" s="1"><v>522</v></c>',
   '<c r="B2" s="1"><f>SUM(500,22)</f><v>522</v></c>'

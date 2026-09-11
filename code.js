@@ -5296,14 +5296,16 @@ function validateTrainingImportRowStructure_(cells, expectedRow, rowNumber) {
     }
 
     const expectedValue = expectedRow[columnIndex];
-    if (expectedValue === '' || expectedValue === null || expectedValue === undefined) return;
+    const isEmptyExpectedValue = expectedValue === ''
+      || expectedValue === null
+      || expectedValue === undefined;
     if (TRAINING_IMPORT_NUMERIC_COLUMN_INDEXES.has(columnIndex)) {
-      if (cell.type || !cell.hasValue || cell.hasInlineString) {
+      if (cell.type || cell.hasInlineString || (!isEmptyExpectedValue && !cell.hasValue)) {
         throw new Error('教育訓練匯入資料 ' + cell.reference + ' 必須為數值儲存格');
       }
       return;
     }
-    if (cell.type !== 'inlineStr' || !cell.hasInlineString || cell.hasValue) {
+    if (cell.type !== 'inlineStr' || cell.hasValue || (!isEmptyExpectedValue && !cell.hasInlineString)) {
       throw new Error('教育訓練匯入資料 ' + cell.reference + ' 必須為 inlineStr 文字儲存格');
     }
   });
