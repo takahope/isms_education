@@ -11,10 +11,12 @@
 
 ## 目錄結構
 
-*   `example/`：專案核心程式碼目錄。
-    *   `index.html`：前端使用者介面。包含登錄、影片播放邏輯（防快轉、閒置偵測）與測驗介面。
-    *   `code.js`：GAS 後端程式碼。處理 `doGet` 請求以及將測驗結果寫入試算表。
-    *   `test.md`：資安測驗題庫參考文件。包含資安政策、密碼管理、個資法、社交工程及 AI 趨勢等主題。
+*   `code.js`：根目錄的 GAS 後端；處理 `doGet`、資料存取與寄信工作流程。
+*   `index.html`：根目錄的小寫主頁 HTML；包含影片與測驗介面。
+*   `mention.html`：根目錄的催辦、報表與教育訓練匯入 HTML。
+*   `env.js`：環境設定，包含 `ENV.MASTER_SHEET_ID`。
+*   `appsscript.json`：GAS manifest 與 OAuth 範圍。
+*   `example/`：參考與舊版材料，不是部署目標。
 
 ## 核心功能說明
 
@@ -32,12 +34,13 @@
 
 此專案設計為部署於 **Google Apps Script**：
 
-1.  建立一個新的 Google 試算表。
-2.  點擊「擴充功能」 > 「Apps Script」。
-3.  將 `example/code.js` 的內容貼入腳本編輯器中。
-4.  在腳本編輯器中新增一個名為 `Index.html` 的檔案，並將 `example/index.html` 的內容貼入。
-5.  在 `code.js` 中視需要修改 `SpreadsheetApp.getActiveSpreadsheet()` 的邏輯。
-6.  點擊「部署」 > 「新部署」，選擇「網頁應用程式」，並設定存取權限。
+請以根目錄的部署檔案為準；`example/` 僅供參考，不是部署目標。
+
+1. 建立或開啟綁定 Google 試算表的 Apps Script 專案。
+2. 將根目錄的 `code.js`、`env.js` 與 `appsscript.json` 同步至 Apps Script 專案；`appsscript.json` 的 OAuth 範圍必須一併保留。
+3. 將根目錄的小寫的 `index.html` 與 `mention.html` 同步為 Apps Script 的 HTML 檔案。`doGet()` 會載入小寫的 `index`，因此不得改成 `Index.html`。
+4. 在 `env.js` 設定 `ENV.MASTER_SHEET_ID`，使其指向可連線的 Google 試算表；該試算表必須包含 `人員主檔`，且 A 欄為 Email、B 欄為顯示名稱。
+5. 點擊「部署」>「新部署」，選擇「網頁應用程式」，設定執行身分與存取權限，並完成要求的 OAuth 授權。
 
 ### 教育訓練匯入信件設定
 
