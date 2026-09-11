@@ -39,6 +39,20 @@
 5.  在 `code.js` 中視需要修改 `SpreadsheetApp.getActiveSpreadsheet()` 的邏輯。
 6.  點擊「部署」 > 「新部署」，選擇「網頁應用程式」，並設定存取權限。
 
+### 教育訓練匯入信件設定
+
+教育訓練匯入功能會從 Drive 的 XLSX 範本建立單一附件，並以一封信寄給固定收件人。部署管理員應依序完成下列設定：
+
+1. 將 `importtemplate_v20251226 (1).xlsx` 上傳到 Google Drive；請保持為 XLSX，**不需要轉換成 Google Sheet**。
+2. 複製該 Drive 檔案 ID，於 Apps Script「專案設定」>「指令碼屬性」設定 `TRAINING_IMPORT_TEMPLATE_FILE_ID`。
+3. 在同一處設定 `TRAINING_IMPORT_RECIPIENT_EMAIL` 為固定收件者的 Email。
+4. 確認固定收件者 Email 與部署操作者 Email 都在 `人員主檔` 的 A:B 欄有對應中文姓名（A 欄 Email、B 欄姓名）。
+5. 將範本檔案以 Viewer 權限分享給 Web App 的執行帳號。
+6. 重新部署 Web App，並核准新增的唯讀 Drive 授權範圍。
+7. 先執行一筆測試寄送，開啟產生的 `importtemplate_vYYYYMMDD.xlsx`，再匯入目標系統，確認空白 `certNo` 也能被接受。
+
+請勿將實際收件者 Email 或 Drive 檔案 ID 寫入原始碼或文件。
+
 ## 開發慣例
 
 *   **前端**：偏好使用 CDN 引入函式庫（如 Tailwind, SweetAlert2），以減少部屬複雜度。
