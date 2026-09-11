@@ -3346,6 +3346,28 @@ function resolveAuthenticatedUser_(payload, courseTitle, options) {
   };
 }
 
+function parseDashboardTimestampMs_(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return 0;
+  const parsed = new Date(raw);
+  const time = parsed.getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function compareDashboardTimestamps_(left, right) {
+  const leftMs = parseDashboardTimestampMs_(left);
+  const rightMs = parseDashboardTimestampMs_(right);
+  if (leftMs === rightMs) return 0;
+  return leftMs > rightMs ? 1 : -1;
+}
+
+function getLatestTimestampString_(left, right) {
+  if (!left && !right) return '';
+  if (!left) return String(right || '').trim();
+  if (!right) return String(left || '').trim();
+  return compareDashboardTimestamps_(left, right) >= 0 ? String(left).trim() : String(right).trim();
+}
+
 /**
  * 建立通知所需的資料上下文
  */
@@ -3488,13 +3510,26 @@ function buildMentionContext_(options) {
       if (courseTitle && !detectedCourseTitle) detectedCourseTitle = courseTitle;
       const score = Number(row[4] || 0);
       const result = String(row[5] || '').trim();
+      const timestamp = String(row[0] || '').trim();
       if (!quizByEmail.has(email)) {
-        quizByEmail.set(email, { hasPassed: false, bestScore: 0, attemptCount: 0 });
+        quizByEmail.set(email, {
+          hasPassed: false,
+          bestScore: 0,
+          attemptCount: 0,
+          latestScore: null,
+          latestResult: '',
+          latestAttemptAt: ''
+        });
       }
       const q = quizByEmail.get(email);
       q.attemptCount += 1;
       if (score > q.bestScore) q.bestScore = score;
       if (result === '通過' || score >= MENTION_CONFIG.passingScore) q.hasPassed = true;
+      if (!q.latestAttemptAt || compareDashboardTimestamps_(timestamp, q.latestAttemptAt) >= 0) {
+        q.latestAttemptAt = timestamp;
+        q.latestScore = score;
+        q.latestResult = result;
+      }
     }
   }
 
@@ -3509,7 +3544,17 @@ function buildMentionContext_(options) {
       const secVal = Number(row[4] !== undefined && row[4] !== '' ? row[4] : (row[2] || 0));
       const watchedSec = Number.isFinite(secVal) ? secVal : 0;
       const completed = watchedSec >= MENTION_CONFIG.requiredWatchSeconds;
-      progressByEmail.set(email, { watchedSec, completed });
+      const updatedAt = String(row[6] || '').trim();
+      if (!progressByEmail.has(email)) {
+        progressByEmail.set(email, { watchedSec, completed, updatedAt });
+      } else {
+        const p = progressByEmail.get(email);
+        if (watchedSec > p.watchedSec) p.watchedSec = watchedSec;
+        p.completed = p.completed || completed;
+        if (!p.updatedAt || compareDashboardTimestamps_(updatedAt, p.updatedAt) >= 0) {
+          p.updatedAt = updatedAt;
+        }
+      }
     }
   }
 
@@ -3528,15 +3573,25 @@ function buildMentionContext_(options) {
       const primaryAsgn = userAssignments[0] || {};
       const orgNode = orgNodeMap.get(primaryAsgn.orgCode);
 
-      const quiz = quizByEmail.get(email) || { hasPassed: false, bestScore: 0, attemptCount: 0 };
-      const prog = progressByEmail.get(email) || { watchedSec: 0, completed: false };
+      const quiz = quizByEmail.get(email) || {
+        hasPassed: false,
+        bestScore: 0,
+        attemptCount: 0,
+        latestScore: null,
+        latestResult: '',
+        latestAttemptAt: ''
+      };
+      const prog = progressByEmail.get(email) || { watchedSec: 0, completed: false, updatedAt: '' };
       let status = 'not_started';
-      let statusLabel = '未觀看';
+      let statusLabel = '未開始';
       if (quiz.hasPassed) {
         status = 'completed';
         statusLabel = '已完成';
+      } else if (prog.completed) {
+        status = 'pending_quiz';
+        statusLabel = '待補測';
       } else if (quiz.attemptCount > 0) {
-        status = 'quiz_failed';
+        status = 'in_progress';
         statusLabel = '測驗未通過';
       } else if (prog.watchedSec > 0) {
         status = 'in_progress';
@@ -3544,6 +3599,7 @@ function buildMentionContext_(options) {
       }
 
       const watchedPercent = Math.min(100, Math.round((prog.watchedSec / MENTION_CONFIG.requiredWatchSeconds) * 100));
+      const lastActivityAt = getLatestTimestampString_(prog.updatedAt, quiz.latestAttemptAt);
 
       learners.push({
         email,
@@ -3560,7 +3616,14 @@ function buildMentionContext_(options) {
         status,
         statusLabel,
         watchedPercent,
-        bestScore: quiz.bestScore
+        watchedSecondsCount: prog.watchedSec,
+        watchCompleted: prog.completed,
+        bestScore: quiz.bestScore,
+        latestScore: quiz.latestScore,
+        latestResult: quiz.latestResult,
+        attemptCount: quiz.attemptCount,
+        hasPassed: quiz.hasPassed,
+        lastActivityAt
       });
     }
   }
@@ -4438,3 +4501,136 @@ function debugGetLeaderProfile(email, options) {
     };
   }
 }
+
+/**
+ * 取得教育訓練統計報告匯出資料 (移植自 dashboard)
+ */
+function getTrainingReportExportData(payload) {
+  try {
+    const viewerEmail = getCurrentUserEmail();
+    if (!canAccessMention_(viewerEmail)) {
+      return {
+        success: false,
+        message: '權限不足：您未被授權匯出教育訓練報告。'
+      };
+    }
+
+    const p = payload || {};
+    const context = buildMentionContext_();
+    const courseTitle = context.courseTitle || MENTION_CONFIG.defaultCourseTitle;
+
+    const excludeParentalLeave = p.excludeParentalLeave !== false;
+    const excludeOutsideLocation = p.excludeOutsideLocation !== false;
+    const excludeEthicsCommittee = p.excludeEthicsCommittee !== false;
+    const excludeVendor = p.excludeVendor !== false;
+
+    const filteredLearners = (context.learners || []).filter((learner) => {
+      if (excludeParentalLeave && String(learner.personnelStatus || '').trim() === '育嬰假') {
+        return false;
+      }
+      if (excludeOutsideLocation && isOutsideLocation_(learner.location)) {
+        return false;
+      }
+      if (excludeEthicsCommittee && typeof isEthicsCommitteeMember_ === 'function' && isEthicsCommitteeMember_(learner, context)) {
+        return false;
+      }
+      if (excludeVendor && typeof isVendorPersonnel_ === 'function' && isVendorPersonnel_(learner, context)) {
+        return false;
+      }
+      return true;
+    });
+
+    const total = filteredLearners.length;
+    let completed = 0;
+    let pendingQuiz = 0;
+    let inProgress = 0;
+    let notStarted = 0;
+    let recentActive = 0;
+    const nowMs = Date.now();
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+    const unitMap = new Map();
+
+    filteredLearners.forEach((learner) => {
+      if (learner.status === 'completed') completed += 1;
+      else if (learner.status === 'pending_quiz') pendingQuiz += 1;
+      else if (learner.status === 'in_progress') inProgress += 1;
+      else notStarted += 1;
+
+      if (learner.lastActivityAt) {
+        const actMs = parseDashboardTimestampMs_(learner.lastActivityAt);
+        if (actMs > 0 && (nowMs - actMs) <= sevenDaysMs) {
+          recentActive += 1;
+        }
+      }
+
+      const unitName = learner.assignmentOrgName || '未設定單位';
+      if (!unitMap.has(unitName)) {
+        unitMap.set(unitName, { unitName, total: 0, completed: 0 });
+      }
+      const u = unitMap.get(unitName);
+      u.total += 1;
+      if (learner.status === 'completed') u.completed += 1;
+    });
+
+    const completionRate = total > 0 ? Math.round((completed / total) * 1000) / 10 : 0;
+    const kpis = {
+      total,
+      completed,
+      pendingQuiz,
+      inProgress,
+      notStarted,
+      recentActive,
+      completionRate
+    };
+
+    const unitSummary = Array.from(unitMap.values()).map((u) => {
+      const uTotal = u.total;
+      const uCompleted = u.completed;
+      const uIncomplete = Math.max(0, uTotal - uCompleted);
+      const uRate = uTotal > 0 ? Math.round((uCompleted / uTotal) * 1000) / 10 : 0;
+      return {
+        unitName: u.unitName,
+        total: uTotal,
+        completed: uCompleted,
+        incomplete: uIncomplete,
+        completionRate: uRate
+      };
+    }).sort((a, b) => b.total - a.total || a.unitName.localeCompare(b.unitName, 'zh-Hant'));
+
+    const filtersSummary = [
+      ['排除育嬰假', excludeParentalLeave ? '是' : '否'],
+      ['排除 outside', excludeOutsideLocation ? '是' : '否'],
+      ['排除倫理委員會', excludeEthicsCommittee ? '是' : '否'],
+      ['排除委外廠商', excludeVendor ? '是' : '否']
+    ];
+
+    const d = new Date();
+    const YYYY = d.getFullYear();
+    const MM = String(d.getMonth() + 1).padStart(2, '0');
+    const DD = String(d.getDate()).padStart(2, '0');
+    const HH = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    const exportTime = `${YYYY}-${MM}-${DD} ${HH}:${mm}:${ss}`;
+
+    return {
+      success: true,
+      courseTitle,
+      viewerEmail,
+      operatorEmail: viewerEmail,
+      exportTime,
+      kpis,
+      unitSummary,
+      filtersSummary,
+      learners: filteredLearners
+    };
+  } catch (error) {
+    console.error('取得匯出資料失敗:', error);
+    return {
+      success: false,
+      message: error && error.message ? error.message : String(error)
+    };
+  }
+}
+

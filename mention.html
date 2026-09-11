@@ -9,6 +9,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- SheetJS (xlsx.full.min.js) CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -37,6 +39,12 @@
           </svg>
           <span id="viewer-email-display">管理人員</span>
         </span>
+        <button id="export-report-btn" type="button" class="inline-flex items-center px-3 py-1.5 border border-slate-300 text-xs sm:text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-2xs transition">
+          <svg class="w-4 h-4 mr-1.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          📊 匯出報告
+        </button>
         <a href="<?= webAppUrl ?>" target="_top" class="text-xs sm:text-sm text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
           回到上課首頁
         </a>
@@ -788,10 +796,488 @@
       });
     }
 
+    // ==========================================
+    // 報表匯出功能 (移植自 dashboard)
+    // ==========================================
+
+    // 格式化篩選條件摘要
+    function formatFiltersSummary(filters) {
+      const f = filters || {};
+      const list = [];
+      list.push(['排除育嬰假', f.excludeParentalLeave ? '是' : '否']);
+      list.push(['排除 outside', f.excludeOutsideLocation ? '是' : '否']);
+      list.push(['排除倫理委員會', f.excludeEthicsCommittee ? '是' : '否']);
+      list.push(['排除委外廠商', f.excludeVendor ? '是' : '否']);
+      return list;
+    }
+
+    // 格式化匯出日期時間 (YYYY-MM-DD HH:mm:ss)
+    function formatExportDateTime(date) {
+      const d = (date instanceof Date && !isNaN(date.getTime()))
+        ? date
+        : new Date(typeof date === 'number' ? date : String(date || '').trim());
+      if (isNaN(d.getTime())) return '';
+      const YYYY = d.getFullYear();
+      const MM = String(d.getMonth() + 1).padStart(2, '0');
+      const DD = String(d.getDate()).padStart(2, '0');
+      const HH = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${YYYY}-${MM}-${DD} ${HH}:${mm}:${ss}`;
+    }
+
+    // 格式化百分比
+    function formatPercent(value) {
+      const num = Number(value || 0);
+      return Number.isFinite(num) ? (Math.round(num * 10) / 10).toString() : '0';
+    }
+
+    // 建置「訓練統計摘要」工作表 AOA (支援 full / simple)
+    function buildSummarySheetAoa(meta, kpis, unitSummary, filtersSummaryList, reportType) {
+      const safeMeta = meta || {};
+      const safeKpis = kpis || {};
+      const type = reportType || 'full';
+
+      if (type === 'simple') {
+        return [
+          ['【報表基本資訊】', ''],
+          ['課程名稱', safeMeta.courseTitle || '未設定課程名稱'],
+          ['匯出時間', safeMeta.exportTime || formatExportDateTime(new Date())],
+          ['操作人員', safeMeta.operatorEmail || safeMeta.viewerEmail || '系統管理員'],
+          ['應訓總人數', Number(safeKpis.total || 0)],
+          ['已完成人數', Number(safeKpis.completed || 0)],
+          ['待測驗人數', Number(safeKpis.pendingQuiz || 0)],
+          ['進行中人數', Number(safeKpis.inProgress || 0)],
+          ['未開始人數', Number(safeKpis.notStarted || 0)],
+          ['整體完成率', `${formatPercent(safeKpis.completionRate)}%`]
+        ];
+      }
+
+      const safeUnits = Array.isArray(unitSummary) ? unitSummary : [];
+      const safeFilters = Array.isArray(filtersSummaryList)
+        ? filtersSummaryList
+        : formatFiltersSummary(filtersSummaryList);
+
+      const aoa = [
+        ['【報表基本資訊】', ''],
+        ['課程名稱', safeMeta.courseTitle || '未設定課程名稱'],
+        ['匯出時間', safeMeta.exportTime || formatExportDateTime(new Date())],
+        ['操作人員', safeMeta.operatorEmail || safeMeta.viewerEmail || '系統管理員'],
+        [],
+        ['【套用篩選條件】', '']
+      ];
+
+      safeFilters.forEach((item) => {
+        if (Array.isArray(item)) {
+          aoa.push([item[0], item[1]]);
+        } else if (typeof item === 'string') {
+          const parts = item.split(/[:：]/);
+          if (parts.length > 1) {
+            aoa.push([parts[0].trim(), parts.slice(1).join(':').trim()]);
+          } else {
+            aoa.push([item, '']);
+          }
+        }
+      });
+
+      aoa.push(
+        [],
+        ['【整體 KPI 指標】', ''],
+        ['應訓總人數', Number(safeKpis.total || 0)],
+        ['已完成人數', Number(safeKpis.completed || 0)],
+        ['待測驗人數', Number(safeKpis.pendingQuiz || 0)],
+        ['進行中人數', Number(safeKpis.inProgress || 0)],
+        ['未開始人數', Number(safeKpis.notStarted || 0)],
+        ['近 7 日活躍人數', Number(safeKpis.recentActive || 0)],
+        ['整體完成率', `${formatPercent(safeKpis.completionRate)}%`],
+        [],
+        ['【各單位完成概況】', '', '', '', ''],
+        ['單位名稱', '應訓人數', '已完成人數', '未完成人數', '單位完成率']
+      );
+
+      if (safeUnits.length === 0) {
+        aoa.push(['無單位資料', 0, 0, 0, '0%']);
+      } else {
+        safeUnits.forEach((u) => {
+          const total = Number(u.total || 0);
+          const completed = Number(u.completed || 0);
+          const incomplete = Math.max(0, total - completed);
+          const rate = u.completionRate !== undefined
+            ? `${formatPercent(u.completionRate)}%`
+            : (total > 0 ? `${formatPercent(Math.round((completed / total) * 1000) / 10)}%` : '0%');
+          aoa.push([u.unitName || '未設定單位', total, completed, incomplete, rate]);
+        });
+      }
+
+      return aoa;
+    }
+
+    // 建置「學員明細清單」工作表 AOA (支援 full 15 欄 / simple 3 欄)
+    function buildLearnerDetailsSheetAoa(learners, reportType) {
+      const type = reportType || 'full';
+      const list = Array.isArray(learners) ? learners : [];
+
+      if (type === 'simple') {
+        const headers = ['姓名', '電子郵件', '最終訓練狀態'];
+        const aoa = [headers];
+        list.forEach((learner) => {
+          const row = [
+            learner.name || '',
+            learner.email || '',
+            learner.statusLabel || (learner.status === 'completed' ? '已完成' : learner.status === 'pending_quiz' ? '待補測' : learner.status === 'in_progress' ? '進行中' : '未開始')
+          ];
+          aoa.push(row);
+        });
+        return aoa;
+      }
+
+      const headers = [
+        '姓名', '電子郵件', '工作地點', '所屬單位', '職務名稱',
+        '人員狀態', '觀看進度', '累計觀看秒數', '影片觀看合格', '測驗最佳分數',
+        '測驗最新分數', '測驗最新結果', '測驗測驗次數', '最終訓練狀態', '最後活動時間'
+      ];
+
+      const aoa = [headers];
+
+      list.forEach((learner) => {
+        const row = [
+          learner.name || '',
+          learner.email || '',
+          learner.location || '-',
+          learner.assignmentOrgName || '未設定單位',
+          learner.assignmentTitle || '-',
+          learner.personnelStatus || '-',
+          `${formatPercent(learner.watchedPercent)}%`,
+          Number(learner.watchedSecondsCount || 0),
+          learner.watchCompleted ? '是' : '否',
+          (learner.bestScore !== null && learner.bestScore !== undefined && learner.bestScore !== '') ? Number(learner.bestScore) : '-',
+          (learner.latestScore !== null && learner.latestScore !== undefined && learner.latestScore !== '') ? Number(learner.latestScore) : '-',
+          learner.latestResult || '未作答',
+          Number(learner.attemptCount || 0),
+          learner.statusLabel || (learner.status === 'completed' ? '已完成' : learner.status === 'pending_quiz' ? '待補測' : learner.status === 'in_progress' ? '進行中' : '未開始'),
+          learner.lastActivityAt ? (formatExportDateTime(learner.lastActivityAt) || learner.lastActivityAt) : '無紀錄'
+        ];
+        aoa.push(row);
+      });
+
+      return aoa;
+    }
+
+    // 計算欄位寬度
+    function calculateColWidths(aoa) {
+      if (!Array.isArray(aoa) || aoa.length === 0) return [];
+      const colWidths = [];
+      aoa.forEach((row) => {
+        if (!Array.isArray(row)) return;
+        row.forEach((cell, colIndex) => {
+          const str = (cell === null || cell === undefined) ? '' : String(cell);
+          let width = 0;
+          for (let i = 0; i < str.length; i += 1) {
+            const code = str.charCodeAt(i);
+            if (code > 255 || (code >= 0x4e00 && code <= 0x9fa5)) {
+              width += 2.1;
+            } else {
+              width += 1.1;
+            }
+          }
+          const paddedWidth = Math.ceil(width) + 3;
+          colWidths[colIndex] = Math.max(colWidths[colIndex] || 10, paddedWidth);
+        });
+      });
+      return colWidths.map((wch) => ({ wch: Math.min(60, Math.max(10, wch)) }));
+    }
+
+    // 建置 Excel 工作簿 (支援 full / simple)
+    function buildExportWorkbook(learners, kpis, unitSummary, state, reportType) {
+      if (typeof XLSX === 'undefined') {
+        throw new Error('未載入 XLSX 套件，無法建置匯出檔案。');
+      }
+
+      const type = reportType || 'full';
+      const wb = XLSX.utils.book_new();
+      const meta = {
+        courseTitle: (state && state.courseTitle) || '資訊安全教育訓練',
+        exportTime: formatExportDateTime(new Date()),
+        operatorEmail: (state && (state.viewerEmail || state.operatorEmail)) || '系統管理員'
+      };
+
+      const filtersSummaryList = formatFiltersSummary(state ? state.filters : {});
+      const summaryAoa = buildSummarySheetAoa(meta, kpis, unitSummary, filtersSummaryList, type);
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+      wsSummary['!cols'] = calculateColWidths(summaryAoa);
+
+      const detailsAoa = buildLearnerDetailsSheetAoa(learners, type);
+      const wsDetails = XLSX.utils.aoa_to_sheet(detailsAoa);
+      wsDetails['!cols'] = calculateColWidths(detailsAoa);
+
+      XLSX.utils.book_append_sheet(wb, wsSummary, '訓練統計摘要');
+      XLSX.utils.book_append_sheet(wb, wsDetails, '學員明細清單');
+
+      return wb;
+    }
+
+    // 產生匯出檔案名稱 (支援完整 / 簡易標註)
+    function generateExportFileName(courseTitle, date, reportType) {
+      const type = reportType || 'full';
+      const typeLabel = type === 'simple' ? '簡易' : '完整';
+      const rawTitle = (courseTitle !== undefined && courseTitle !== null && String(courseTitle).trim())
+        ? String(courseTitle).trim()
+        : '資訊安全教育訓練';
+      const cleanTitle = rawTitle.replace(/[\\/:*?"<>|]/g, '_').trim() || '資訊安全教育訓練';
+      const d = (date instanceof Date && !isNaN(date.getTime()))
+        ? date
+        : new Date(typeof date === 'number' ? date : String(date || '').trim());
+      const safeDate = !isNaN(d.getTime()) ? d : new Date();
+      const YYYY = safeDate.getFullYear();
+      const MM = String(safeDate.getMonth() + 1).padStart(2, '0');
+      const DD = String(safeDate.getDate()).padStart(2, '0');
+      const HH = String(safeDate.getHours()).padStart(2, '0');
+      const mm = String(safeDate.getMinutes()).padStart(2, '0');
+      const timeString = `${YYYY}${MM}${DD}_${HH}${mm}`;
+      return `教育訓練報告_${typeLabel}_${cleanTitle}_${timeString}.xlsx`;
+    }
+
+    // 匯出教育訓練報告 (先彈出視窗選擇完整或簡易報告)
+    function exportTrainingReport() {
+      if (typeof XLSX === 'undefined') {
+        const errMsg = '未載入 XLSX 套件，無法建置匯出檔案。';
+        if (typeof Swal !== 'undefined') {
+          Swal.fire('錯誤', errMsg, 'error');
+        } else {
+          alert(errMsg);
+        }
+        return;
+      }
+
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: '請選擇匯出報告格式',
+          html: `
+            <div class="text-left text-xs space-y-3 mt-2">
+              <label class="flex items-start p-3 border-2 border-indigo-500 bg-indigo-50/40 rounded-xl cursor-pointer hover:bg-indigo-50 transition export-format-card" data-format="full">
+                <input type="radio" name="export-report-type" value="full" checked class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+                <div class="ml-3">
+                  <div class="font-bold text-slate-900 text-sm flex items-center">
+                    <span>📊 完整報告</span>
+                    <span class="ml-2 px-1.5 py-0.5 text-[10px] bg-indigo-100 text-indigo-700 rounded font-medium">全量指標與明細</span>
+                  </div>
+                  <div class="text-slate-500 mt-1 leading-relaxed text-[11px]">
+                    工作表包含基本資訊、篩選條件、整體 KPI、各單位完成概況，以及 15 欄詳細學員紀錄（觀看秒數、成績、作答狀態、最後活動時間等）。
+                  </div>
+                </div>
+              </label>
+              <label class="flex items-start p-3 border-2 border-slate-200 rounded-xl cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition export-format-card" data-format="simple">
+                <input type="radio" name="export-report-type" value="simple" class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+                <div class="ml-3">
+                  <div class="font-bold text-slate-900 text-sm flex items-center">
+                    <span>📋 簡易報告</span>
+                    <span class="ml-2 px-1.5 py-0.5 text-[10px] bg-emerald-100 text-emerald-700 rounded font-medium">核心精簡版</span>
+                  </div>
+                  <div class="text-slate-500 mt-1 leading-relaxed text-[11px]">
+                    摘要僅列基本資訊與 6 項核心 KPI 數據；學員清單僅列 3 欄（姓名、電子郵件、最終訓練狀態）。
+                  </div>
+                </div>
+              </label>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonColor: '#4f46e5',
+          cancelButtonColor: '#64748b',
+          confirmButtonText: '開始匯出',
+          cancelButtonText: '取消',
+          focusConfirm: false,
+          didOpen: () => {
+            const radios = document.querySelectorAll('input[name="export-report-type"]');
+            radios.forEach(radio => {
+              radio.addEventListener('change', () => {
+                document.querySelectorAll('.export-format-card').forEach(card => {
+                  const input = card.querySelector('input');
+                  if (input && input.checked) {
+                    card.classList.add('border-indigo-500', 'bg-indigo-50/40');
+                    card.classList.remove('border-slate-200');
+                  } else {
+                    card.classList.remove('border-indigo-500', 'bg-indigo-50/40');
+                    card.classList.add('border-slate-200');
+                  }
+                });
+              });
+            });
+          },
+          preConfirm: () => {
+            const selected = document.querySelector('input[name="export-report-type"]:checked');
+            return selected ? selected.value : 'full';
+          }
+        }).then((result) => {
+          if (!result.isConfirmed) return;
+          executeExportReport(result.value || 'full');
+        });
+      } else {
+        executeExportReport('full');
+      }
+    }
+
+    // 執行匯出作業
+    function executeExportReport(reportType) {
+      const type = reportType || 'full';
+      const payload = {
+        excludeParentalLeave: document.getElementById('exclude-parental-leave') ? document.getElementById('exclude-parental-leave').checked : true,
+        excludeOutsideLocation: document.getElementById('exclude-outside') ? document.getElementById('exclude-outside').checked : true,
+        excludeEthicsCommittee: document.getElementById('exclude-ethics-committee') ? document.getElementById('exclude-ethics-committee').checked : true,
+        excludeVendor: document.getElementById('exclude-vendor') ? document.getElementById('exclude-vendor').checked : true
+      };
+
+      const exportBtn = document.getElementById('export-report-btn');
+      const originalText = exportBtn ? exportBtn.innerHTML : '📊 匯出報告';
+      if (exportBtn) {
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '<span>產出中...</span>';
+      }
+
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: '報表產出中...',
+          text: '正在整理最新學員數據與統計摘要，請稍候。',
+          allowOutsideClick: false,
+          didOpen: function() {
+            Swal.showLoading();
+          }
+        });
+      }
+
+      const handleExportSuccess = function(res) {
+        if (!res || !res.success) {
+          const errMsg = (res && res.message) ? res.message : '匯出報表時發生未知錯誤，請重試。';
+          if (typeof Swal !== 'undefined') {
+            Swal.fire('匯出失敗', errMsg, 'error');
+          } else {
+            alert('匯出報表失敗：' + errMsg);
+          }
+          return;
+        }
+
+        const learners = res.learners || [];
+        if (learners.length === 0) {
+          const warnMsg = '目前篩選範圍內無學員資料可供匯出，請調整篩選條件。';
+          if (typeof Swal !== 'undefined') {
+            Swal.fire('提醒', warnMsg, 'warning');
+          } else {
+            alert(warnMsg);
+          }
+          return;
+        }
+
+        try {
+          const wb = buildExportWorkbook(learners, res.kpis, res.unitSummary, {
+            courseTitle: res.courseTitle || (gInitialData && gInitialData.courseTitle),
+            viewerEmail: res.viewerEmail || res.operatorEmail || (gInitialData && gInitialData.viewerEmail),
+            filters: payload
+          }, type);
+          const filename = generateExportFileName(res.courseTitle || (gInitialData && gInitialData.courseTitle), new Date(), type);
+          XLSX.writeFile(wb, filename);
+
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'success',
+              title: `已成功匯出${type === 'simple' ? '簡易' : '完整'}教育訓練報告！`,
+              toast: true,
+              position: 'top-end',
+              showConfirmButton: false,
+              timer: 3000,
+              timerProgressBar: true
+            });
+          } else {
+            alert(`已成功匯出${type === 'simple' ? '簡易' : '完整'}教育訓練報告！`);
+          }
+        } catch (error) {
+          console.error('建置報表失敗:', error);
+          const errMsg = (error && error.message) ? error.message : '建置報表檔案失敗。';
+          if (typeof Swal !== 'undefined') {
+            Swal.fire('匯出失敗', errMsg, 'error');
+          } else {
+            alert('匯出報表失敗：' + errMsg);
+          }
+        }
+      };
+
+      const handleExportFailure = function(err) {
+        console.error('匯出報表請求失敗:', err);
+        const errMsg = (err && err.message) ? err.message : String(err);
+        if (typeof Swal !== 'undefined') {
+          Swal.fire('匯出失敗', errMsg, 'error');
+        } else {
+          alert('匯出報表失敗：' + errMsg);
+        }
+      };
+
+      const finalizeButton = function() {
+        if (exportBtn) {
+          exportBtn.disabled = false;
+          exportBtn.innerHTML = originalText;
+        }
+      };
+
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        setTimeout(function() {
+          const mockLearners = [
+            {
+              name: '測試學員',
+              email: 'test@biobank.org.tw',
+              location: 'biobank',
+              assignmentOrgName: '資訊組',
+              assignmentTitle: '管理師',
+              personnelStatus: '在勤',
+              watchedPercent: 100,
+              watchedSecondsCount: 3600,
+              watchCompleted: true,
+              bestScore: 90,
+              latestScore: 90,
+              latestResult: '通過',
+              attemptCount: 1,
+              status: 'completed',
+              statusLabel: '已完成',
+              lastActivityAt: '2026-09-10 10:00:00'
+            }
+          ];
+          handleExportSuccess({
+            success: true,
+            courseTitle: (gInitialData && gInitialData.courseTitle) || '資訊安全暨個資保護教育訓練',
+            viewerEmail: (gInitialData && gInitialData.viewerEmail) || 'admin@biobank.org.tw',
+            kpis: {
+              total: 1,
+              completed: 1,
+              pendingQuiz: 0,
+              inProgress: 0,
+              notStarted: 0,
+              recentActive: 1,
+              completionRate: 100
+            },
+            unitSummary: [
+              { unitName: '資訊組', total: 1, completed: 1, incomplete: 0, completionRate: 100 }
+            ],
+            learners: mockLearners
+          });
+          finalizeButton();
+        }, 500);
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          handleExportSuccess(res);
+          finalizeButton();
+        })
+        .withFailureHandler(function(err) {
+          handleExportFailure(err);
+          finalizeButton();
+        })
+        .getTrainingReportExportData(payload);
+    }
+
     // 事件綁定
     document.addEventListener('DOMContentLoaded', function() {
       initPage();
 
+      document.getElementById('export-report-btn').addEventListener('click', exportTrainingReport);
       document.getElementById('mention-template-type').addEventListener('change', updateTemplateFields);
       document.getElementById('mention-deadline-date').addEventListener('input', function(e) {
         updateDeadlineDatePreview(e.target.value);
