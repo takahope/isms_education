@@ -2529,14 +2529,14 @@ function buildNotificationWatchReminderHtml_() {
 function buildNotificationLoginReminderHtml_() {
   return [
     '<p>※ 登入提醒：<br>',
-    '點擊上方連結進入後，請以公務 Google 帳號登入系統，學習紀錄將自動為您保存與同步。</p>'
+    '請先確認瀏覽器在公務 Google 帳號登入狀態，再點擊下面的“前往上課”，學習紀錄將自動為您保存與同步。</p>'
   ].join('');
 }
 
 function buildNotificationShadowLoginReminderHtml_() {
   return [
     '<p>※ 專屬免登入提醒：<br>',
-    '此專屬連結已內嵌安全認證憑證，點擊進入後系統將<strong>自動認列您的公務身分</strong>，無需切換或登入 Google 組織帳號，學習與測驗紀錄將自動為您保存與同步。</p>'
+    '請點擊下方“前往上課”，此專屬連結已內嵌安全認證憑證，點擊進入後系統將<strong>自動認列您的公務身分</strong>，無需切換或登入 公務的 Google 帳號，學習與測驗紀錄將自動為您保存與同步。</p>'
   ].join('');
 }
 
@@ -3134,7 +3134,7 @@ function buildShadowForwardingNoticeHtml_(learnerName) {
   const safeName = escapeHtml_(learnerName || '長官/同仁');
   return [
     '<div style="background-color: #fef3c7; border: 1px solid #fcd34d; border-radius: 6px; padding: 12px; margin: 12px 0 16px 0; font-size: 13px; color: #92400e; line-height: 1.5; font-family: sans-serif;">',
-    '🪞 <strong>非公務信箱專屬轉派通知</strong><br>',
+    '<strong>非公務信箱專屬轉派通知</strong><br>',
     '此信件為系統自動同步轉派至您的私人信箱。您可直接點擊下方「前往上課」專屬連結，使用手機或個人行動裝置直接上課與測驗，系統將自動以您的公務身分（<strong>' + safeName + '</strong>）記錄上課進度與測驗成績，無需登入 Google 組織帳號。',
     '</div>'
   ].join('');
