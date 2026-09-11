@@ -261,14 +261,16 @@ function resetFixtures(options) {
   sandbox.zipCallCount = 0;
   sandbox.uuidCounter = 0;
   sandbox.lockReleased = false;
-  sandbox.masterSpreadsheet = new MockSpreadsheet({
+  const masterRows = {
     人員主檔: [
       ['信箱', '姓名', '人員狀態', '', '', '', '', '工作地點'],
       ['admin@example.org', '王管理', '在勤', '', '', '', '', ''],
       ['receiver@example.org', '李承辦', '在勤', '', '', '', '', '']
     ].concat(learnerRows),
     組織架構樹: [['類型', '層級', '代碼', '名稱', '別名', '父代碼', '主管信箱', '主管姓名']]
-  });
+  };
+  if (settings.masterLogRows) masterRows.訓練匯出紀錄 = settings.masterLogRows;
+  sandbox.masterSpreadsheet = new MockSpreadsheet(masterRows);
   const activeRows = {
     人員職務配置: [['使用者信箱', '姓名', '組織代碼', '組織名稱', '職稱', '類型']],
     訓練紀錄: qualified.trainingRows,
@@ -445,6 +447,11 @@ function getLogRows() {
   return logSheet ? logSheet.rows : [];
 }
 
+function getMasterLogRows() {
+  const logSheet = sandbox.masterSpreadsheet.getSheetByName('訓練匯出紀錄');
+  return logSheet ? logSheet.rows : [];
+}
+
 function readAttachmentRows(attachment) {
   const partMap = new Map(Utilities.unzip(attachment).map((part) => [part.getName(), part]));
   const sheetXml = partMap.get('xl/worksheets/sheet1.xml').getDataAsString();
@@ -505,6 +512,49 @@ const duplicateResult = api.executeTrainingImportEmail({
 assert.strictEqual(duplicateResult.success, false);
 assert.strictEqual(sandbox.sentMessages.length, 1);
 assert.strictEqual(getLogRows().length, 5);
+assert.strictEqual(sandbox.masterSpreadsheet.getSheetByName('訓練匯出紀錄'), null);
+
+const fallbackSentRow = [
+  'legacy-sent', '課程甲\nlearner1@example.org', '課程甲', '張學員甲',
+  'learner1@example.org', '2026-09-01', 'receiver@example.org', 'old.xlsx',
+  '已寄出', 'legacy@example.org', '2026/09/01 10:00:00', '2026/09/01 10:00:00',
+  '2026/09/01 10:00:00', ''
+];
+const fallbackPreparingRow = [
+  'legacy-preparing', '課程甲\nlearner2@example.org', '課程甲', '陳學員乙',
+  'learner2@example.org', '2026-09-02', 'receiver@example.org', 'old.xlsx',
+  '準備寄送', 'legacy@example.org', '2026/09/02 10:00:00', '',
+  '2026/09/02 10:00:00', ''
+];
+resetFixtures({
+  masterLogRows: [LOG_HEADERS, fallbackSentRow, fallbackPreparingRow]
+});
+const fallbackPreview = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(fallbackPreview.success, true);
+assert.strictEqual(fallbackPreview.rows.length, 2);
+assert.strictEqual(fallbackPreview.alreadySentCount, 1);
+assert.strictEqual(fallbackPreview.preparingCount, 1);
+const fallbackSend = api.executeTrainingImportEmail({
+  courseTitle: '課程甲',
+  previewHash: fallbackPreview.previewHash
+});
+assert.strictEqual(fallbackSend.success, true);
+assert.strictEqual(fallbackSend.sentCount, 2);
+assert.strictEqual(sandbox.sentMessages.length, 1);
+assert.strictEqual(sandbox.activeSpreadsheet.getSheetByName('訓練匯出紀錄'), null);
+assert.strictEqual(getMasterLogRows().length, 5);
+assert.strictEqual(
+  getMasterLogRows().filter((row) => row[1] === '課程甲\nlearner1@example.org').length,
+  1
+);
+assert.strictEqual(
+  getMasterLogRows().filter((row) => row[1] === '課程甲\nlearner2@example.org').length,
+  1
+);
+const fallbackPreviewAfterSend = api.previewTrainingImportEmail({ courseTitle: '課程甲' });
+assert.strictEqual(fallbackPreviewAfterSend.success, false);
+assert.match(fallbackPreviewAfterSend.message, /待寄|新增|資料/);
+assert.strictEqual(sandbox.sentMessages.length, 1);
 
 resetFixtures();
 const staleResult = api.executeTrainingImportEmail({

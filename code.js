@@ -5459,7 +5459,7 @@ function readTrainingImportSheetRows_(spreadsheetCandidates, sheetName) {
 }
 
 /**
- * 一次建立匯入預覽所需的 Sheet 快照，並保留訓練紀錄所在試算表供後續台帳寫入。
+ * 一次建立匯入預覽所需的 Sheet 快照，並保留訓練紀錄與既有台帳的實際試算表來源。
  *
  * @returns {Object} 試算表、六類顯示值資料列及通知領域上下文
  */
@@ -5498,9 +5498,11 @@ function readTrainingImportSource_() {
     (spreadsheet) => spreadsheet !== trainingSpreadsheet
   ));
   const logSource = readTrainingImportSheetRows_(logCandidates, MENTION_CONFIG.trainingImportLogSheetName);
+  const logSpreadsheet = logSource.spreadsheet || trainingSpreadsheet;
 
   return {
     spreadsheet: trainingSpreadsheet,
+    logSpreadsheet,
     personnelRows: personnelSource.rows,
     assignmentRows: assignmentSource.rows,
     orgRows: orgSource.rows,
@@ -5832,7 +5834,7 @@ function executeTrainingImportEmail(payload) {
       throw new Error('今日 MailApp 寄件配額不足。');
     }
 
-    logSheet = getOrCreateTrainingImportLogSheet_(snapshot.source.spreadsheet);
+    logSheet = getOrCreateTrainingImportLogSheet_(snapshot.source.logSpreadsheet);
     nowText = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
     batchId = Utilities.getUuid();
     attachmentName = snapshot.attachmentName;
