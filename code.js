@@ -5085,28 +5085,17 @@ const TRAINING_IMPORT_TEMPLATE_SHEET_NAMES = [
   '表3-對應清單(參考用)'
 ];
 
+// 圖形、註解與 metadata 並非匯入資料契約；存在時會原樣保留，
+// 並由關聯完整性檢查確認它們沒有形成斷裂引用。
 const TRAINING_IMPORT_TEMPLATE_REQUIRED_PART_NAMES = [
-  'xl/comments1.xml',
-  'xl/_rels/comments1.xml.rels',
-  'xl/drawings/vmlDrawing1.vml',
-  'xl/drawings/drawing1.xml',
-  'xl/drawings/drawing2.xml',
-  'xl/drawings/drawing3.xml',
   'xl/worksheets/sheet1.xml',
-  'xl/worksheets/_rels/sheet1.xml.rels',
   'xl/worksheets/sheet2.xml',
-  'xl/worksheets/_rels/sheet2.xml.rels',
   'xl/worksheets/sheet3.xml',
-  'xl/worksheets/_rels/sheet3.xml.rels',
-  'docProps/core.xml',
-  'xl/theme/theme1.xml',
   'xl/sharedStrings.xml',
   'xl/styles.xml',
   'xl/workbook.xml',
   'xl/_rels/workbook.xml.rels',
   '_rels/.rels',
-  'xl/metadata',
-  'xl/commentsmeta0',
   '[Content_Types].xml'
 ];
 
@@ -5352,6 +5341,56 @@ function requireTrainingImportPart_(partMap, name) {
   return part;
 }
 
+function resolveTrainingImportRelationshipTarget_(relationshipPartName, target) {
+  const relationshipPath = String(relationshipPartName || '');
+  const rawTarget = String(target || '');
+  const relationshipFolderMarker = '/_rels/';
+  const markerIndex = relationshipPath.indexOf(relationshipFolderMarker);
+  const baseDirectory = relationshipPath === '_rels/.rels'
+    ? ''
+    : markerIndex >= 0 ? relationshipPath.slice(0, markerIndex) : '';
+  const unresolvedPath = rawTarget.charAt(0) === '/'
+    ? rawTarget.slice(1)
+    : (baseDirectory ? baseDirectory + '/' : '') + rawTarget;
+  const resolvedSegments = [];
+
+  unresolvedPath.split('/').forEach((segment) => {
+    if (!segment || segment === '.') return;
+    if (segment === '..') {
+      if (resolvedSegments.length > 0) resolvedSegments.pop();
+      return;
+    }
+    resolvedSegments.push(segment);
+  });
+  return resolvedSegments.join('/');
+}
+
+function validateTrainingImportRelationshipTargets_(partMap) {
+  partMap.forEach((relationshipBlob, relationshipPartName) => {
+    if (!/(^|\/)_rels\/[^/]+\.rels$/.test(relationshipPartName)) return;
+    const relationshipsXml = relationshipBlob.getDataAsString();
+    String(relationshipsXml || '').replace(
+      /<Relationship\b([^>]*)\/?\s*>/g,
+      (relationshipXml, attributes) => {
+        const targetMode = getTrainingImportXmlAttribute_(attributes, 'TargetMode');
+        if (String(targetMode || '').toLowerCase() === 'external') return relationshipXml;
+        const target = getTrainingImportXmlAttribute_(attributes, 'Target');
+        if (!target) return relationshipXml;
+        const resolvedTarget = resolveTrainingImportRelationshipTarget_(relationshipPartName, target);
+        if (!partMap.has(resolvedTarget)) {
+          throw new Error(
+            '教育訓練匯入範本關聯目標不存在：'
+            + relationshipPartName
+            + ' → '
+            + resolvedTarget
+          );
+        }
+        return relationshipXml;
+      }
+    );
+  });
+}
+
 function getTrainingImportXmlAttribute_(attributes, name) {
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = String(attributes || '').match(new RegExp('(?:^|\\s)' + escapedName + '="([^"]*)"'));
@@ -5534,6 +5573,7 @@ function validateTrainingImportTemplateParts_(parts) {
   TRAINING_IMPORT_TEMPLATE_REQUIRED_PART_NAMES.forEach((name) => {
     requireTrainingImportPart_(partMap, name);
   });
+  validateTrainingImportRelationshipTargets_(partMap);
   const workbookBlob = requireTrainingImportPart_(partMap, 'xl/workbook.xml');
   const workbookRelationshipsBlob = requireTrainingImportPart_(partMap, 'xl/_rels/workbook.xml.rels');
   const sharedStringsBlob = requireTrainingImportPart_(partMap, 'xl/sharedStrings.xml');

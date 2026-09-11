@@ -131,9 +131,7 @@ assert.throws(() => api.validateTrainingImportTemplateParts_(withoutPart('xl/sha
 [
   'xl/_rels/workbook.xml.rels',
   'xl/styles.xml',
-  'xl/drawings/drawing1.xml',
-  'xl/comments1.xml',
-  'xl/metadata',
+  '_rels/.rels',
   '[Content_Types].xml'
 ].forEach((requiredPartName) => {
   assert.throws(
@@ -147,6 +145,32 @@ function replacePart(parts, name, transform) {
     ? new MockBlob(transform(part.getDataAsString()), part.getContentType(), name)
     : part);
 }
+
+assert.throws(
+  () => api.validateTrainingImportTemplateParts_(withoutPart('xl/drawings/drawing1.xml')),
+  /drawing1\.xml|關聯目標/,
+  '仍被工作表關聯引用的 drawing part 不得缺漏'
+);
+
+const withoutDrawing1 = replacePart(
+  replacePart(
+    withoutPart('xl/drawings/drawing1.xml'),
+    'xl/worksheets/_rels/sheet1.xml.rels',
+    (xml) => xml.replace(
+      /<Relationship\b(?=[^>]*Target="\.\.\/drawings\/drawing1\.xml")[^>]*\/>/,
+      ''
+    )
+  ),
+  '[Content_Types].xml',
+  (xml) => xml.replace(
+    /<Override\b(?=[^>]*PartName="\/xl\/drawings\/drawing1\.xml")[^>]*\/>/,
+    ''
+  )
+);
+assert.doesNotThrow(
+  () => api.validateTrainingImportTemplateParts_(withoutDrawing1),
+  '未使用 drawing1.xml 的有效 XLSX 不應被資料結構驗證阻擋'
+);
 
 const wrongSheetNames = replacePart(templateParts, 'xl/workbook.xml', (xml) => xml.replace(
   'name="表1-匯入資料填寫區"',
@@ -199,6 +223,21 @@ workbookBlob.parts.forEach((part) => {
 });
 
 assert.doesNotThrow(() => api.verifyTrainingImportWorkbookBlob_(workbookBlob, rows));
+
+const workbookWithoutDrawing = api.buildTrainingImportWorkbookBlob_(
+  new MockBlob(
+    '',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'template-without-drawing.xlsx',
+    withoutDrawing1
+  ),
+  rows,
+  'importtemplate_without_drawing.xlsx'
+);
+assert(!workbookWithoutDrawing.parts.some(
+  (part) => part.getName() === 'xl/drawings/drawing1.xml'
+));
+assert.doesNotThrow(() => api.verifyTrainingImportWorkbookBlob_(workbookWithoutDrawing, rows));
 
 const badValueParts = replacePart(workbookBlob.parts, 'xl/worksheets/sheet1.xml', (xml) => xml.replace(
   'ming@example.org',
