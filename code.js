@@ -86,6 +86,9 @@ function doGet(e) {
 
   const template = HtmlService.createTemplateFromFile('index');
   template.authContext = JSON.stringify(authContext);
+  const isUrlBypass = Boolean(e && e.parameter && (String(e.parameter.bg).trim() === '1' || String(e.parameter.bg_play).trim() === '1'));
+  const allowBg = isBackgroundPlayAllowed_();
+  template.allowBackgroundPlay = (allowBg || isUrlBypass) ? 'true' : 'false';
   return template.evaluate()
       .setTitle('臺灣人體生物資料庫資安暨個資教育訓練')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
@@ -2969,6 +2972,63 @@ function buildOrgGroupReminderTemplate_(courseTitle) {
   };
 }
 
+function buildOrgGroupInitialTemplate_(courseTitle) {
+  const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
+  return {
+    subject: `【教育訓練通知】{{組別名稱}} - ${safeCourseTitle}線上課程開課說明`,
+    htmlBody: [
+      '<p>{{組別名稱}} 各位同仁 您好：</p>',
+      `<p>因應外部稽核與法規要求，本年度「<strong>${safeCourseTitle}</strong>」線上課程已開放觀看與測驗，請各位同仁於期限內撥冗完成相關要求。</p>`,
+      '<p><strong>課程資訊：</strong><br>',
+      `課程名稱：${safeCourseTitle}<br>`,
+      '及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>',
+      '修課期限：請於 {{修課期限}} 以前完成</p>',
+      buildNotificationWatchReminderHtml_(),
+      buildNotificationLoginReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      '<p>※ 本信件同步副本（CC）該組組長協助宣導知悉。</p>',
+      buildNotificationAutoReplyFooterHtml_()
+    ].join('')
+  };
+}
+
+function buildLeadershipAnnouncementNotificationTemplate_(courseTitle, isIndividual) {
+  const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
+  const greeting = isIndividual ? '<p>{{姓名}} 長官/主管 您好：</p>' : '<p>長官、主管們好：</p>';
+  return {
+    subject: `【教育訓練通知】${safeCourseTitle}`,
+    htmlBody: [
+      greeting,
+      `<p>依據《資通安全責任等級分級辦法》，公務機關及特定非公務機關人員（含約聘僱）每年須完成至少 3 小時之資通安全通識教育訓練。另臺灣人體生物資料庫每年亦須通過 ISO27001 與 ISO27701 第三方國際標準驗證，須持續就資訊安全暨個人資料保護管理系統範圍內之政策、制度及作業規範進行宣導，並確保相關管理措施符合組織實際運作情形。為配合前述法規要求與制度推動，本次已安排辦理<strong>${safeCourseTitle}</strong>。</p>`,
+      '<p>鑑於長官與主管們同時肩負資訊安全暨個人資料保護委員會召集人或委員之職責，需參與政策審議、資源協調、管理審查、稽核督導及制度推動等事項。為使召集人與委員充分了解臺灣人體生物資料庫之資訊安全與個人資料保護相關政策、管理要求及執行重點，特誠摯邀請長官撥冗參與本次課程。</p>',
+      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 {{修課期限}} 以前完成相關課程與測驗。</p>',
+      buildNotificationWatchReminderHtml_(),
+      buildNotificationLoginReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      '<p>敬請撥冗參與。</p>',
+      buildNotificationAutoReplyFooterHtml_()
+    ].join('')
+  };
+}
+
+function buildLeadershipAnnouncementSummaryTemplate_(courseTitle, isIndividual) {
+  const safeCourseTitle = escapeHtml_(courseTitle || '資訊安全暨個資保護教育訓練');
+  const greeting = isIndividual ? '<p>{{姓名}} 長官/主管 您好：</p>' : '<p>長官、主管們好：</p>';
+  return {
+    subject: `【教育訓練通知】${safeCourseTitle}`,
+    htmlBody: [
+      greeting,
+      `<p>依據《資通安全責任等級分級辦法》，公務機關及特定非公務機關人員（含約聘僱）每年須完成至少 3 小時之資通安全通識教育訓練。另因臺灣人體生物資料庫每年需通過 ISO27001 與 ISO27701 第三方國際標準驗證，故已安排辦理<strong>${safeCourseTitle}</strong>。</p>`,
+      '<p>鑑於長官與主管身為資訊安全暨個人資料保護委員會召集人或委員，需了解本庫資訊安全與個人資料保護相關政策、管理要求及制度推動重點，以利後續政策審議、管理審查與督導作業。</p>',
+      '<p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 {{修課期限}} 以前完成相關課程與測驗。</p>',
+      buildNotificationWatchReminderHtml_(),
+      buildNotificationLoginReminderHtml_(),
+      '<p><a href="{{上課網址}}">前往上課</a></p>',
+      buildNotificationAutoReplyFooterHtml_()
+    ].join('')
+  };
+}
+
 function buildOrgGroupIncompleteListHtml_(learners) {
   if (!learners || learners.length === 0) {
     return '<p style="color: #64748b; font-size: 13px;">（目前本組尚無未完成人員）</p>';
@@ -3663,6 +3723,11 @@ function selectMentionRecipients_(context, payload) {
   const skipped = [];
   const seenEmails = new Set();
 
+  const isInitial = payload && (
+    payload.templateType === 'leadership_announcement' ||
+    payload.templateType === 'leadership_announcement_summary'
+  );
+
   (context && context.learners ? context.learners : []).forEach((learner) => {
     const email = normalizeEmail_(learner.email);
     const reasons = [];
@@ -3674,7 +3739,7 @@ function selectMentionRecipients_(context, payload) {
     if (!hasExecutiveAdminAssignment_(learner.email, context)) {
       reasons.push('非層級1~4行政長官主管');
     }
-    if (learner.status === 'completed') {
+    if (!isInitial && learner.status === 'completed') {
       reasons.push('已完成訓練');
     }
 
@@ -3721,6 +3786,7 @@ function selectMentionRecipients_(context, payload) {
  * 挑選全組織各組未完成通知對象
  */
 function selectMentionOrgGroupRecipients_(context, payload) {
+  const isInitial = payload && payload.templateType === 'org_group_initial';
   const groupMap = new Map();
   const skippedLearners = [];
   const seenEmails = new Set();
@@ -3785,7 +3851,9 @@ function selectMentionOrgGroupRecipients_(context, payload) {
 
     const group = groupMap.get(orgCode);
     group.allMembers.push(learner);
-    if (learner.status !== 'completed') {
+    if (isInitial) {
+      group.toMembers.push(learner);
+    } else if (learner.status !== 'completed') {
       group.toMembers.push(learner);
     }
   });
@@ -3811,19 +3879,29 @@ function selectMentionOrgGroupRecipients_(context, payload) {
     }
 
     const leads = resolveOrgGroupLeadRecipients_(orgCode, context, group.allMembers);
-    const toEmailSet = new Set((group.toMembers || []).map(m => normalizeEmail_(m.email)));
-    const filteredLeads = (leads || []).filter(lead => !toEmailSet.has(normalizeEmail_(lead.email)));
-
+    let finalLeads = leads || [];
     if (payload && payload.excludeVendor) {
-      group.ccMembers = filteredLeads.filter(lead => {
+      finalLeads = finalLeads.filter(lead => {
         const leadLearner = (context.learners || []).find(l => normalizeEmail_(l.email) === normalizeEmail_(lead.email));
         if (leadLearner && typeof isVendorPersonnel_ === 'function' && isVendorPersonnel_(leadLearner, context)) return false;
         const s = String(lead.title || '') + String(lead.name || '');
         if (s.includes('委外') || s.includes('廠商')) return false;
         return true;
       });
+    }
+
+    if (isInitial) {
+      const leadEmailSet = new Set(finalLeads.map(lead => normalizeEmail_(lead.email)));
+      const nonLeadMembers = group.toMembers.filter(m => !leadEmailSet.has(normalizeEmail_(m.email)));
+      if (nonLeadMembers.length > 0) {
+        group.toMembers = nonLeadMembers;
+        group.ccMembers = finalLeads;
+      } else {
+        group.ccMembers = [];
+      }
     } else {
-      group.ccMembers = filteredLeads;
+      const toEmailSet = new Set((group.toMembers || []).map(m => normalizeEmail_(m.email)));
+      group.ccMembers = finalLeads.filter(lead => !toEmailSet.has(normalizeEmail_(lead.email)));
     }
 
     group.toMembers = (group.toMembers || []).map((m) => ({
@@ -3837,7 +3915,7 @@ function selectMentionOrgGroupRecipients_(context, payload) {
 
     if (group.toMembers.length === 0) {
       group.isSkipped = true;
-      group.skipReason = '全組人員皆已完成';
+      group.skipReason = isInitial ? '無有效收件人' : '全組人員皆已完成';
       skippedGroups.push(group);
     } else {
       activeGroups.push(group);
@@ -3876,9 +3954,13 @@ function getMentionInitialData() {
       defaultSenderName,
       courseTitle,
       defaultDeadlineDate,
+      allowBackgroundPlay: isBackgroundPlayAllowed_(),
       courseUrl: resolveBaseCourseUrl_(''),
       templates: {
+        leadership_announcement: buildLeadershipAnnouncementNotificationTemplate_(courseTitle),
+        leadership_announcement_summary: buildLeadershipAnnouncementSummaryTemplate_(courseTitle),
         leadership_reminder: buildLeadershipReminderGenericTemplate_(courseTitle),
+        org_group_initial: buildOrgGroupInitialTemplate_(courseTitle),
         org_group_reminder: buildOrgGroupReminderTemplate_(courseTitle)
       },
       excludeDefaults: {
@@ -3893,6 +3975,83 @@ function getMentionInitialData() {
     return {
       success: false,
       message: error && error.message ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * 檢查目前系統是否允許學員背景播放影片（不因視窗失焦或切換分頁暫停）
+ * 讀取 Script Properties 中的 SETTING_ALLOW_BACKGROUND_PLAY
+ * 預設值為 true（允許背景播放）
+ * @returns {boolean}
+ */
+function isBackgroundPlayAllowed_() {
+  try {
+    if (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties) {
+      const props = PropertiesService.getScriptProperties();
+      if (props && props.getProperty) {
+        const val = props.getProperty('SETTING_ALLOW_BACKGROUND_PLAY');
+        if (val === 'false') {
+          return false;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('讀取 SETTING_ALLOW_BACKGROUND_PLAY 失敗，採用預設值 true:', err);
+  }
+  return true;
+}
+
+/**
+ * 取得目前背景播放設定
+ * @returns {{ success: boolean, allowBackgroundPlay: boolean }}
+ */
+function getBackgroundPlaySetting() {
+  try {
+    return {
+      success: true,
+      allowBackgroundPlay: isBackgroundPlayAllowed_()
+    };
+  } catch (err) {
+    return {
+      success: true,
+      allowBackgroundPlay: true
+    };
+  }
+}
+
+/**
+ * 設定學員受訓時是否允許背景播放（需具備管理員存取權限）
+ * @param {boolean} allow - 是否允許背景播放
+ * @returns {{ success: boolean, allowBackgroundPlay: boolean, message: string }}
+ */
+function setBackgroundPlaySetting(allow) {
+  try {
+    const viewerEmail = getCurrentUserEmail();
+    if (!canAccessMention_(viewerEmail)) {
+      return {
+        success: false,
+        message: '權限不足：您未被授權調整系統設定，請確認 DASHBOARD_ALLOWED_EMAILS。'
+      };
+    }
+
+    if (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties) {
+      const props = PropertiesService.getScriptProperties();
+      if (props && props.setProperty) {
+        props.setProperty('SETTING_ALLOW_BACKGROUND_PLAY', allow ? 'true' : 'false');
+      }
+    }
+
+    return {
+      success: true,
+      allowBackgroundPlay: Boolean(allow),
+      message: allow ? '已切換為：允許背景播放（多工友善模式）' : '已切換為：強制失焦暫停（嚴格防弊模式）'
+    };
+  } catch (err) {
+    console.error('setBackgroundPlaySetting 發生例外:', err);
+    return {
+      success: false,
+      message: '儲存設定失敗：' + (err && err.message ? err.message : String(err))
     };
   }
 }
@@ -3921,7 +4080,7 @@ function previewMentionNotification(payload) {
       ? String(p.senderName).trim()
       : resolveDefaultMentionSenderName_(viewerEmail, context);
 
-    if (templateType === 'leadership_reminder') {
+    if (['leadership_reminder', 'leadership_announcement', 'leadership_announcement_summary'].includes(templateType)) {
       const selection = selectMentionRecipients_(context, p);
       const firstRecipient = selection.recipients[0] || {
         name: '長官主管',
@@ -3931,22 +4090,38 @@ function previewMentionNotification(payload) {
         statusLabel: '未完成'
       };
 
-      const defaultTpl = p.deliveryMode === 'individual'
-        ? buildLeadershipReminderIndividualTemplate_(courseTitle)
-        : buildLeadershipReminderGenericTemplate_(courseTitle);
+      const isAnnouncement = templateType === 'leadership_announcement' || templateType === 'leadership_announcement_summary';
+      const defaultDelivery = isAnnouncement ? 'direct' : 'individual';
+      const deliveryMode = p.deliveryMode || defaultDelivery;
+
+      let defaultTpl;
+      if (templateType === 'leadership_announcement') {
+        defaultTpl = buildLeadershipAnnouncementNotificationTemplate_(courseTitle, deliveryMode === 'individual');
+      } else if (templateType === 'leadership_announcement_summary') {
+        defaultTpl = buildLeadershipAnnouncementSummaryTemplate_(courseTitle, deliveryMode === 'individual');
+      } else {
+        defaultTpl = deliveryMode === 'individual'
+          ? buildLeadershipReminderIndividualTemplate_(courseTitle)
+          : buildLeadershipReminderGenericTemplate_(courseTitle);
+      }
 
       const sampleSubject = (p.subject || defaultTpl.subject)
         .replace(/\{\{課程名稱\}\}/g, courseTitle)
         .replace(/\{\{修課期限\}\}/g, deadlineText);
 
-      const sampleHtmlBody = (p.htmlBody || defaultTpl.htmlBody)
+      let bodyTemplate = p.htmlBody || defaultTpl.htmlBody;
+      if (deliveryMode === 'individual' && isAnnouncement) {
+        bodyTemplate = bodyTemplate.replace(/<p>長官、主管們好：<\/p>/g, '<p>{{姓名}} 長官/主管 您好：</p>');
+      }
+
+      const sampleHtmlBody = bodyTemplate
         .replace(/\{\{姓名\}\}/g, escapeHtml_(firstRecipient.name))
         .replace(/\{\{信箱\}\}/g, escapeHtml_(firstRecipient.email))
         .replace(/\{\{單位\}\}/g, escapeHtml_(firstRecipient.assignmentOrgName || ''))
         .replace(/\{\{職稱\}\}/g, escapeHtml_(firstRecipient.assignmentTitle || ''))
         .replace(/\{\{課程名稱\}\}/g, escapeHtml_(courseTitle))
         .replace(/\{\{修課期限\}\}/g, escapeHtml_(deadlineText))
-        .replace(/\{\{訓練狀態\}\}/g, escapeHtml_(firstRecipient.statusLabel || '未完成'))
+        .replace(/\{\{訓練狀態\}\}/g, escapeHtml_(firstRecipient.statusLabel || (firstRecipient.status === 'completed' ? '已完成' : '未完成')))
         .replace(/\{\{上課網址\}\}/g, courseUrl || '#');
 
       return {
@@ -3964,12 +4139,16 @@ function previewMentionNotification(payload) {
       };
     }
 
-    if (templateType === 'org_group_reminder') {
+    if (['org_group_reminder', 'org_group_initial'].includes(templateType)) {
       const selection = selectMentionOrgGroupRecipients_(context, p);
-      const defaultTpl = buildOrgGroupReminderTemplate_(courseTitle);
+      const defaultTpl = templateType === 'org_group_initial'
+        ? buildOrgGroupInitialTemplate_(courseTitle)
+        : buildOrgGroupReminderTemplate_(courseTitle);
 
       const groups = selection.groups.map((group) => {
-        const incompleteListHtml = buildOrgGroupIncompleteListHtml_(group.toMembers);
+        const incompleteListHtml = templateType === 'org_group_reminder'
+          ? buildOrgGroupIncompleteListHtml_(group.toMembers)
+          : '';
         const groupSubject = (p.subject || defaultTpl.subject)
           .replace(/\{\{課程名稱\}\}/g, courseTitle)
           .replace(/\{\{組別名稱\}\}/g, group.orgName)
@@ -4043,12 +4222,22 @@ function executeMentionNotification(payload) {
     const failures = [];
     let sentCount = 0;
 
-    if (templateType === 'leadership_reminder') {
+    if (['leadership_reminder', 'leadership_announcement', 'leadership_announcement_summary'].includes(templateType)) {
       const selection = selectMentionRecipients_(context, p);
-      const deliveryMode = p.deliveryMode || 'individual';
-      const defaultTpl = deliveryMode === 'individual'
-        ? buildLeadershipReminderIndividualTemplate_(courseTitle)
-        : buildLeadershipReminderGenericTemplate_(courseTitle);
+      const isAnnouncement = templateType === 'leadership_announcement' || templateType === 'leadership_announcement_summary';
+      const defaultDelivery = isAnnouncement ? 'direct' : 'individual';
+      const deliveryMode = p.deliveryMode || defaultDelivery;
+
+      let defaultTpl;
+      if (templateType === 'leadership_announcement') {
+        defaultTpl = buildLeadershipAnnouncementNotificationTemplate_(courseTitle, deliveryMode === 'individual');
+      } else if (templateType === 'leadership_announcement_summary') {
+        defaultTpl = buildLeadershipAnnouncementSummaryTemplate_(courseTitle, deliveryMode === 'individual');
+      } else {
+        defaultTpl = deliveryMode === 'individual'
+          ? buildLeadershipReminderIndividualTemplate_(courseTitle)
+          : buildLeadershipReminderGenericTemplate_(courseTitle);
+      }
 
       if (deliveryMode === 'individual') {
         selection.recipients.forEach((recipient) => {
@@ -4056,7 +4245,11 @@ function executeMentionNotification(payload) {
             .replace(/\{\{課程名稱\}\}/g, courseTitle)
             .replace(/\{\{修課期限\}\}/g, deadlineText);
 
-          const templateBody = p.htmlBody || defaultTpl.htmlBody;
+          let templateBody = p.htmlBody || defaultTpl.htmlBody;
+          if (isAnnouncement) {
+            templateBody = templateBody.replace(/<p>長官、主管們好：<\/p>/g, '<p>{{姓名}} 長官/主管 您好：</p>');
+          }
+
           const baseHtmlBody = templateBody
             .replace(/\{\{姓名\}\}/g, escapeHtml_(recipient.name))
             .replace(/\{\{信箱\}\}/g, escapeHtml_(recipient.email))
@@ -4201,7 +4394,7 @@ function executeMentionNotification(payload) {
       };
     }
 
-    if (templateType === 'org_group_reminder') {
+    if (templateType === 'org_group_reminder' || templateType === 'org_group_initial') {
       const preview = previewMentionNotification(p);
       if (!preview.success) throw new Error(preview.message || '群組範本生成失敗');
 
@@ -5050,14 +5243,14 @@ function buildTrainingImportDataset_(input) {
     `附件為截至 ${dateText} 新增完成「${rawCourseTitle}」之教育訓練資料，共 ${pendingLearners.length} 筆。名單均已符合影片觀看達標及測驗通過條件，並依全院時數管理系統匯入範本產製，請協助匯入相關系統。`,
     '',
     `附件：${attachmentName}`,
-    '本批資料已排除先前成功寄送之紀錄。',
+    '感謝',
     '',
     `${senderGivenName} 敬上`
   ].join('\n');
   const htmlBody = [
     `<p>${escapeHtml_(recipientGivenName)}您好：</p>`,
     `<p>附件為截至 ${escapeHtml_(dateText)} 新增完成「${escapeHtml_(rawCourseTitle)}」之教育訓練資料，共 ${pendingLearners.length} 筆。名單均已符合影片觀看達標及測驗通過條件，並依全院時數管理系統匯入範本產製，請協助匯入相關系統。</p>`,
-    `<p>附件：${escapeHtml_(attachmentName)}<br>本批資料已排除先前成功寄送之紀錄。</p>`,
+    `<p>附件：${escapeHtml_(attachmentName)}<br>感謝</p>`,
     `<p>${escapeHtml_(senderGivenName)} 敬上</p>`
   ].join('');
 

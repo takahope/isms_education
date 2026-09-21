@@ -7,6 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script>
     window.APP_AUTH = <?!= typeof authContext !== 'undefined' ? authContext : '{"isShadowAuth":false}' ?>;
+    window.ALLOW_BACKGROUND_PLAY = <?!= typeof allowBackgroundPlay !== 'undefined' ? (allowBackgroundPlay === 'true' ? 'true' : 'false') : 'true' ?>;
   </script>
   <style>
     /* Design Decisions:
@@ -5308,6 +5309,23 @@
       return element === trainingIframe || element === replayIframe;
     }
 
+    function isBackgroundPlayAllowed() {
+      if (typeof window !== 'undefined' && window.ALLOW_BACKGROUND_PLAY === true) {
+        return true;
+      }
+      try {
+        if (typeof window !== 'undefined' && window.location && window.location.search) {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('bg') === '1' || params.get('bg_play') === '1') {
+            return true;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+      return false;
+    }
+
     function shouldSkipFocusLossPause() {
       if (document.hidden) return true;
       if (document.hasFocus()) return true;
@@ -5316,6 +5334,7 @@
     }
 
     function shouldPauseForAttentionLoss() {
+      if (isBackgroundPlayAllowed()) return false;
       if (!canPauseForFocusLoss()) return false;
       return !shouldSkipFocusLossPause();
     }
@@ -5380,12 +5399,14 @@
     }
 
     document.addEventListener('visibilitychange', () => {
+      if (isBackgroundPlayAllowed()) return;
       if (document.hidden) {
         pauseTrainingForFocusLoss('系統偵測到您離開了此分頁。為確保訓練品質，請保持在此畫面觀看。');
       }
     });
 
     window.addEventListener('blur', () => {
+      if (isBackgroundPlayAllowed()) return;
       clearTimeout(blurCheckTimeout);
       blurCheckTimeout = setTimeout(() => {
         if (!shouldPauseForAttentionLoss()) return;

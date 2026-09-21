@@ -39,6 +39,11 @@
           </svg>
           <span id="viewer-email-display">管理人員</span>
         </span>
+        <!-- 背景播放開關按鈕 -->
+        <button id="bg-play-toggle-btn" type="button" title="點擊切換：允許背景播放 / 視窗失焦強制暫停" class="inline-flex items-center px-3 py-1.5 border text-xs sm:text-sm font-medium rounded-md text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 shadow-2xs transition">
+          <span id="bg-play-icon" class="mr-1.5 text-xs sm:text-sm">🎧</span>
+          <span id="bg-play-label">背景播放：已允許</span>
+        </button>
         <button id="export-report-btn" type="button" class="inline-flex items-center px-3 py-1.5 border border-slate-300 text-xs sm:text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-2xs transition">
           <svg class="w-4 h-4 mr-1.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
@@ -71,10 +76,10 @@
           <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
             <div>
               <h2 class="text-base font-bold text-slate-900">通知設定</h2>
-              <p class="text-xs text-slate-500 mt-0.5">選擇欲發送的未完成通知對象與條件，並支援自訂期限與信件內容。</p>
+              <p class="text-xs text-slate-500 mt-0.5" id="header-desc-text">選擇欲發送的開課通知或催課對象與條件，並支援自訂期限與信件內容。</p>
             </div>
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-              未完成專用
+            <span id="header-type-badge" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+              開課通知
             </span>
           </div>
 
@@ -86,8 +91,15 @@
                   範本類型 <span class="text-red-500">*</span>
                 </label>
                 <select id="mention-template-type" class="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 bg-white border">
-                  <option value="leadership_reminder">長官主管未完成通知（層級 1~4 行政長官）</option>
-                  <option value="org_group_reminder">全組織各組未完成通知（組員 To，組長 CC）</option>
+                  <optgroup label="開課初次通知">
+                    <option value="org_group_initial">全組織各組初次通知（組員 To，組長 CC）</option>
+                    <option value="leadership_announcement">長官主管初次通知（完整版）</option>
+                    <option value="leadership_announcement_summary">長官主管初次通知（摘要版）</option>
+                  </optgroup>
+                  <optgroup label="未完成催課通知">
+                    <option value="leadership_reminder">長官主管未完成通知（層級 1~4 行政長官）</option>
+                    <option value="org_group_reminder">全組織各組未完成通知（組員 To，組長 CC）</option>
+                  </optgroup>
                 </select>
                 <p class="text-[11px] text-slate-400 mt-1" id="template-hint">針對層級 1~4 行政長官主管，主兼職認列，支援影子信箱雙軌寄送。</p>
               </div>
@@ -513,6 +525,101 @@
       };
     }
 
+    // 背景播放設定狀態與切換控制
+    let currentBackgroundPlaySetting = true;
+
+    function updateBgPlayButtonUi(allowed, loading) {
+      const btn = document.getElementById('bg-play-toggle-btn');
+      const icon = document.getElementById('bg-play-icon');
+      const label = document.getElementById('bg-play-label');
+      if (!btn || !icon || !label) return;
+
+      if (loading) {
+        btn.disabled = true;
+        btn.className = 'inline-flex items-center px-3 py-1.5 border text-xs sm:text-sm font-medium rounded-md text-slate-500 bg-slate-100 border-slate-300 opacity-70 cursor-not-allowed shadow-2xs transition';
+        icon.textContent = '⏳';
+        label.textContent = '更新中...';
+        return;
+      }
+
+      btn.disabled = false;
+      if (allowed) {
+        btn.className = 'inline-flex items-center px-3 py-1.5 border text-xs sm:text-sm font-medium rounded-md text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 shadow-2xs transition';
+        icon.textContent = '🎧';
+        label.textContent = '背景播放：已允許';
+        btn.title = '目前允許同仁離開視窗或換分頁時持續播放（多工友善）。點擊切換為【強制失焦暫停】。';
+      } else {
+        btn.className = 'inline-flex items-center px-3 py-1.5 border text-xs sm:text-sm font-medium rounded-md text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 shadow-2xs transition';
+        icon.textContent = '🔒';
+        label.textContent = '失焦暫停：強制中';
+        btn.title = '目前同仁離開視窗或換分頁將強制暫停（嚴格模式）。點擊切換為【允許背景播放】。';
+      }
+    }
+
+    function handleToggleBackgroundPlay() {
+      const currentAllow = currentBackgroundPlaySetting;
+      const targetAllow = !currentAllow;
+
+      Swal.fire({
+        title: targetAllow ? '切換為「允許背景播放」？' : '切換為「強制失焦暫停」？',
+        html: targetAllow
+          ? '<div class="text-left text-xs sm:text-sm space-y-2 text-slate-600">' +
+            '<p>切換後，學員在教育訓練主頁切換分頁或點選其他視窗時，<b>影片將持續播放不中斷</b>。</p>' +
+            '<p class="text-emerald-700 font-medium">※ 防弊說明：系統仍維持每 5 分鐘閒置確認與禁止快轉機制，兼顧多工作業友善與資安防弊底線。</p>' +
+            '</div>'
+          : '<div class="text-left text-xs sm:text-sm space-y-2 text-slate-600">' +
+            '<p>切換後，學員在教育訓練主頁切換分頁或離開主視窗時，<b>系統將強制暫停影片並彈窗提醒</b>。</p>' +
+            '<p class="text-amber-700 font-medium">※ 適用於需要嚴格要求專注度的正式受訓情境。</p>' +
+            '</div>',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: targetAllow ? '#059669' : '#d97706',
+        confirmButtonText: targetAllow ? '確認切換為允許' : '確認切換為強制暫停',
+        cancelButtonText: '取消'
+      }).then((result) => {
+        if (!result.isConfirmed) return;
+
+        updateBgPlayButtonUi(targetAllow, true);
+
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+          google.script.run
+            .withSuccessHandler(function(response) {
+              if (response && response.success) {
+                currentBackgroundPlaySetting = Boolean(response.allowBackgroundPlay);
+                updateBgPlayButtonUi(currentBackgroundPlaySetting, false);
+                Swal.fire({
+                  toast: true,
+                  position: 'top-end',
+                  icon: 'success',
+                  title: response.message || (currentBackgroundPlaySetting ? '已切換為允許背景播放' : '已切換為強制失焦暫停'),
+                  showConfirmButton: false,
+                  timer: 3000
+                });
+              } else {
+                updateBgPlayButtonUi(currentBackgroundPlaySetting, false);
+                Swal.fire('設定失敗', (response && response.message) || '無法更新設定', 'error');
+              }
+            })
+            .withFailureHandler(function(err) {
+              updateBgPlayButtonUi(currentBackgroundPlaySetting, false);
+              Swal.fire('系統錯誤', (err && err.message) ? err.message : String(err), 'error');
+            })
+            .setBackgroundPlaySetting(targetAllow);
+        } else {
+          currentBackgroundPlaySetting = targetAllow;
+          updateBgPlayButtonUi(currentBackgroundPlaySetting, false);
+          Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'success',
+            title: targetAllow ? '已切換為允許背景播放' : '已切換為強制失焦暫停',
+            showConfirmButton: false,
+            timer: 3000
+          });
+        }
+      });
+    }
+
     // 初始化頁面資料
     function initPage() {
       if (typeof google === 'undefined' || !google.script || !google.script.run) {
@@ -522,7 +629,20 @@
           courseTitle: '資訊安全暨個資保護教育訓練',
           defaultDeadlineDate: new Date().getFullYear() + '-08-30',
           defaultSenderName: '臺灣人體生物資料庫資安暨個資教育訓練(專案規劃組/策略組-林專員)',
+          allowBackgroundPlay: true,
           templates: {
+            org_group_initial: {
+              subject: '【教育訓練通知】{{組別名稱}} - 資訊安全暨個資保護教育訓練線上課程開課說明',
+              htmlBody: '<p>{{組別名稱}} 各位同仁 您好：</p><p>因應外部稽核與法規要求，本年度「<strong>資訊安全暨個資保護教育訓練</strong>」線上課程已開放觀看與測驗，請各位同仁於期限內撥冗完成相關要求。</p><p><strong>課程資訊：</strong><br>課程名稱：資訊安全暨個資保護教育訓練<br>及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>修課期限：請於 {{修課期限}} 以前完成</p><p>※ 觀看提醒：<br>1. 觀看時請勿快轉或頻繁切換視窗，系統將定期確認在座狀態。<br>2. 需完整觀看達規定時數，課後評量始算有效。</p><p>※ 登入提醒：<br>點擊上方連結進入後，請以公務 Google 帳號登入系統，學習紀錄將自動為您保存與同步。</p><p><a href="{{上課網址}}">前往上課</a></p><p>※ 本信件同步副本（CC）該組組長協助宣導知悉。</p><p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">此為自動發送之通知信件，無需直接回覆。<br>如有任何問題，請聯絡專案規劃組(策略組)。</p>'
+            },
+            leadership_announcement: {
+              subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
+              htmlBody: '<p>長官、主管們好：</p><p>依據《資通安全責任等級分級辦法》，公務機關及特定非公務機關人員（含約聘僱）每年須完成至少 3 小時之資通安全通識教育訓練。另臺灣人體生物資料庫每年亦須通過 ISO27001 與 ISO27701 第三方國際標準驗證，須持續就資訊安全暨個人資料保護管理系統範圍內之政策、制度及作業規範進行宣導，並確保相關管理措施符合組織實際運作情形。為配合前述法規要求與制度推動，本次已安排辦理<strong>資訊安全暨個資保護教育訓練</strong>。</p><p>鑑於長官與主管們同時肩負資訊安全暨個人資料保護委員會召集人或委員之職責，需參與政策審議、資源協調、管理審查、稽核督導及制度推動等事項。為使召集人與委員充分了解臺灣人體生物資料庫之資訊安全與個人資料保護相關政策、管理要求及執行重點，特誠摯邀請長官撥冗參與本次課程。</p><p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 {{修課期限}} 以前完成相關課程與測驗。</p><p>※ 觀看提醒：<br>1. 觀看時請勿快轉或頻繁切換視窗，系統將定期確認在座狀態。<br>2. 需完整觀看達規定時數，課後評量始算有效。</p><p>※ 登入提醒：<br>點擊上方連結進入後，請以公務 Google 帳號登入系統，學習紀錄將自動為您保存與同步。</p><p><a href="{{上課網址}}">前往上課</a></p><p>敬請撥冗參與。</p><p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">此為自動發送之通知信件，無需直接回覆。<br>如有任何問題，請聯絡專案規劃組(策略組)。</p>'
+            },
+            leadership_announcement_summary: {
+              subject: '【教育訓練通知】資訊安全暨個資保護教育訓練',
+              htmlBody: '<p>長官、主管們好：</p><p>依據《資通安全責任等級分級辦法》，公務機關及特定非公務機關人員（含約聘僱）每年須完成至少 3 小時之資通安全通識教育訓練。另因臺灣人體生物資料庫每年需通過 ISO27001 與 ISO27701 第三方國際標準驗證，故已安排辦理<strong>資訊安全暨個資保護教育訓練</strong>。</p><p>鑑於長官與主管身為資訊安全暨個人資料保護委員會召集人或委員，需了解本庫資訊安全與個人資料保護相關政策、管理要求及制度推動重點，以利後續政策審議、管理審查與督導作業。</p><p>本次課程可同時列計資安三小時與個資保護教育訓練時數。請先完成課程影片觀看，再進行評量；評量 70 分以上為及格，並請於 {{修課期限}} 以前完成相關課程與測驗。</p><p>※ 觀看提醒：<br>1. 觀看時請勿快轉或頻繁切換視窗，系統將定期確認在座狀態。<br>2. 需完整觀看達規定時數，課後評量始算有效。</p><p>※ 登入提醒：<br>點擊上方連結進入後，請以公務 Google 帳號登入系統，學習紀錄將自動為您保存與同步。</p><p><a href="{{上課網址}}">前往上課</a></p><p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">此為自動發送之通知信件，無需直接回覆。<br>如有任何問題，請聯絡專案規劃組(策略組)。</p>'
+            },
             leadership_reminder: {
               subject: '【重要提醒】請長官、主管撥冗完成資訊安全暨個資保護教育訓練',
               htmlBody: '<p>長官、主管們好：</p><p>依據《資通安全責任等級分級辦法》及第三方國際標準驗證要求，每年需持續落實資訊安全與個資保護管理要求。</p><p>提醒各位長官主管，本年度「<strong>資訊安全暨個資保護教育訓練</strong>」線上課程目前尚有長官主管未完成，鑑於長官主管肩負管理審查與督導重任，敬請尚未完成的長官與主管撥冗安排時間完成影片觀看與課後測驗。</p><p><strong>修課說明：</strong><br>及格標準：觀看滿指定時數，並通過課後測驗（評量 70 分以上為及格）<br>修課期限：請於 {{修課期限}} 以前完成</p><p>※ 觀看提醒：<br>1. 觀看時請勿快轉或頻繁切換視窗，系統將定期確認在座狀態。<br>2. 需完整觀看達規定時數，課後評量始算有效。</p><p>※ 登入提醒：<br>點擊上方連結進入後，請以公務 Google 帳號登入系統，學習紀錄將自動為您保存與同步。</p><p><a href="{{上課網址}}">前往上課</a></p><p style="color: #64748b; font-size: 0.9em; margin-top: 24px;">此為自動發送之通知信件，無需直接回覆。<br>如有任何問題，請聯絡專案規劃組(策略組)。</p>'
@@ -593,6 +713,10 @@
           document.getElementById('exclude-vendor').checked = data.excludeDefaults.excludeVendor !== false;
         }
       }
+      if (typeof data.allowBackgroundPlay !== 'undefined') {
+        currentBackgroundPlaySetting = Boolean(data.allowBackgroundPlay);
+      }
+      updateBgPlayButtonUi(currentBackgroundPlaySetting, false);
       updateTemplateFields();
     }
 
@@ -608,7 +732,36 @@
       const templateHint = document.getElementById('template-hint');
       const deliveryHint = document.getElementById('delivery-mode-hint');
 
-      if (templateType === 'leadership_reminder') {
+      const isInitial = ['org_group_initial', 'leadership_announcement', 'leadership_announcement_summary'].includes(templateType);
+      const headerBadge = document.getElementById('header-type-badge');
+      const headerDesc = document.getElementById('header-desc-text');
+
+      if (headerBadge) {
+        if (isInitial) {
+          headerBadge.textContent = '開課通知';
+          headerBadge.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200';
+        } else {
+          headerBadge.textContent = '未完成專用';
+          headerBadge.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200';
+        }
+      }
+
+      if (headerDesc) {
+        headerDesc.textContent = isInitial
+          ? '選擇欲發送的開課通知對象與條件，並支援自訂期限與信件內容。'
+          : '選擇欲發送的未完成通知對象與條件，並支援自訂期限與信件內容。';
+      }
+
+      if (templateType === 'leadership_announcement' || templateType === 'leadership_announcement_summary') {
+        deliveryModeSelect.disabled = false;
+        deliveryModeSelect.innerHTML = [
+          '<option value="direct">直接發送（收件人信箱皆在 To 欄位）</option>',
+          '<option value="single_bcc">密件副本（單封發送，收件人相互保密）</option>',
+          '<option value="individual">個人化信件（每位長官各自收到專屬信件）</option>'
+        ].join('');
+        templateHint.textContent = '針對層級 1~4 行政長官主管，主兼職認列，支援影子信箱雙軌寄送。';
+        deliveryHint.textContent = '長官主管初次通知預設使用直接發送。';
+      } else if (templateType === 'leadership_reminder') {
         deliveryModeSelect.disabled = false;
         deliveryModeSelect.innerHTML = [
           '<option value="individual">個人化信件（每位長官各自收到專屬信件）</option>',
@@ -616,7 +769,12 @@
           '<option value="direct">直接發送（收件人信箱皆在 To 欄位）</option>'
         ].join('');
         templateHint.textContent = '針對層級 1~4 行政長官主管，主兼職認列，支援影子信箱雙軌寄送。';
-        deliveryHint.textContent = '長官主管預設使用個人化信件發送。';
+        deliveryHint.textContent = '長官主管催課預設使用個人化信件發送。';
+      } else if (templateType === 'org_group_initial') {
+        deliveryModeSelect.innerHTML = '<option value="group">依組別發送（組員 To，組長 CC）</option>';
+        deliveryModeSelect.disabled = true;
+        templateHint.textContent = '針對層級 5 之後作業組別與合作單位，組員列於 To，組長列於 CC，宣導開課。';
+        deliveryHint.textContent = '全組織各組通知強制鎖定依組別發送模式。';
       } else if (templateType === 'org_group_reminder') {
         deliveryModeSelect.innerHTML = '<option value="group">依組別發送（組員 To，組長 CC）</option>';
         deliveryModeSelect.disabled = true;
@@ -656,10 +814,15 @@
       if (countSpan) {
         countSpan.textContent = `已選取 ${selected} / ${total} 組`;
       }
-      if (statsSummary && gCurrentPreviewData && gCurrentPreviewData.templateType === 'org_group_reminder') {
+      if (statsSummary && gCurrentPreviewData && (gCurrentPreviewData.templateType === 'org_group_reminder' || gCurrentPreviewData.templateType === 'org_group_initial')) {
+        const isInitial = gCurrentPreviewData.templateType === 'org_group_initial';
         const skipped = gCurrentPreviewData.skippedGroupsCount || 0;
         const totalGroups = gCurrentPreviewData.totalGroups || total;
-        statsSummary.textContent = `共掃描 ${totalGroups} 組：目前選取 ${selected} 組進行通知（${skipped} 組全數完課）。`;
+        if (isInitial) {
+          statsSummary.textContent = `共掃描 ${totalGroups} 組：目前選取 ${selected} 組進行開課通知。`;
+        } else {
+          statsSummary.textContent = `共掃描 ${totalGroups} 組：目前選取 ${selected} 組進行通知（${skipped} 組全數完課）。`;
+        }
       }
     }
 
@@ -692,7 +855,10 @@
           previewSender.textContent = vEmail ? `${sName} <${vEmail}>` : sName;
         }
 
-        if (res.templateType === 'leadership_reminder') {
+        const isLeadership = ['leadership_reminder', 'leadership_announcement', 'leadership_announcement_summary'].includes(res.templateType);
+        const isOrgGroup = ['org_group_reminder', 'org_group_initial'].includes(res.templateType);
+
+        if (isLeadership) {
           groupSelectContainer.classList.add('hidden');
           if (groupChecklistContainer) groupChecklistContainer.classList.add('hidden');
           previewCcRow.classList.add('hidden');
@@ -706,10 +872,15 @@
               : '';
             return `${r.name} &lt;${r.email}&gt;${shadowBadge}`;
           }).join(', ');
-          previewTo.innerHTML = recipientNames || '<span class="text-amber-600 font-bold">查無符合條件之未完成長官主管</span>';
 
-          statsSummary.textContent = `共 ${res.recipientCount || 0} 位未完成長官主管需通知（已排除 ${res.skippedCount || 0} 位）。`;
-        } else if (res.templateType === 'org_group_reminder') {
+          const isInitialLead = res.templateType !== 'leadership_reminder';
+          previewTo.innerHTML = recipientNames || (isInitialLead ? '<span class="text-amber-600 font-bold">查無符合條件之長官主管</span>' : '<span class="text-amber-600 font-bold">查無符合條件之未完成長官主管</span>');
+
+          statsSummary.textContent = isInitialLead
+            ? `共 ${res.recipientCount || 0} 位長官主管需通知（已排除 ${res.skippedCount || 0} 位）。`
+            : `共 ${res.recipientCount || 0} 位未完成長官主管需通知（已排除 ${res.skippedCount || 0} 位）。`;
+        } else if (isOrgGroup) {
+          const isInitialGroup = res.templateType === 'org_group_initial';
           groupSelectContainer.classList.remove('hidden');
           if (groupChecklistContainer) groupChecklistContainer.classList.remove('hidden');
           previewCcRow.classList.remove('hidden');
@@ -718,9 +889,10 @@
           if (groupChecklist) groupChecklist.innerHTML = '';
 
           (res.groups || []).forEach(function(g, idx) {
+            const memberCountLabel = isInitialGroup ? `組員 ${g.toMembers.length} 人` : `未完成 ${g.toMembers.length} 人`;
             const opt = document.createElement('option');
             opt.value = idx;
-            opt.textContent = `${g.orgName} (未完成 ${g.toMembers.length} 人，組長 CC ${g.ccMembers.length} 人)`;
+            opt.textContent = `${g.orgName} (${memberCountLabel}，組長 CC ${g.ccMembers.length} 人)`;
             groupSelect.appendChild(opt);
 
             if (groupChecklist) {
@@ -728,7 +900,7 @@
               itemLabel.className = 'flex items-center space-x-2 text-xs text-slate-700 hover:bg-indigo-50/60 p-1.5 rounded cursor-pointer border border-transparent hover:border-indigo-100 transition';
               itemLabel.innerHTML = `
                 <input type="checkbox" class="group-select-checkbox rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" value="${escapeHtml_(g.orgCode)}" checked>
-                <span class="flex-1 truncate font-medium">${escapeHtml_(g.orgName)} <span class="text-slate-400 text-[11px] font-normal">(未完成 ${g.toMembers.length}人)</span></span>
+                <span class="flex-1 truncate font-medium">${escapeHtml_(g.orgName)} <span class="text-slate-400 text-[11px] font-normal">(${memberCountLabel})</span></span>
               `;
               itemLabel.addEventListener('click', function(e) {
                 if (e.target && e.target.tagName && e.target.tagName.toLowerCase() !== 'input') {
@@ -761,10 +933,14 @@
             previewSubject.textContent = '（無任何組別需要通知）';
             previewTo.textContent = '無';
             previewCc.textContent = '無';
-            previewBody.innerHTML = '<p class="text-emerald-600 font-bold">全組織所有組別同仁皆已全數完課！太棒了！</p>';
+            previewBody.innerHTML = isInitialGroup
+              ? '<p class="text-slate-500 font-bold">查無任何符合發送條件的組別。</p>'
+              : '<p class="text-emerald-600 font-bold">全組織所有組別同仁皆已全數完課！太棒了！</p>';
           }
 
-          statsSummary.textContent = `共掃描 ${res.totalGroups || 0} 組：${res.activeGroupsCount || 0} 組尚有同仁未完課，${res.skippedGroupsCount || 0} 組全數完課。`;
+          statsSummary.textContent = isInitialGroup
+            ? `共掃描 ${res.totalGroups || 0} 組：${res.activeGroupsCount || 0} 組進行開課通知（已排除 ${res.skippedGroupsCount || 0} 組）。`
+            : `共掃描 ${res.totalGroups || 0} 組：${res.activeGroupsCount || 0} 組尚有同仁未完課，${res.skippedGroupsCount || 0} 組全數完課。`;
         }
 
         modal.classList.remove('hidden');
@@ -800,7 +976,7 @@
     function sendNotification() {
       const payload = getFormPayload();
 
-      if (payload.templateType === 'org_group_reminder') {
+      if (payload.templateType === 'org_group_reminder' || payload.templateType === 'org_group_initial') {
         const selectedGroupCodes = getSelectedGroupCodes();
         if (selectedGroupCodes.length === 0) {
           Swal.fire('請至少勾選一個組別', '您尚未選取任何要發送通知的組別。', 'warning');
@@ -1680,6 +1856,11 @@
     // 事件綁定
     document.addEventListener('DOMContentLoaded', function() {
       initPage();
+
+      const bgPlayToggleBtn = document.getElementById('bg-play-toggle-btn');
+      if (bgPlayToggleBtn) {
+        bgPlayToggleBtn.addEventListener('click', handleToggleBackgroundPlay);
+      }
 
       document.getElementById('export-report-btn').addEventListener('click', exportTrainingReport);
       document.getElementById('training-import-btn').addEventListener('click', openTrainingImportModal);
